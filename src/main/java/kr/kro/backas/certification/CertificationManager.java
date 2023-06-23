@@ -101,7 +101,6 @@ public class CertificationManager {
         while (codes.containsValue(code)) {
             code = 100000 + (int) (Math.random() * ((999999 - 100000) + 1));
         }
-        code = Integer.parseInt(String.format("%06d", code));
         failed.remove(user.getIdLong());
         emails.put(user.getIdLong(), email);
         Message reply = message.reply("메일을 발송중에 있습니다. 잠시만 기다려주세요.").complete();
