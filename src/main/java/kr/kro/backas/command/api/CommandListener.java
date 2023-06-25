@@ -16,7 +16,7 @@ import java.util.Map;
 
 public class CommandListener extends ListenerAdapter {
 
-    public static final Logger LOGGER = LoggerFactory.getLogger("Command");
+    public static final Logger LOGGER = LoggerFactory.getLogger(CommandListener.class);
 
     @Override
     public void onMessageReceived(@NotNull MessageReceivedEvent event) {
