@@ -72,12 +72,13 @@ public class CertificationInfoCommand implements CommandSource {
 
     @Override
     public String getDescription() {
-        return "인증 정보를 확인합니다.";
+        return """ 
+                * 인증 정보를 확인합니다.""";
     }
 
     @Override
     public String getUsage() {
-        return "!정보 - 내 인증 정보를 확인합니다.\n!정보 [닉네임 또는 별명] - 상대방의 인증 정보를 확인합니다. (관리자 권한이 필요합니다)";
+        return "``!정보`` 내 인증 정보를 확인합니다.\n``!정보 [닉네임 또는 별명]`` 상대방의 인증 정보를 확인합니다. (관리자 권한이 필요합니다)";
     }
 
     @Override
