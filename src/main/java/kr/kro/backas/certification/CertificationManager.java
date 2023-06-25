@@ -205,7 +205,7 @@ public class CertificationManager {
     }
 
     public boolean isCertificating(String email) {
-        return codes.containsKey(email);
+        return emails.containsValue(email);
     }
 
     public void certificate(long userId, CertificationInfo info) throws IOException {
