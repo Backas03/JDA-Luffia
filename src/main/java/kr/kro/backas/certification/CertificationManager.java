@@ -26,7 +26,7 @@ import java.util.concurrent.CompletableFuture;
 
 public class CertificationManager {
 
-    public static final Logger LOGGER = LoggerFactory.getLogger("Certification");
+    public static final Logger LOGGER = LoggerFactory.getLogger(CertificationManager.class);
 
     private final Map<Long, String> emails;
     private final Map<String, Integer> codes;
