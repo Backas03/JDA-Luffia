@@ -40,7 +40,7 @@ public class CertificationRemoveCommand implements CommandSource {
 
     @Override
     public String getUsage() {
-        return "!인증해제 [userId] - 특정 유저의 인증 데이터를 삭제합니다.";
+        return "``!인증해제 [userId]`` 특정 유저의 인증 데이터를 삭제합니다.";
     }
 
     @Override

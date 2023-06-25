@@ -32,12 +32,13 @@ public class CertificationCommand implements CommandSource {
 
     @Override
     public String getDescription() {
-        return "대구대학교 이메일로 재학생 인증을 진행합니다. 인증 완료로 학교 인증이 필요한 모든 이벤트에 참여하실 수 있습니다";
+        return """
+                * 대구대학교 이메일로 재학생 인증을 진행합니다. 인증 완료로 학교 인증이 필요한 모든 이벤트에 참여하실 수 있습니다""";
     }
 
     @Override
     public String getUsage() {
-        return "!인증 [자신의 학교이메일] - 인증 코드를 발급 또는 재발급 받습니다.\n!인증 [6자리 인증 코드] - 인증을 완료합니다.";
+        return "``!인증 [자신의 학교이메일]`` 인증 코드를 발급 또는 재발급 받습니다.\n``!인증 [6자리 인증 코드]`` 인증을 완료합니다.";
     }
 
     @Override
