@@ -4,6 +4,7 @@ import kr.kro.backas.certification.CertificationManager;
 import kr.kro.backas.command.CertificationCommand;
 import kr.kro.backas.command.CertificationInfoCommand;
 import kr.kro.backas.command.CertificationRemoveCommand;
+import kr.kro.backas.command.HelpCommand;
 import kr.kro.backas.command.api.CommandManager;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Activity;
@@ -23,6 +24,7 @@ public class Luffia {
         this.commandManager.registerCommand("인증", new CertificationCommand());
         this.commandManager.registerCommand("정보", new CertificationInfoCommand());
         this.commandManager.registerCommand("인증해제", new CertificationRemoveCommand());
+        this.commandManager.registerCommand("도움말", new HelpCommand());
 
         this.certificationManager = new CertificationManager(discordAPI);
 
