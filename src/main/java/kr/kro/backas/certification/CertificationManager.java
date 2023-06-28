@@ -110,9 +110,8 @@ public class CertificationManager {
                 MailUtil.sendCertificationMessage(email, finalCode); // 순서 중요
             } catch (Exception e) {
                 message.reply(
-                        "인증 메일을 보내는 도중 에러가 발생했습니다.\n```cs\n"
-                                + StackTraceUtil.convert(e)
-                                + "```"
+                        "인증 메일을 보내는 도중 에러가 발생했습니다.\n" +
+                                StackTraceUtil.convertDiscord(e)
                 ).queue();
             }
             return null;
@@ -194,7 +193,7 @@ public class CertificationManager {
         } catch (Exception e) {
             message.reply(
                     "인증 절차를 완료하는 중 에러가 발생했습니다.\n```cs\n"
-                            + StackTraceUtil.convert(e)
+                            + StackTraceUtil.convertDiscord(e)
                             + "```"
             ).queue();
         }

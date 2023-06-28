@@ -10,4 +10,12 @@ public class StackTraceUtil {
         e.printStackTrace(pw);
         return (e.getMessage() + "\"" + sw + "\"").substring(0, Math.min(1900, sw.toString().length()));
     }
+
+    public static String convertDiscord(Exception e, String lang) {
+        return "```" + lang + "\n" + convert(e) + "```";
+    }
+
+    public static String convertDiscord(Exception e) {
+        return convertDiscord(e, "elm");
+    }
 }
