@@ -25,9 +25,8 @@ public class HelpCommand implements CommandSource {
                 .setTitle("Luffia 도움말")
                 .setDescription("""
                             Java Discord API(JDA) 로 여러 기능을 서비스하는 디스코드 봇 Luffia 입니다.
-                            이 봇은 <@397589473531002882> bagkaseu(박카스#9970) 에 의해 제작되었으며, 대구대 게임 전공 서버
-                            이외에 서비스를 하지 않습니다.
-                            해당 봇의 오류나 건의, 문의사항이 있을시 제작자에게 문의 또는 Luffia Github에 Pull Request(PR) 바랍니다.
+                            이 봇은 <@397589473531002882> bagkaseu(박카스#9970) 에 의해 제작되었으며, 대구대 게임 전공 서버 이외에 서비스를 하지 않습니다.
+                            해당 봇의 오류나 건의, 문의사항이 있을시 제작자에게 문의 또는 Luffia Github에 Issue 바랍니다.
                             
 
                             아래는 해당 봇의 기능입니다.""");
