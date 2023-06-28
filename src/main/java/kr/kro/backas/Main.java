@@ -35,39 +35,42 @@ public class Main {
         try {
             JDA jda = builder.build().awaitReady();
             luffia = new Luffia(jda);
-            /* scanner start */
-            while (true) {
-                Scanner scanner = new Scanner(System.in);
-                try {
-                    String input = scanner.nextLine();
-                    if (input.equals("stop")) {
-                        if (!isInitialized()) {
-                            System.out.println("luffia isn't initialized.");
-                            return;
-                        }
-                        System.out.println("stopping luffia...");
-                        JDA discordAPI = luffia.getDiscordAPI();
-                        discordAPI.shutdown();
-                        discordAPI.awaitShutdown();
-                        if (!discordAPI.awaitShutdown(Duration.ofSeconds(SHUTDOWN_TIMEOUT))) {
-                            discordAPI.shutdownNow();
-                            discordAPI.awaitShutdown();
-                        }
-                        System.out.println("...done");
-                        System.exit(0);
-                    }
-                    System.out.println(input);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-                /* scanner end */
-            }
+            initScanner();
         } catch (InterruptedException | IOException e) {
             e.printStackTrace();
             System.exit(-1);
         }
     }
 
+    private static void initScanner() {
+        /* scanner start */
+        while (true) {
+            Scanner scanner = new Scanner(System.in);
+            try {
+                String input = scanner.nextLine();
+                if (input.equals("stop")) {
+                    if (!isInitialized()) {
+                        System.out.println("luffia isn't initialized.");
+                        return;
+                    }
+                    System.out.println("stopping luffia...");
+                    JDA discordAPI = luffia.getDiscordAPI();
+                    discordAPI.shutdown();
+                    discordAPI.awaitShutdown();
+                    if (!discordAPI.awaitShutdown(Duration.ofSeconds(SHUTDOWN_TIMEOUT))) {
+                        discordAPI.shutdownNow();
+                        discordAPI.awaitShutdown();
+                    }
+                    System.out.println("...done");
+                    System.exit(0);
+                }
+                System.out.println(input);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            /* scanner end */
+        }
+    }
 
     public static boolean isInitialized() {
         return luffia != null;
