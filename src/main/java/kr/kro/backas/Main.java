@@ -56,7 +56,6 @@ public class Main {
                     System.out.println("stopping luffia...");
                     JDA discordAPI = luffia.getDiscordAPI();
                     discordAPI.shutdown();
-                    discordAPI.awaitShutdown();
                     if (!discordAPI.awaitShutdown(Duration.ofSeconds(SHUTDOWN_TIMEOUT))) {
                         discordAPI.shutdownNow();
                         discordAPI.awaitShutdown();
