@@ -29,7 +29,7 @@ public class CertificationRemoveCommand implements CommandSource {
         } catch (NumberFormatException ignore) {
             event.getMessage().reply("유저 아이디를 찾을 수 없습니다.").queue();
         } catch (IOException e) {
-            event.getMessage().reply("해당 데이터 처리중 오류가 발생했습니다.\n```cs\n" + StackTraceUtil.convert(e) + "```").queue();
+            event.getMessage().reply("해당 데이터 처리중 오류가 발생했습니다.\n" + StackTraceUtil.convertDiscord(e)).queue();
         }
     }
 
