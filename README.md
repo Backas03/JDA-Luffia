@@ -15,23 +15,23 @@ Provide various features with Java Discord API (JDA)
   [[../kr/kro/backas/Luffia.java]](https://github.com/Backas03/JLuffia/blob/master/src/main/java/kr/kro/backas/Luffia.java)
   ```java
   public Luffia(JDA discordAPI) throws IOException {
-        this.discordAPI = discordAPI;
-
-        this.commandManager = new CommandManager("!", discordAPI);
-        this.commandManager.registerCommand("인증", new CertificationCommand());
-        this.commandManager.registerCommand("정보", new CertificationInfoCommand());
-        this.commandManager.registerCommand("인증해제", new CertificationRemoveCommand());
-        this.commandManager.registerCommand("도움말", new HelpCommand());
-
-        this.certificationManager = new CertificationManager(discordAPI);
+    this.discordAPI = discordAPI;
   
-        아래 4줄이 PR에서 추가된 부분 입니다
-        /* [backas03] add command start */
-        this.commandManager.registerCommand("테스트1", null);
-        this.commandManager.registerCommand("테스트2", null);
-        /* [backas03] add command end */      
+    this.commandManager = new CommandManager("!", discordAPI);
+    this.commandManager.registerCommand("인증", new CertificationCommand());
+    this.commandManager.registerCommand("정보", new CertificationInfoCommand());
+    this.commandManager.registerCommand("인증해제", new CertificationRemoveCommand());
+    this.commandManager.registerCommand("도움말", new HelpCommand());
 
-        this.discordAPI.getPresence().setActivity(Activity.playing("!도움말 명령어로 기능 확인"));
-    }
+    this.certificationManager = new CertificationManager(discordAPI);
+  
+    아래 4줄이 PR에서 추가된 부분 입니다
+    /* [backas03] add command start */
+    this.commandManager.registerCommand("테스트1", null);
+    this.commandManager.registerCommand("테스트2", null);   
+    /* [backas03] add command end */      
+
+    this.discordAPI.getPresence().setActivity(Activity.playing("!도움말 명령어로 기능 확인"));
+  }
   ```
 
