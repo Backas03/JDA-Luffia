@@ -58,8 +58,12 @@ public class CertificationManager {
         return new File("data/certification.yaml");
     }
 
+    public boolean isValidEmail(String email) {
+        return email.matches("^[0-9a-zA-Z]([-_.]?[0-9a-zA-Z])*@daegu\\.ac\\.kr");
+    }
+
     public void requestCertification(String email, Message message, User user) {
-        if (!email.matches("^[0-9a-zA-Z]([-_.]?[0-9a-zA-Z])*@daegu\\.ac\\.kr")) {
+        if (!isValidEmail(email)) {
             message.reply("올바른 학교 이메일을 입력해주세요.").queue();
             return;
         }
@@ -109,10 +113,7 @@ public class CertificationManager {
             try {
                 MailUtil.sendCertificationMessage(email, finalCode); // 순서 중요
             } catch (Exception e) {
-                message.reply(
-                        "인증 메일을 보내는 도중 에러가 발생했습니다.\n" +
-                                StackTraceUtil.convertDiscord(e)
-                ).queue();
+                StackTraceUtil.replyError("인증 메일을 보내는 도중 에러가 발생했습니다.", message, e);
             }
             return null;
         }).thenApply(a -> {
@@ -191,11 +192,7 @@ public class CertificationManager {
             message.replyEmbeds(builder.build()).queue();
 
         } catch (Exception e) {
-            message.reply(
-                    "인증 절차를 완료하는 중 에러가 발생했습니다.\n```cs\n"
-                            + StackTraceUtil.convertDiscord(e)
-                            + "```"
-            ).queue();
+            StackTraceUtil.replyError("인증 절차를 완료하는 중 에러가 발생했습니다.", message, e);
         }
     }
 
