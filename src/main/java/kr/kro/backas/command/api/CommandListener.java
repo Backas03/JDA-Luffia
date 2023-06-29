@@ -2,6 +2,7 @@ package kr.kro.backas.command.api;
 
 import kr.kro.backas.Main;
 import kr.kro.backas.SharedConstant;
+import kr.kro.backas.util.StackTraceUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Role;
@@ -46,7 +47,11 @@ public class CommandListener extends ListenerAdapter {
                         event.getAuthor(),
                         event.getMessage().getContentRaw()
                 );
-                command.onTriggered(event);
+                try {
+                    command.onTriggered(event);
+                } catch (Exception e) {
+                    StackTraceUtil.replyError("커맨드를 실행하는 도중 예상치 못한 오류가 발생했습니다.", event.getMessage(), e);
+                }
                 return;
             }
             return;
