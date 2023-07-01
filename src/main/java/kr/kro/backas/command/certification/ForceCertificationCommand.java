@@ -1,4 +1,4 @@
-package kr.kro.backas.command;
+package kr.kro.backas.command.certification;
 
 import kr.kro.backas.Main;
 import kr.kro.backas.SharedConstant;
