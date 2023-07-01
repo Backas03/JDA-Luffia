@@ -11,6 +11,7 @@ version = "1.0.0-SNAPSHOT"
 repositories {
     mavenCentral()
     maven("https://jitpack.io")
+    maven("https://m2.dv8tion.net/releases")
 }
 
 dependencies {
@@ -22,6 +23,7 @@ dependencies {
     implementation("org.slf4j:slf4j-api:2.0.5")
     implementation("ch.qos.logback:logback-classic:1.4.7")
     implementation("com.sun.mail:javax.mail:1.6.2")
+    implementation ("com.sedmelluq:lavaplayer:1.3.77")
 }
 
 tasks.test {
