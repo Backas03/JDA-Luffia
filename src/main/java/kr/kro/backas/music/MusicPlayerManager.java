@@ -63,7 +63,7 @@ public class MusicPlayerManager {
         player.addListener(this.trackScheduler);
         this.queries = new HashMap<>();
         Guild guild = luffia.getPublishedGuild();
-        guild.getAudioManager().setSendingHandler(new AudioForwarder(this.player, guild));
+        guild.getAudioManager().setSendingHandler(new AudioForwarder(this.player));
     }
 
     public Map<Long, AudioPlaylist> getQueries() {
