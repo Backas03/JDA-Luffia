@@ -9,7 +9,7 @@ import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 public class NoRepeatCommand implements CommandSource {
     @Override
     public void onTriggered(MessageReceivedEvent event) {
-        int mode = TrackScheduler.RepeatMode.REPEAT_ALL;
+        int mode = TrackScheduler.RepeatMode.NO_REPEAT;
         Message message = event.getMessage();
         Main.getLuffia()
                 .getMusicPlayerManager()

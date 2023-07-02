@@ -9,6 +9,10 @@ public class SkipCommand implements CommandSource {
     @Override
     public void onTriggered(MessageReceivedEvent event) {
         Message message = event.getMessage();
+        if (Main.getLuffia().getMusicPlayerManager().getTrackScheduler().getNowPlaying() == null) {
+            message.reply("현재 재생중인 곡이 없습니다.").queue();
+            return;
+        }
         Main.getLuffia()
                 .getMusicPlayerManager()
                 .getTrackScheduler()
