@@ -21,4 +21,14 @@ public final class DurationUtil {
         }
         return sb.toString().replaceFirst("\\s", "");
     }
+
+    public static String formatDurationColon(int seconds) {
+        int hours = seconds / 3600;
+        int minutes = (seconds / 60) % 60;
+        seconds = seconds % 60;
+        if (hours != 0) {
+            return String.format("%02d", hours) + ":" + String.format("%02d", minutes) + ":" + String.format("%02d", seconds);
+        }
+        return String.format("%02d", minutes) + ":" + String.format("%02d", seconds);
+    }
 }
