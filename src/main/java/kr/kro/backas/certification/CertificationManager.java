@@ -3,15 +3,13 @@ package kr.kro.backas.certification;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import kr.kro.backas.Main;
 import kr.kro.backas.util.FileUtil;
 import kr.kro.backas.util.MailUtil;
 import kr.kro.backas.util.StackTraceUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
-import net.dv8tion.jda.api.entities.Member;
-import net.dv8tion.jda.api.entities.Message;
-import net.dv8tion.jda.api.entities.Role;
-import net.dv8tion.jda.api.entities.User;
+import net.dv8tion.jda.api.entities.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -218,6 +216,11 @@ public class CertificationManager {
 
     public void removeCertification(long userId) throws IOException {
         certificationData.getData().remove(userId);
+        Guild guild =  Main.getLuffia().getPublishedGuild();
+        Member member = guild.getMemberById(userId);
+        if (member != null) {
+            guild.removeRoleFromMember(member, role).queue();
+        }
         save();
         LOGGER.info(
                 "certification data removed. {userId={}}",

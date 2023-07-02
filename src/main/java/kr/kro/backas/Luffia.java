@@ -11,15 +11,22 @@ import kr.kro.backas.command.certification.CertificationCommand;
 import kr.kro.backas.command.certification.CertificationInfoCommand;
 import kr.kro.backas.command.certification.CertificationRemoveCommand;
 import kr.kro.backas.command.certification.ForceCertificationCommand;
+import kr.kro.backas.command.music.*;
 import kr.kro.backas.music.MusicPlayerManager;
+import kr.kro.backas.music.service.youtube.YoutubeService;
 import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.IPermissionHolder;
+import net.dv8tion.jda.api.entities.PermissionOverride;
+import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.managers.AudioManager;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
+import java.util.List;
 
 public class Luffia {
 
@@ -27,6 +34,8 @@ public class Luffia {
     private final CommandManager commandManager;
     private final CertificationManager certificationManager;
     private final MusicPlayerManager musicPlayerManager;
+
+    private final YoutubeService youtubeService;
 
     public Luffia(JDA discordAPI) throws IOException {
         this.discordAPI = discordAPI;
@@ -38,15 +47,30 @@ public class Luffia {
         this.commandManager.registerCommand("도움말", new HelpCommand());
         this.commandManager.registerCommand("강제인증", new ForceCertificationCommand());
 
-        this.certificationManager = new CertificationManager(discordAPI);
+        this.commandManager.registerCommand("재생", new PlayCommand());
+        this.commandManager.registerCommand("참여", new JoinCommand());
+        this.commandManager.registerCommand("나가기", new QuitCommand());
+        this.commandManager.registerCommand("스킵", new SkipCommand());
+        this.commandManager.registerCommand("np", new NowPlayingCommand());
+        this.commandManager.registerCommand("정지", new PauseCommand());
+        this.commandManager.registerCommand("전체반복", new RepeatAllCommand());
+        this.commandManager.registerCommand("반복", new RepeatCurrentCommand());
+        this.commandManager.registerCommand("반복해제", new NoRepeatCommand());
+        this.commandManager.registerCommand("queue", new QueueCommand());
 
-        this.musicPlayerManager = new MusicPlayerManager(discordAPI);
+        this.certificationManager = new CertificationManager(discordAPI);
+        this.musicPlayerManager = new MusicPlayerManager(this);
+        this.youtubeService = new YoutubeService();
 
         this.discordAPI.getPresence().setActivity(Activity.playing("!도움말 명령어로 기능 확인"));
     }
 
     public MusicPlayerManager getMusicPlayerManager() {
         return musicPlayerManager;
+    }
+
+    public YoutubeService getYoutubeService() {
+        return youtubeService;
     }
 
     public JDA getDiscordAPI() {
