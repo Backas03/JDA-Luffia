@@ -12,10 +12,8 @@ import kr.kro.backas.util.DurationUtil;
 import kr.kro.backas.util.StackTraceUtil;
 import kr.kro.backas.util.UserUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
-import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
-import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.AudioChannel;
 import net.dv8tion.jda.api.exceptions.InsufficientPermissionException;
 import net.dv8tion.jda.api.managers.AudioManager;
@@ -73,6 +71,7 @@ public class TrackScheduler extends AudioEventAdapter {
                     .getPublishedGuild()
                     .getAudioManager()
                     .closeAudioConnection();
+            repeatMode = RepeatMode.NO_REPEAT;
             return;
         }
         playNow(nowPlaying, false);
@@ -83,8 +82,34 @@ public class TrackScheduler extends AudioEventAdapter {
     }
 
     public void skip() {
+        AudioTrack current = player.getPlayingTrack();
+        nowPlaying = pop();
         player.stopTrack();
-        popAndPlay();
+        if (repeatMode == RepeatMode.REPEAT_CURRENT) {
+            nowPlaying = current.makeClone();
+            playNow(nowPlaying, true);
+            return;
+        }
+        if (repeatMode == RepeatMode.REPEAT_ALL) {
+            if (nowPlaying == null) {
+                nowPlaying = current.makeClone();
+            }
+            playNow(nowPlaying, true);
+            queue.add(current.makeClone());
+            return;
+        }
+        if (nowPlaying == null) {
+            Main.getLuffia()
+                    .getPublishedGuild()
+                    .getAudioManager()
+                    .closeAudioConnection();
+            repeatMode = RepeatMode.NO_REPEAT;
+            return;
+        }
+        if (repeatMode == RepeatMode.NO_REPEAT) {
+            playNow(nowPlaying, false);
+            return;
+        }
     }
 
     public void quit() {
@@ -94,6 +119,7 @@ public class TrackScheduler extends AudioEventAdapter {
                 .getPublishedGuild()
                 .getAudioManager()
                 .closeAudioConnection();
+        repeatMode = RepeatMode.NO_REPEAT;
     }
 
     public LinkedList<AudioTrack> getQueue() {
