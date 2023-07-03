@@ -12,6 +12,7 @@ import kr.kro.backas.command.certification.CertificationInfoCommand;
 import kr.kro.backas.command.certification.CertificationRemoveCommand;
 import kr.kro.backas.command.certification.ForceCertificationCommand;
 import kr.kro.backas.command.music.*;
+import kr.kro.backas.music.MusicListener;
 import kr.kro.backas.music.MusicPlayerManager;
 import kr.kro.backas.music.service.youtube.YoutubeService;
 import net.dv8tion.jda.api.JDA;
@@ -62,6 +63,7 @@ public class Luffia {
         this.musicPlayerManager = new MusicPlayerManager(this);
         this.youtubeService = new YoutubeService();
 
+        this.discordAPI.addEventListener(new MusicListener());
         this.discordAPI.getPresence().setActivity(Activity.playing("!도움말 명령어로 기능 확인"));
     }
 
