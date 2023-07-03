@@ -120,6 +120,14 @@ public class TrackScheduler extends AudioEventAdapter {
                 .getAudioManager()
                 .closeAudioConnection();
         repeatMode = RepeatMode.NO_REPEAT;
+        nowPlaying = null;
+    }
+
+    public void onQuit() {
+        queue.clear();
+        player.stopTrack();
+        repeatMode = RepeatMode.NO_REPEAT;
+        nowPlaying = null;
     }
 
     public LinkedList<AudioTrack> getQueue() {
@@ -219,12 +227,10 @@ public class TrackScheduler extends AudioEventAdapter {
                     .reply(message, track.getInfo(), "음악을 재생합니다.");
         }
         player.stopTrack();
-        player.playTrack(track);
+        player.playTrack(nowPlaying = track.makeClone());
     }
 
-    @Override
-    public void onTrackEnd(AudioPlayer player, AudioTrack track, AudioTrackEndReason endReason) {
-        System.out.println(endReason.mayStartNext + " " + endReason.name());
+    private void nextQueue(AudioTrackEndReason endReason, AudioTrack track) {
         if (endReason == AudioTrackEndReason.FINISHED) {
             if (repeatMode == RepeatMode.NO_REPEAT) {
                 popAndPlay();
@@ -239,8 +245,15 @@ public class TrackScheduler extends AudioEventAdapter {
             }
             if (repeatMode == RepeatMode.REPEAT_CURRENT) {
                 playNow(track.makeClone(), true);
-                return;
             }
+        }
+    }
+
+    @Override
+    public void onTrackEnd(AudioPlayer player, AudioTrack track, AudioTrackEndReason endReason) {
+        System.out.println(endReason.mayStartNext + " " + endReason.name());
+        if (endReason == AudioTrackEndReason.FINISHED) {
+            nextQueue(endReason, track);
             return;
         }
         TrackUserData data = track.getUserData(TrackUserData.class);
@@ -258,6 +271,7 @@ public class TrackScheduler extends AudioEventAdapter {
         if (endReason == AudioTrackEndReason.LOAD_FAILED) {
             builder.setDescription("데이터 로드에 실패했습니다. 다음 곡을 재생합니다.");
             message.replyEmbeds(builder.build()).queue();
+            nextQueue(endReason, track);
             return;
         }
         // TODO: queue == 0 exit
