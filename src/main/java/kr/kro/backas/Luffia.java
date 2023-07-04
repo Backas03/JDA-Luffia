@@ -43,7 +43,7 @@ public class Luffia {
 
         this.commandManager = new CommandManager("!", discordAPI);
         this.commandManager.registerCommand("인증", new CertificationCommand());
-        this.commandManager.registerCommand("정보", new CertificationInfoCommand());
+        this.commandManager.registerCommand("인증정보", new CertificationInfoCommand());
         this.commandManager.registerCommand("인증해제", new CertificationRemoveCommand());
         this.commandManager.registerCommand("도움말", new HelpCommand());
         this.commandManager.registerCommand("강제인증", new ForceCertificationCommand());
@@ -52,12 +52,12 @@ public class Luffia {
         this.commandManager.registerCommand("참여", new JoinCommand());
         this.commandManager.registerCommand("나가기", new QuitCommand());
         this.commandManager.registerCommand("스킵", new SkipCommand());
-        this.commandManager.registerCommand("np", new NowPlayingCommand());
+        this.commandManager.registerCommand("정보", new NowPlayingCommand());
         this.commandManager.registerCommand("정지", new PauseCommand());
         this.commandManager.registerCommand("전체반복", new RepeatAllCommand());
         this.commandManager.registerCommand("반복", new RepeatCurrentCommand());
         this.commandManager.registerCommand("반복해제", new NoRepeatCommand());
-        this.commandManager.registerCommand("queue", new QueueCommand());
+        this.commandManager.registerCommand("대기열", new QueueCommand());
 
         this.certificationManager = new CertificationManager(discordAPI);
         this.musicPlayerManager = new MusicPlayerManager(this);
