@@ -13,6 +13,7 @@ public class MusicListener extends ListenerAdapter {
 
     @Override
     public void onGuildVoiceUpdate(@NotNull GuildVoiceUpdateEvent event) {
+        /*
         AudioChannelUnion channelLeft = event.getChannelLeft();
         if (channelLeft == null) {
             return;
@@ -25,12 +26,14 @@ public class MusicListener extends ListenerAdapter {
             return;
         }
         List<Member> members = channelLeft.getMembers();
-        members.removeIf(member -> member.getUser().isBot());
+        members.removeIf(member -> member != null && member.getUser().isBot());
         if (members.isEmpty()) {
             Main.getLuffia()
                     .getMusicPlayerManager()
                     .getTrackScheduler()
                     .quit();
         }
+
+         */
     }
 }

@@ -161,7 +161,17 @@ public class CertificationManager {
 
             // 역할 지급
             Member member = message.getMember();
-            if (member != null && !member.getRoles().contains(role)) {
+            if (member == null) {
+                member = Main.getLuffia()
+                                .getPublishedGuild()
+                                .retrieveMemberById(user.getIdLong())
+                                .complete();
+            }
+            if (member == null) {
+                message.reply("member 데이터를 찾을 수 없습니다. 관리자에게 문의해주세요.").queue();
+                return;
+            }
+            if (!member.getRoles().contains(role)) {
                 message.getGuild().addRoleToMember(user, role).queue();
             }
 
