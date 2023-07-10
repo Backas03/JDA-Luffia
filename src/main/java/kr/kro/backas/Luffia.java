@@ -36,8 +36,6 @@ public class Luffia {
     private final CertificationManager certificationManager;
     private final MusicPlayerManager musicPlayerManager;
 
-    private final YoutubeService youtubeService;
-
     public Luffia(JDA discordAPI) throws IOException {
         this.discordAPI = discordAPI;
 
@@ -61,7 +59,6 @@ public class Luffia {
 
         this.certificationManager = new CertificationManager(discordAPI);
         this.musicPlayerManager = new MusicPlayerManager(this);
-        this.youtubeService = new YoutubeService();
 
         this.discordAPI.addEventListener(new MusicListener());
         this.discordAPI.getPresence().setActivity(Activity.playing("!도움말 명령어로 기능 확인"));
@@ -69,10 +66,6 @@ public class Luffia {
 
     public MusicPlayerManager getMusicPlayerManager() {
         return musicPlayerManager;
-    }
-
-    public YoutubeService getYoutubeService() {
-        return youtubeService;
     }
 
     public JDA getDiscordAPI() {
