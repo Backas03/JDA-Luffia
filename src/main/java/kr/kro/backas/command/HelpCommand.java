@@ -35,7 +35,7 @@ public class HelpCommand implements CommandSource {
             if (source instanceof HelpCommand) continue; // bypass
             String perm = "";
             Long[] roleIds = source.getAllowedRoleIds();
-            if (roleIds != null) {
+            if (roleIds != null && roleIds.length != 0) {
                 StringBuilder sb = new StringBuilder();
                 int i = 0;
                 for (; i<roleIds.length; i++) {

@@ -11,6 +11,7 @@ import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 
 import java.io.IOException;
+import java.time.Instant;
 
 public class ForceCertificationCommand implements CommandSource {
     @Override
@@ -41,12 +42,14 @@ public class ForceCertificationCommand implements CommandSource {
             Member member = Main.getLuffia()
                     .getDiscordAPI()
                     .getGuildById(SharedConstant.MAIN_GUILD_ID)
-                    .getMemberById(userId);
+                    .retrieveMemberById(userId)
+                    .complete();
             if (member == null) {
                 message.reply("유저를 찾을수 없습니다.").queue();
                 return;
             }
-            manager.certificate(userId, CertificationInfo.email(arg1));
+            manager.giveRole(member);
+            manager.certificate(userId, new CertificationInfo(arg1, Instant.now().toEpochMilli(), member.getNickname(), false));
             message.reply("해당 유저를 인증 상태로 전환하였습니다.").queue();
         } catch (NumberFormatException ignore) {
             message.reply("userId는 정수여야합니다.").queue();
