@@ -10,7 +10,7 @@ public class StackTraceUtil {
         StringWriter sw = new StringWriter();
         PrintWriter pw = new PrintWriter(sw);
         e.printStackTrace(pw);
-        return (e.getMessage() + "\"" + sw + "\"").substring(0, Math.min(900, sw.toString().length()));
+        return (e.getMessage() + "\n" + sw).substring(0, Math.min(900, sw.toString().length()));
     }
 
     public static String convertDiscord(Exception e, String lang) {

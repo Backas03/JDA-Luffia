@@ -224,6 +224,13 @@ public class CertificationManager {
         );
     }
 
+    public void giveRole(Member member) {
+        // 역할 지급
+        if (!member.getRoles().contains(role)) {
+            Main.getLuffia().getPublishedGuild().addRoleToMember(member.getUser(), role).queue();
+        }
+    }
+
     public void removeCertification(long userId) throws IOException {
         certificationData.getData().remove(userId);
         Guild guild =  Main.getLuffia().getPublishedGuild();

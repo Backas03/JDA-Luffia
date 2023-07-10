@@ -72,7 +72,7 @@ public class QueueCommand implements CommandSource {
 
     @Override
     public String getUsage() {
-        return "!queue - 현재 재생중인 곡과 대기열을 확인합니다.";
+        return "!대기열 - 현재 재생중인 곡과 대기열과 같은 모든 정보를 확인합니다.";
     }
 
     @Override

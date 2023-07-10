@@ -48,7 +48,7 @@ public class NowPlayingCommand implements CommandSource {
 
     @Override
     public String getUsage() {
-        return "!np - 현재 재생중인 노래 정보를 확인합니다.";
+        return "!정보 - 현재 재생중인 노래 정보를 확인합니다.";
     }
 
     @Override
