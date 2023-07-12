@@ -1,6 +1,5 @@
 package kr.kro.backas.civilwar.lol;
 
-import com.merakianalytics.orianna.Orianna;
 import kr.kro.backas.Main;
 import kr.kro.backas.civilwar.GameType;
 import kr.kro.backas.civilwar.api.GameTeamType;
