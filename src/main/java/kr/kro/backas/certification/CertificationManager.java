@@ -131,7 +131,7 @@ public class CertificationManager {
                 .setTitle("대구대학교 인증 확인 (클릭)", "https://outlook.com/daegu.ac.kr")
                 .setDescription("해당 메일로 인증 코드를 보내드렸습니다.\n아래 절차를 따라 학교 인증을 완료해주세요.")
                 .addField("아래 명령어를 입력하여 학교 인증을 완료합니다.", "!인증 [6자리 인증 코드]", false)
-                .addField("대구대학교 이메일 아이디/비밀번호 찾기", "https://office.daegu.ac.kr/Case1/FindPwd.aspx", false)
+                .addField("아이디 또는 비밀번호를 잊어버리셨다면?", "[대구대학교 이메일 아이디/비밀번호 찾기](https://office.daegu.ac.kr/Case1/FindPwd.aspx)", false)
                 .setFooter("대구대학교 이메일만 가지고 있으면 인증이 가능합니다.")
                 .setColor(Color.decode("#9047ff"));
         message.editMessageEmbeds(builder.build()).queue();
