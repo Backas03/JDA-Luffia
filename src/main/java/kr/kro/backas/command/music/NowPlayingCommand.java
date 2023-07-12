@@ -5,8 +5,9 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import kr.kro.backas.Luffia;
 import kr.kro.backas.Main;
 import kr.kro.backas.command.api.CommandSource;
+import kr.kro.backas.music.service.youtube.YoutubeService;
 import kr.kro.backas.util.DurationUtil;
-import kr.kro.backas.util.UserUtil;
+import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
@@ -27,8 +28,8 @@ public class NowPlayingCommand implements CommandSource {
                 .setColor(Color.decode("#5e71ef"))
                 .setAuthor(info.author)
                 .setTitle(info.title, info.uri)
-                .setThumbnail(luffia.getYoutubeService().getThumbnailURL(info.uri))
-                .setFooter(UserUtil.getName(event.getMember()))
+                .setThumbnail(YoutubeService.getThumbnailURL(info.uri))
+                .setFooter(MemberUtil.getName(event.getMember()))
                 .addField(
                         "재생 시간",
                         DurationUtil.formatDurationColon((int) (track.getPosition() / 1000)) + " / " + DurationUtil.formatDurationColon((int) (info.length / 1000)),

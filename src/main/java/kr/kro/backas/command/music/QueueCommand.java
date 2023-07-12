@@ -4,10 +4,10 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import kr.kro.backas.Main;
 import kr.kro.backas.command.api.CommandSource;
-import kr.kro.backas.music.TrackScheduler;
 import kr.kro.backas.music.TrackUserData;
+import kr.kro.backas.music.service.youtube.YoutubeService;
 import kr.kro.backas.util.DurationUtil;
-import kr.kro.backas.util.UserUtil;
+import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
@@ -34,8 +34,8 @@ public class QueueCommand implements CommandSource {
                 .setColor(Color.decode("#5e71ef"))
                 .setAuthor(info.author)
                 .setTitle(info.title, info.uri)
-                .setThumbnail(Main.getLuffia().getYoutubeService().getThumbnailURL(info.uri))
-                .setFooter(UserUtil.getName(data.message().getMember()))
+                .setThumbnail(YoutubeService.getThumbnailURL(info.uri))
+                .setFooter(MemberUtil.getName(data.message().getMember()))
                 .addField(
                         "재생 시간",
                         DurationUtil.formatDurationColon((int) (track.getPosition() / 1000)) + " / " + DurationUtil.formatDurationColon((int) (info.length / 1000)),
@@ -58,7 +58,7 @@ public class QueueCommand implements CommandSource {
             data = t.getUserData(TrackUserData.class);
             builder.addField(
                     (i + 1) + ". " + t.getInfo().title,
-                    UserUtil.getName(data.message().getMember()) + " - " + t.getInfo().uri,
+                    MemberUtil.getName(data.message().getMember()) + " - " + t.getInfo().uri,
                     false
             );
         }
