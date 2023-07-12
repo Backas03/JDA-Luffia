@@ -6,11 +6,11 @@ import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackEndReason;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
-import kr.kro.backas.Luffia;
 import kr.kro.backas.Main;
+import kr.kro.backas.music.service.youtube.YoutubeService;
 import kr.kro.backas.util.DurationUtil;
+import kr.kro.backas.util.MemberUtil;
 import kr.kro.backas.util.StackTraceUtil;
-import kr.kro.backas.util.UserUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
@@ -195,8 +195,8 @@ public class TrackScheduler extends AudioEventAdapter {
         AudioTrackInfo info = track.getInfo();
         EmbedBuilder builder = new EmbedBuilder()
                 .setColor(Color.decode("#5e71ef"))
-                .setTitle(info.title, Main.getLuffia().getYoutubeService().getThumbnailURL(info.uri))
-                .setFooter(UserUtil.getName(message.getMember()))
+                .setTitle(info.title, YoutubeService.getThumbnailURL(info.uri))
+                .setFooter(MemberUtil.getName(message.getMember()))
                 .addField(
                         "재생 시간",
                         DurationUtil.formatDuration((int) (info.length / 1000)),
@@ -261,8 +261,8 @@ public class TrackScheduler extends AudioEventAdapter {
         AudioTrackInfo info = track.getInfo();
         EmbedBuilder builder = new EmbedBuilder()
                 .setColor(Color.decode("#5e71ef"))
-                .setTitle(info.title, Main.getLuffia().getYoutubeService().getThumbnailURL(info.uri))
-                .setFooter(UserUtil.getName(message.getMember()))
+                .setTitle(info.title, YoutubeService.getThumbnailURL(info.uri))
+                .setFooter(MemberUtil.getName(message.getMember()))
                 .addField(
                         "재생 시간",
                         DurationUtil.formatDuration((int) (info.length / 1000)),
@@ -292,7 +292,7 @@ public class TrackScheduler extends AudioEventAdapter {
                 .setColor(Color.decode("#f1554a"))
                 .setTitle("데이터 로드에 실패했습니다")
                 .setDescription("해당 메시지 링크와 함께 관리자에게 문의해주세요")
-                .setFooter(UserUtil.getName(member))
+                .setFooter(MemberUtil.getName(member))
                 .addField(
                         exception.getClass().getName(),
                         StackTraceUtil.convertDiscord(exception),
