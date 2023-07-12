@@ -9,7 +9,7 @@ import java.net.URL;
 
 public class YoutubeService {
 
-    public String getThumbnailURL(String url) {
+    public static String getThumbnailURL(String url) {
         String videoId = extractVideoId(url);
         return "https://img.youtube.com/vi/" + videoId + "/0.jpg";
     }
