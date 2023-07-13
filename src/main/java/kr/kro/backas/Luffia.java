@@ -1,10 +1,7 @@
 package kr.kro.backas;
 
-import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
-import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager;
-import com.sedmelluq.discord.lavaplayer.source.AudioSourceManager;
-import com.sedmelluq.discord.lavaplayer.source.AudioSourceManagers;
 import kr.kro.backas.certification.CertificationManager;
+import kr.kro.backas.civilwar.lol.LOLUserInfo;
 import kr.kro.backas.command.*;
 import kr.kro.backas.command.api.CommandManager;
 import kr.kro.backas.command.certification.CertificationCommand;
@@ -14,20 +11,14 @@ import kr.kro.backas.command.certification.ForceCertificationCommand;
 import kr.kro.backas.command.music.*;
 import kr.kro.backas.music.MusicListener;
 import kr.kro.backas.music.MusicPlayerManager;
-import kr.kro.backas.music.service.youtube.YoutubeService;
 import net.dv8tion.jda.api.JDA;
-import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.Guild;
-import net.dv8tion.jda.api.entities.IPermissionHolder;
-import net.dv8tion.jda.api.entities.PermissionOverride;
-import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.managers.AudioManager;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
-import java.util.List;
 
 public class Luffia {
 
