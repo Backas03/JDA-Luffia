@@ -1,5 +1,7 @@
 package kr.kro.backas;
 
+import com.merakianalytics.orianna.Orianna;
+import com.merakianalytics.orianna.types.common.Platform;
 import kr.kro.backas.secret.BotSecret;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -8,10 +10,7 @@ import net.dv8tion.jda.api.utils.ChunkingFilter;
 import net.dv8tion.jda.api.utils.MemberCachePolicy;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.time.Duration;
 import java.util.Scanner;
 
@@ -33,6 +32,9 @@ public class Main {
                 .enableCache(CacheFlag.ROLE_TAGS);
 
         try {
+            Orianna.setRiotAPIKey(BotSecret.RIOT_API_KEY);
+            Orianna.setDefaultPlatform(Platform.KOREA);
+
             JDA jda = builder.build().awaitReady();
             luffia = new Luffia(jda);
             initScanner();
