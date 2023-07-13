@@ -2,27 +2,70 @@ package kr.kro.backas.civilwar.lol;
 
 import com.merakianalytics.orianna.Orianna;
 import com.merakianalytics.orianna.types.common.Queue;
-import com.merakianalytics.orianna.types.common.Tier;
+import com.merakianalytics.orianna.types.core.championmastery.ChampionMasteries;
+import com.merakianalytics.orianna.types.core.championmastery.ChampionMastery;
 import com.merakianalytics.orianna.types.core.league.LeagueEntry;
 import com.merakianalytics.orianna.types.core.summoner.Summoner;
 import kr.kro.backas.civilwar.api.GameUserInfo;
+import net.dv8tion.jda.api.EmbedBuilder;
+
+import java.awt.*;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 public class LOLUserInfo implements GameUserInfo {
 
     public String nickname;
-    private int weight;
 
-    public LOLUserInfo(String nickname, int weight) {
+    public LOLUserInfo(String nickname) {
         this.nickname = nickname;
-        this.weight = weight;
     }
 
-    public void setWeight(int weight) {
-        this.weight = weight;
-    }
 
     public Summoner getSummoner() {
         return Orianna.summonerNamed(nickname).get();
+    }
+
+    public EmbedBuilder getInfoMessage() {
+        String imageURL = getSummoner()
+                .getProfileIcon()
+                .getImage()
+                .getURL();
+
+        EmbedBuilder builder = new EmbedBuilder();
+        builder.setColor(Color.decode("#ff8c00"));
+        builder.setAuthor(
+                nickname,
+                "https://www.op.gg/summoners/kr/" + URLEncoder.encode(nickname, StandardCharsets.UTF_8),
+                imageURL
+        );
+        builder.addField("개인/듀오 랭크", getTier(Queue.RANKED_SOLO), true);
+        builder.addField("자유 랭크", getTier(Queue.RANKED_FLEX), true);
+
+        builder.addField("", "", false);
+
+        String encodedNickname = URLEncoder.encode(nickname, StandardCharsets.UTF_8);
+
+        ChampionMasteries masteries = Orianna.championMasteriesForSummoner(getSummoner()).get();
+        for (int i=0; i<Math.min(3, masteries.size()); i++) {
+            ChampionMastery mastery = masteries.get(i);
+            if (mastery == null || !mastery.exists()) {
+                continue;
+            }
+            builder.addField(
+                    (i + 1) + ". " + mastery.getChampion().getName(),
+                    "숙련도: " + mastery.getLevel() + " 레벨\n" +
+                    "숙련도 포인트: " + mastery.getPoints() + "\n",
+                    true
+            );
+        }
+        builder.addField("전적 검색 사이트로 이동하기",
+                "[오피지지](https://www.op.gg/summoners/kr/" + encodedNickname + ")\n" +
+                        "[롤PS](https://lol.ps/summoner/" + encodedNickname + "?region=kr)\n" +
+                        "[포우](https://fow.kr/find/" + encodedNickname + ")",
+                false
+        );
+        return builder;
     }
 
     public String getTier(Queue queue) {
@@ -30,11 +73,11 @@ public class LOLUserInfo implements GameUserInfo {
         if (summoner == null) return "";
         LeagueEntry position = summoner.getLeaguePosition(queue);
         if (position == null) return "언랭";
-        return position.getTier() + " " + position.getDivision() + " " + position.getLeaguePoints() + "점";
+        return position.getTier() + " " + position.getDivision() + "  " + position.getLeaguePoints() + "점";
     }
 
     @Override
     public int getWeight() {
-        return weight;
+        return 0;
     }
 }
