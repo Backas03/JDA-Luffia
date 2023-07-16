@@ -33,6 +33,16 @@ public class MusicListener extends ListenerAdapter {
             LOGGER.info("track data cleared because the bot has left the voice channel. {voiceChannelId={}}", channelLeft.getIdLong());
             return;
         }
+        AudioChannel currentChannel = Main.getLuffia()
+                .getPublishedGuild()
+                .getAudioManager()
+                .getConnectedChannel();
+        if (currentChannel == null) {
+            return;
+        }
+        if (channelLeft.getIdLong() != currentChannel.getIdLong()) {
+            return;
+        }
         List<Member> members = new ArrayList<>(channelLeft.getMembers());
         members.removeIf(member -> member != null && member.getUser().isBot());
         if (members.isEmpty()) {
