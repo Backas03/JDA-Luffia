@@ -23,7 +23,10 @@ public class CommandListener extends ListenerAdapter {
             return;
         }
         long guildId = event.getGuild().getIdLong();
-        if (guildId != SharedConstant.PUBLISHED_GUILD_ID) {
+        long publishedGuildId = SharedConstant.ON_DEV ?
+                SharedConstant.DEV_GUILD_ID :
+                SharedConstant.PUBLISHED_GUILD_ID;
+        if (guildId != publishedGuildId) {
             return;
         }
         String content = event.getMessage().getContentRaw();
