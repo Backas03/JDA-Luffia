@@ -25,7 +25,7 @@ public class Main {
 
     public static void main(String[] args) {
         JDABuilder builder = JDABuilder
-                .createDefault(BotSecret.TOKEN)
+                .createDefault(SharedConstant.ON_DEV ? BotSecret.DEV_TOKEN : BotSecret.TOKEN)
                 .setChunkingFilter(ChunkingFilter.ALL) // enable member chunking for all guilds
                 .setMemberCachePolicy(MemberCachePolicy.ALL)
                 .enableIntents(GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MEMBERS)

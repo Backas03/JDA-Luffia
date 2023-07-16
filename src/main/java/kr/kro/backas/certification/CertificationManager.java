@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import kr.kro.backas.Main;
+import kr.kro.backas.SharedConstant;
 import kr.kro.backas.util.FileUtil;
 import kr.kro.backas.util.MailUtil;
 import kr.kro.backas.util.StackTraceUtil;
@@ -34,7 +35,7 @@ public class CertificationManager {
 
     public CertificationManager(JDA discordAPI) throws IOException {
         this.role = discordAPI.getRoleById(1120505896297050152L);
-        if (this.role == null) throw new IOException("역할을 찾을 수 없습니다.");
+        if (this.role == null && !SharedConstant.ON_DEV) throw new IOException("역할을 찾을 수 없습니다.");
         this.emails = new HashMap<>();
         this.codes = new HashMap<>();
         this.failed = new HashSet<>();

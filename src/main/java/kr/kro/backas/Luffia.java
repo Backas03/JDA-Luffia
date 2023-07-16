@@ -72,7 +72,9 @@ public class Luffia {
     }
 
     public Guild getPublishedGuild() {
-        return discordAPI.getGuildById(SharedConstant.PUBLISHED_GUILD_ID);
+        return SharedConstant.ON_DEV ?
+                discordAPI.getGuildById(1121632283154202694L) :
+                discordAPI.getGuildById(SharedConstant.PUBLISHED_GUILD_ID);
     }
 
     public void connectVoice(@NotNull VoiceChannel channel) {
