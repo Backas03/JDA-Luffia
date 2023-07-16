@@ -62,6 +62,7 @@ public class HelpCommand implements CommandSource {
                     false
             );
         }
+        /*
         builder.addField(
                 "아래 기능들은 discord.py 로 구동되며, Java Discord API(JDA)로 서비스 되지않습니다. 기능이 정상 작동하지 않을수도 있습니다.",
                 """
@@ -75,7 +76,7 @@ public class HelpCommand implements CommandSource {
                         """,
                 false
         );
-
+         */
         builder.setAuthor(
                 "Luffia Github (click)" +
                 "\n" + SharedConstant.LICENSE,
