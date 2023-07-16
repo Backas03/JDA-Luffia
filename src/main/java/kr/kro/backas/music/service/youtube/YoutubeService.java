@@ -1,12 +1,5 @@
 package kr.kro.backas.music.service.youtube;
 
-import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
-import kr.kro.backas.music.service.MusicService;
-
-import java.net.MalformedURLException;
-import java.net.URI;
-import java.net.URL;
-
 public class YoutubeService {
 
     public static String getThumbnailURL(String url) {
