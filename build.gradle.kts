@@ -28,6 +28,7 @@ dependencies {
     implementation("com.sedmelluq:lavaplayer:1.3.78")
     implementation("com.google.api-client:google-api-client:2.2.0")
     implementation("com.merakianalytics.orianna:orianna:4.0.0-SNAPSHOT")
+    implementation("org.jsoup:jsoup:1.14.1")
 }
 
 tasks.test {

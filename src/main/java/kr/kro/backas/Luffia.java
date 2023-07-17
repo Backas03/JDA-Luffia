@@ -2,7 +2,6 @@ package kr.kro.backas;
 
 import kr.kro.backas.certification.CertificationManager;
 import kr.kro.backas.certification.listener.CertificationListener;
-import kr.kro.backas.civilwar.lol.LOLUserInfo;
 import kr.kro.backas.command.*;
 import kr.kro.backas.command.api.CommandManager;
 import kr.kro.backas.command.certification.CertificationCommand;
@@ -10,6 +9,7 @@ import kr.kro.backas.command.certification.CertificationInfoCommand;
 import kr.kro.backas.command.certification.CertificationRemoveCommand;
 import kr.kro.backas.command.certification.ForceCertificationCommand;
 import kr.kro.backas.command.lol.LOLUserInfoCommand;
+import kr.kro.backas.command.maplestory.MapleUserInfoCommand;
 import kr.kro.backas.command.music.*;
 import kr.kro.backas.music.MusicListener;
 import kr.kro.backas.music.MusicPlayerManager;
@@ -51,6 +51,8 @@ public class Luffia {
         this.commandManager.registerCommand("대기열", new QueueCommand());
 
         this.commandManager.registerCommand("롤정보", new LOLUserInfoCommand());
+
+        this.commandManager.registerCommand("메이플정보", new MapleUserInfoCommand());
 
         this.certificationManager = new CertificationManager(discordAPI);
         this.musicPlayerManager = new MusicPlayerManager(this);
