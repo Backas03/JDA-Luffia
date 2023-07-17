@@ -7,7 +7,7 @@ public final class SharedConstant {
 
     public static final boolean ON_DEV = false;
 
-    public static final String RELEASE_VERSION = "Luffia/1.1.7.unstable-Release";
+    public static final String RELEASE_VERSION = "Luffia/1.1.8.unstable-Release";
 
     public static final String LICENSE = "GPL-3.0 license";
 
