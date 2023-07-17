@@ -7,7 +7,10 @@ import com.merakianalytics.orianna.types.core.championmastery.ChampionMastery;
 import com.merakianalytics.orianna.types.core.league.LeagueEntry;
 import com.merakianalytics.orianna.types.core.summoner.Summoner;
 import kr.kro.backas.civilwar.api.GameUserInfo;
+import kr.kro.backas.util.DurationUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
+import org.joda.time.DateTime;
+import org.joda.time.Duration;
 
 import java.awt.*;
 import java.net.URLEncoder;
@@ -17,17 +20,21 @@ public class LOLUserInfo implements GameUserInfo {
 
     public String nickname;
 
-    public LOLUserInfo(String nickname) {
+    public LOLUserInfo(String nickname) throws IllegalArgumentException {
         this.nickname = nickname;
     }
 
+    public boolean exists() {
+        return getSummoner().exists();
+    }
 
     public Summoner getSummoner() {
         return Orianna.summonerNamed(nickname).get();
     }
 
     public EmbedBuilder getInfoMessage() {
-        String imageURL = getSummoner()
+        Summoner summoner = getSummoner();
+        String imageURL = summoner
                 .getProfileIcon()
                 .getImage()
                 .getURL();
@@ -35,7 +42,7 @@ public class LOLUserInfo implements GameUserInfo {
         EmbedBuilder builder = new EmbedBuilder();
         builder.setColor(Color.decode("#ff8c00"));
         builder.setAuthor(
-                nickname,
+                "Lv." + summoner.getLevel() + "    " + nickname,
                 "https://www.op.gg/summoners/kr/" + URLEncoder.encode(nickname, StandardCharsets.UTF_8),
                 imageURL
         );
@@ -46,7 +53,7 @@ public class LOLUserInfo implements GameUserInfo {
 
         String encodedNickname = URLEncoder.encode(nickname, StandardCharsets.UTF_8);
 
-        ChampionMasteries masteries = Orianna.championMasteriesForSummoner(getSummoner()).get();
+        ChampionMasteries masteries = Orianna.championMasteriesForSummoner(summoner).get();
         for (int i=0; i<Math.min(3, masteries.size()); i++) {
             ChampionMastery mastery = masteries.get(i);
             if (mastery == null || !mastery.exists()) {
@@ -65,6 +72,13 @@ public class LOLUserInfo implements GameUserInfo {
                         "[포우](https://fow.kr/find/" + encodedNickname + ")",
                 false
         );
+
+        DateTime now = DateTime.now();
+        DateTime updated = summoner.getUpdated();
+
+        Duration diff = new Duration(updated, now);
+
+        builder.setFooter(DurationUtil.parseDuration(diff) + " 전에 업데이트 되었습니다.");
         return builder;
     }
 

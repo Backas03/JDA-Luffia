@@ -1,6 +1,9 @@
 package kr.kro.backas.util;
 
-import java.time.Duration;
+import org.joda.time.Duration;
+import org.joda.time.Minutes;
+import org.joda.time.Seconds;
+
 import java.util.Arrays;
 import java.util.List;
 
@@ -30,5 +33,29 @@ public final class DurationUtil {
             return String.format("%02d", hours) + ":" + String.format("%02d", minutes) + ":" + String.format("%02d", seconds);
         }
         return String.format("%02d", minutes) + ":" + String.format("%02d", seconds);
+    }
+
+    public static String parseDuration(Duration duration) {
+        long days = duration.getStandardDays();
+        long hours = duration.getStandardHours() % 24;
+        long minutes = duration.getStandardMinutes() % 60;
+        long seconds = duration.getStandardSeconds() % 60;
+
+        StringBuilder result = new StringBuilder();
+
+        if (days > 0) {
+            result.append(days).append("일 ");
+        }
+        if (hours > 0) {
+            result.append(hours).append("시간 ");
+        }
+        if (minutes > 0) {
+            result.append(minutes).append("분 ");
+        }
+        if (seconds > 0) {
+            result.append(seconds).append("초");
+        }
+
+        return result.toString();
     }
 }
