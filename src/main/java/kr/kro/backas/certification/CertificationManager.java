@@ -130,7 +130,6 @@ public class CertificationManager {
                 user.getGlobalName() :
                 String.format("%#s", user);
         String imageURL = "attachment:/" + Main.class.getResource("/image/agreement.png").getPath();
-        System.out.println(imageURL);
         String url = user.getAvatarUrl() != null ? user.getAvatarUrl() : user.getDefaultAvatarUrl();
         EmbedBuilder builder = new EmbedBuilder()
                 .setAuthor(author, null, url)
