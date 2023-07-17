@@ -19,7 +19,7 @@ public class LOLUserInfoCommand implements CommandSource {
         }
         LOLUserInfo info = new LOLUserInfo(nickname);
         if (!info.exists()) {
-            message.reply("해당 사용자를 찾을 수 없습니다.").queue();
+            message.reply("해당 사용자를 찾을 수 없습니다. \"" + nickname + "\"").queue();
             return;
         }
         final Message newer = message.reply("데이터를 조회중에 있습니다 잠시만 기다려주세요...").complete();
