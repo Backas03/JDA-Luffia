@@ -1,7 +1,5 @@
-package kr.kro.backas.civilwar.lol;
+package kr.kro.backas.game.lol;
 
-import com.merakianalytics.orianna.Orianna;
-import com.merakianalytics.orianna.types.dto.summoner.Summoner;
 import net.dv8tion.jda.api.entities.User;
 
 import java.util.HashMap;

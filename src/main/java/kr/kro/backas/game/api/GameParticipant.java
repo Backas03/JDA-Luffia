@@ -1,4 +1,4 @@
-package kr.kro.backas.civilwar.api;
+package kr.kro.backas.game.api;
 
 public interface GameParticipant<D extends GameUserInfo, T extends GameTeam<?>> {
 

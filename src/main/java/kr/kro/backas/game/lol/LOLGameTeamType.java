@@ -1,6 +1,6 @@
-package kr.kro.backas.civilwar.lol;
+package kr.kro.backas.game.lol;
 
-import kr.kro.backas.civilwar.api.GameTeamType;
+import kr.kro.backas.game.api.GameTeamType;
 
 public enum LOLGameTeamType implements GameTeamType {
 

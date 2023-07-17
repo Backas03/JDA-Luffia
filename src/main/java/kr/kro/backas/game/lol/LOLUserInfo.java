@@ -1,4 +1,4 @@
-package kr.kro.backas.civilwar.lol;
+package kr.kro.backas.game.lol;
 
 import com.merakianalytics.orianna.Orianna;
 import com.merakianalytics.orianna.types.common.Queue;
@@ -6,7 +6,7 @@ import com.merakianalytics.orianna.types.core.championmastery.ChampionMasteries;
 import com.merakianalytics.orianna.types.core.championmastery.ChampionMastery;
 import com.merakianalytics.orianna.types.core.league.LeagueEntry;
 import com.merakianalytics.orianna.types.core.summoner.Summoner;
-import kr.kro.backas.civilwar.api.GameUserInfo;
+import kr.kro.backas.game.api.GameUserInfo;
 import kr.kro.backas.util.DurationUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import org.joda.time.DateTime;

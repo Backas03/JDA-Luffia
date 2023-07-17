@@ -1,9 +1,9 @@
-package kr.kro.backas.civilwar.lol;
+package kr.kro.backas.game.lol;
 
 import kr.kro.backas.Main;
-import kr.kro.backas.civilwar.GameType;
-import kr.kro.backas.civilwar.api.GameTeamType;
-import kr.kro.backas.civilwar.api.RecruitmentRoom;
+import kr.kro.backas.game.GameType;
+import kr.kro.backas.game.api.GameTeamType;
+import kr.kro.backas.game.api.RecruitmentRoom;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Guild;

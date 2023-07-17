@@ -1,6 +1,6 @@
-package kr.kro.backas.civilwar.lol;
+package kr.kro.backas.game.lol;
 
-import kr.kro.backas.civilwar.api.GameTeam;
+import kr.kro.backas.game.api.GameTeam;
 
 import java.util.HashSet;
 import java.util.Set;
