@@ -8,6 +8,7 @@ import kr.kro.backas.command.certification.CertificationCommand;
 import kr.kro.backas.command.certification.CertificationInfoCommand;
 import kr.kro.backas.command.certification.CertificationRemoveCommand;
 import kr.kro.backas.command.certification.ForceCertificationCommand;
+import kr.kro.backas.command.lol.LOLUserInfoCommand;
 import kr.kro.backas.command.music.*;
 import kr.kro.backas.music.MusicListener;
 import kr.kro.backas.music.MusicPlayerManager;
@@ -47,6 +48,8 @@ public class Luffia {
         this.commandManager.registerCommand("반복", new RepeatCurrentCommand());
         this.commandManager.registerCommand("반복해제", new NoRepeatCommand());
         this.commandManager.registerCommand("대기열", new QueueCommand());
+
+        this.commandManager.registerCommand("롤정보", new LOLUserInfoCommand());
 
         this.certificationManager = new CertificationManager(discordAPI);
         this.musicPlayerManager = new MusicPlayerManager(this);
