@@ -2,7 +2,7 @@ package kr.kro.backas;
 
 import com.merakianalytics.orianna.Orianna;
 import com.merakianalytics.orianna.types.common.Platform;
-import kr.kro.backas.civilwar.lol.LOLUserInfo;
+import kr.kro.backas.game.maplestory.MapleUserInfo;
 import kr.kro.backas.secret.BotSecret;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
