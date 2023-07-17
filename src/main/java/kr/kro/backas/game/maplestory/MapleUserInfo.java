@@ -219,7 +219,8 @@ public class MapleUserInfo {
                         "무릉도장",
                         mureungFloor + "\n" +
                                 "월드랭킹 " + mureungWorldRank + "\n" +
-                                "랭킹 " + mureungRank + "\n\n" +
+                                "랭킹 " + mureungRank + "\n" +
+                                mureungTime + "\n" +
                                 mureungDate,
                         true
                 ).addField(
