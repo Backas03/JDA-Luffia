@@ -11,12 +11,15 @@ import kr.kro.backas.util.StackTraceUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.*;
+import net.dv8tion.jda.api.utils.FileUpload;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.awt.*;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.util.*;
@@ -126,6 +129,8 @@ public class CertificationManager {
         String author = user.getGlobalName() != null ?
                 user.getGlobalName() :
                 String.format("%#s", user);
+        String imageURL = "attachment:/" + Main.class.getResource("/image/agreement.png").getPath();
+        System.out.println(imageURL);
         String url = user.getAvatarUrl() != null ? user.getAvatarUrl() : user.getDefaultAvatarUrl();
         EmbedBuilder builder = new EmbedBuilder()
                 .setAuthor(author, null, url)
@@ -133,9 +138,17 @@ public class CertificationManager {
                 .setDescription("해당 메일로 인증 코드를 보내드렸습니다.\n아래 절차를 따라 학교 인증을 완료해주세요.")
                 .addField("아래 명령어를 입력하여 학교 인증을 완료합니다.", "!인증 [6자리 인증 코드]", false)
                 .addField("아이디 또는 비밀번호를 잊어버리셨다면?", "[대구대학교 이메일 아이디/비밀번호 찾기](https://office.daegu.ac.kr/Case1/FindPwd.aspx)", false)
+                .addField("계정 중복인증 방지를 위해 아래 사진과 같이 개인정보를 수집하고 있습니다.", "해당 개인정보는 대구대학교 재학생 인증일로부터 해당 디스코드 커뮤니티 퇴장일까지 보관되며, 재학생 인증 절차 완료시 해당 동의서에 동의하는 것으로 간주합니다.", false)
                 .setFooter("대구대학교 이메일만 가지고 있으면 인증이 가능합니다.")
+                .setImage("attachment://agreement.png")
                 .setColor(Color.decode("#9047ff"));
-        message.editMessageEmbeds(builder.build()).queue();
+        message.editMessageEmbeds(builder.build())
+                .setFiles(
+                        FileUpload.fromData(
+                                Main.class.getResourceAsStream("/image/agreement.png"),
+                                "agreement.png")
+                ).queue();
+
     }
 
 
