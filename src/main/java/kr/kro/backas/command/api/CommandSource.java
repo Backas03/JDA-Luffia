@@ -30,7 +30,7 @@ public interface CommandSource {
         String[] split = input.split(SPLIT);
         if (split.length - 1 > start) {
             StringBuilder sb = new StringBuilder(split[start + 1]);
-            for (int i=start+2; i<end; i++) {
+            for (int i=start+2; i<end+1; i++) {
                 sb.append(" ").append(split[i]);
             }
             return sb.toString();
