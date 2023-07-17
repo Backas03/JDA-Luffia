@@ -113,24 +113,24 @@ public class MapleUserInfo {
             guild = "없음";
         }
         totalRank = doc
-                .selectFirst("div.col-lg-2.col-md-4.col-sm-4.col-6.mt-3")
+                .select("div.col-lg-2.col-md-4.col-sm-4.col-6.mt-3")
                 .select("span")
-                .first()
+                .get(0)
                 .text();
         worldRank = doc
-                .selectFirst("div.col-lg-2.col-md-4.col-sm-4.col-6.mt-3")
+                .select("div.col-lg-2.col-md-4.col-sm-4.col-6.mt-3")
                 .select("span")
-                .first()
+                .get(1)
                 .text();
         jobRankWorld = doc
-                .selectFirst("div.col-lg-2.col-md-4.col-sm-4.col-6.mt-3")
+                .select("div.col-lg-2.col-md-4.col-sm-4.col-6.mt-3")
                 .select("span")
-                .first()
+                .get(2)
                 .text();
         jobRankTotal = doc
-                .selectFirst("div.col-lg-2.col-md-4.col-sm-4.col-6.mt-3")
+                .select("div.col-lg-2.col-md-4.col-sm-4.col-6.mt-3")
                 .select("span")
-                .first()
+                .get(3)
                 .text();
         for (Element itemElement : doc
                 .selectFirst("div.character-coord__items")
@@ -248,7 +248,7 @@ public class MapleUserInfo {
                                 mureungDate,
                         true
                 ).addField(
-                        "유니온 [" + unionRank + "]",
+                        "유니온 [" + unionName + "]",
                         "레벨 " + unionLevel +
                                 "\n " + unionPower +
                                 "\n월드랭킹 " + unionWorldRank +

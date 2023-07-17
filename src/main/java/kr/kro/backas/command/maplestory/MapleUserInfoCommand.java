@@ -7,10 +7,8 @@ import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.utils.FileUpload;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.URL;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 public class MapleUserInfoCommand implements CommandSource {
@@ -45,8 +43,8 @@ public class MapleUserInfoCommand implements CommandSource {
                 return false;
             });
         } catch (Exception e) {
-            // StackTraceUtil.replyError("해당 사용자를 찾을 수 없습니다. \"" + nickname + "\"", message, e);
-            message.reply("해당 사용자를 찾을 수 없습니다. \"" + nickname + "\"").queue();
+            StackTraceUtil.replyError("해당 사용자를 찾을 수 없습니다. \"" + nickname + "\"", message, e);
+            // message.reply("해당 사용자를 찾을 수 없습니다. \"" + nickname + "\"").queue();
         }
     }
 
