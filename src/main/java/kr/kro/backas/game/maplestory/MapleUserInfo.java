@@ -136,60 +136,80 @@ public class MapleUserInfo {
 
             codies.put(type, name);
         }
-        mureungFloor = doc
-                .selectFirst("h1.user-summary-floor")
-                .text()
-                .trim();
-        mureungInfo = doc
-                .selectFirst("footer.user-summary-box-footer")
-                .selectFirst("div.d-block > span")
-                .text()
-                .trim();
-        mureungWorldRank = doc
-                .selectFirst("footer.user-summary-box-footer")
-                .selectFirst("div.mb-2 > b:contains(월드랭킹) + span")
-                .text()
-                .trim();
-        mureungRank = doc
-                .selectFirst("footer.user-summary-box-footer")
-                .select("div.mb-2 > b:contains(랭킹) + span")
-                .get(1)
-                .text()
-                .trim();
-        mureungDate = doc
-                .selectFirst("footer.user-summary-box-footer")
-                .selectFirst("div.user-summary-date > span")
-                .text()
-                .trim();
-        mureungTime = doc
-                .selectFirst("small.user-summary-duration")
-                .text();
-        unionName = doc
-                .selectFirst("div.user-summary-tier-string")
-                .text();
-        unionLevel = doc
-                .selectFirst("span.user-summary-level")
-                .text();
-        unionImageURL = "https:" + doc
-                .selectFirst("img.user-summary-tier")
-                .attr("src");
+        try {
+            mureungFloor = doc
+                    .selectFirst("h1.user-summary-floor")
+                    .text()
+                    .trim();
+            mureungInfo = doc
+                    .selectFirst("footer.user-summary-box-footer")
+                    .selectFirst("div.d-block > span")
+                    .text()
+                    .trim();
+            mureungWorldRank = doc
+                    .selectFirst("footer.user-summary-box-footer")
+                    .selectFirst("div.mb-2 > b:contains(월드랭킹) + span")
+                    .text()
+                    .trim();
+            mureungRank = doc
+                    .selectFirst("footer.user-summary-box-footer")
+                    .select("div.mb-2 > b:contains(랭킹) + span")
+                    .get(1)
+                    .text()
+                    .trim();
+            mureungDate = doc
+                    .selectFirst("footer.user-summary-box-footer")
+                    .selectFirst("div.user-summary-date > span")
+                    .text()
+                    .trim();
+            mureungTime = doc
+                    .selectFirst("small.user-summary-duration")
+                    .text();
+        } catch (Exception ignore) {
+            mureungFloor = "기록이 없습니다.";
+            mureungInfo = "기록이 없습니다.";
+            mureungWorldRank = "기록이 없습니다.";
+            mureungRank = "기록이 없습니다.";
+            mureungDate = "기록이 없습니다.";
+            mureungTime = "기록이 없습니다.";
+        }
 
-        unionPower = doc
-                .select("div.d-block span")
-                .get(2)
-                .text();
-        unionWorldRank = doc
-                .selectFirst("div.mb-2 span")
-                .text();
-        unionRank = doc
-                .select("div.mb-2 span")
-                .last()
-                .text();
-        unionDate = doc
-                .select("div.user-summary-date span")
-                .last()
-                .text()
-                .replace("기준일: ", "");
+        try {
+            unionName = doc
+                    .selectFirst("div.user-summary-tier-string")
+                    .text();
+            unionLevel = doc
+                    .selectFirst("span.user-summary-level")
+                    .text();
+            unionImageURL = "https:" + doc
+                    .selectFirst("img.user-summary-tier")
+                    .attr("src");
+
+            unionPower = doc
+                    .select("div.d-block span")
+                    .get(2)
+                    .text();
+            unionWorldRank = doc
+                    .selectFirst("div.mb-2 span")
+                    .text();
+            unionRank = doc
+                    .select("div.mb-2 span")
+                    .last()
+                    .text();
+            unionDate = doc
+                    .select("div.user-summary-date span")
+                    .last()
+                    .text()
+                    .replace("기준일: ", "");
+        } catch (Exception ignore) {
+            unionName = "기록이 없습니다.";
+            unionLevel = "기록이 없습니다.";
+            unionImageURL = "기록이 없습니다.";
+            unionPower = "기록이 없습니다.";
+            unionWorldRank = "기록이 없습니다.";
+            unionRank = "기록이 없습니다.";
+            unionDate = "기록이 없습니다.";
+        }
         lastUpdate = doc
                 .selectFirst("span.d-block.font-weight-light")
                 .text();
