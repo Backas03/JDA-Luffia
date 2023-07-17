@@ -2,6 +2,7 @@ package kr.kro.backas.command.maplestory;
 
 import kr.kro.backas.command.api.CommandSource;
 import kr.kro.backas.game.maplestory.MapleUserInfo;
+import kr.kro.backas.util.StackTraceUtil;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.utils.FileUpload;
@@ -44,6 +45,7 @@ public class MapleUserInfoCommand implements CommandSource {
                 return false;
             });
         } catch (Exception e) {
+            // StackTraceUtil.replyError("해당 사용자를 찾을 수 없습니다. \"" + nickname + "\"", message, e);
             message.reply("해당 사용자를 찾을 수 없습니다. \"" + nickname + "\"").queue();
         }
     }

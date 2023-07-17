@@ -105,9 +105,13 @@ public class MapleUserInfo {
                 .select("span")
                 .get(1)
                 .text();
-        guild = doc
-                .selectFirst("a.text-yellow.text-underline")
-                .text();
+        try {
+            guild = doc
+                    .selectFirst("a.text-yellow.text-underline")
+                    .text();
+        } catch (Exception ignore) {
+            guild = "없음";
+        }
         totalRank = doc
                 .selectFirst("div.col-lg-2.col-md-4.col-sm-4.col-6.mt-3")
                 .select("span")
