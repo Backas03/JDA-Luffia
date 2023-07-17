@@ -1,6 +1,7 @@
 package kr.kro.backas;
 
 import kr.kro.backas.certification.CertificationManager;
+import kr.kro.backas.certification.listener.CertificationListener;
 import kr.kro.backas.civilwar.lol.LOLUserInfo;
 import kr.kro.backas.command.*;
 import kr.kro.backas.command.api.CommandManager;
@@ -55,6 +56,7 @@ public class Luffia {
         this.musicPlayerManager = new MusicPlayerManager(this);
 
         this.discordAPI.addEventListener(new MusicListener());
+        this.discordAPI.addEventListener(new CertificationListener());
         this.discordAPI.getPresence().setActivity(Activity.playing("!도움말 명령어로 기능 확인"));
     }
 
