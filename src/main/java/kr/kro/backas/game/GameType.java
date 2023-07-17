@@ -1,4 +1,4 @@
-package kr.kro.backas.civilwar;
+package kr.kro.backas.game;
 
 public enum GameType {
 

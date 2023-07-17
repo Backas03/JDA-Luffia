@@ -1,6 +1,6 @@
-package kr.kro.backas.civilwar.api;
+package kr.kro.backas.game.api;
 
-import kr.kro.backas.civilwar.GameType;
+import kr.kro.backas.game.GameType;
 import net.dv8tion.jda.api.EmbedBuilder;
 
 public interface RecruitmentRoom<T extends GameTeam<? extends GameTeamType>> {

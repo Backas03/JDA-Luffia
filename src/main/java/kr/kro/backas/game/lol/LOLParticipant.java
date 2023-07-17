@@ -1,7 +1,6 @@
-package kr.kro.backas.civilwar.lol;
+package kr.kro.backas.game.lol;
 
-import kr.kro.backas.civilwar.api.GameParticipant;
-import net.dv8tion.jda.api.entities.Member;
+import kr.kro.backas.game.api.GameParticipant;
 
 public class LOLParticipant implements GameParticipant<LOLUserInfo, LOLGameTeam> {
 

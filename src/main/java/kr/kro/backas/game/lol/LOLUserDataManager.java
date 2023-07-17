@@ -1,4 +1,4 @@
-package kr.kro.backas.civilwar.lol;
+package kr.kro.backas.game.lol;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
