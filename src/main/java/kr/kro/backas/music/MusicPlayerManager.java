@@ -59,11 +59,15 @@ public class MusicPlayerManager {
         youtubeAudioSourceManager.setPlaylistPageCount(50);
 
         this.player = this.manager.createPlayer();
-        this.trackScheduler = new TrackScheduler(this.player);
+        this.trackScheduler = new TrackScheduler(this, this.player);
         player.addListener(this.trackScheduler);
         this.queries = new HashMap<>();
         Guild guild = luffia.getPublishedGuild();
         guild.getAudioManager().setSendingHandler(new AudioForwarder(this.player));
+    }
+
+    public AudioPlayerManager getPlayerManager() {
+        return manager;
     }
 
     public Map<Long, AudioPlaylist> getQueries() {
@@ -102,98 +106,5 @@ public class MusicPlayerManager {
                         false
                 );
         replyTo.replyEmbeds(builder.build()).queue();
-    }
-
-    private class ResultHandler implements AudioLoadResultHandler {
-
-        private final Member member;
-        private final Message replyTo;
-        private final String identifier;
-        private final String query;
-
-        private int retryAttempt;
-
-        private ResultHandler(Member member, Message replyTo, String identifier, String query) {
-            this.retryAttempt = 0;
-            this.member = member;
-            this.replyTo = replyTo;
-            this.identifier = identifier;
-            this.query = query;
-        }
-
-        @Override
-        public void trackLoaded(AudioTrack track) {
-            AudioTrackInfo info = track.getInfo();
-            trackScheduler.enqueue(replyTo, track);
-            reply(replyTo, info, "해당 음악이 " + trackScheduler.size() + "번째 대기열에 추가 되었습니다.");
-        }
-
-        @Override
-        public void playlistLoaded(AudioPlaylist playlist) {
-            List<AudioTrack> tracks = playlist.getTracks();
-
-            EmbedBuilder builder = new EmbedBuilder()
-                    .setColor(Color.decode("#ff8400"))
-                    .setTitle("\"" + query + "\" 에 대한 검색 결과입니다")
-                    .setDescription("아래는 " + tracks.size() + "개의 검색 항목 중 연관성이 가장 높은 5개의 곡입니다");
-            int max = Math.min(5, tracks.size());
-            for (int i=0; i<max; i++) {
-                AudioTrack track = tracks.get(i);
-                AudioTrackInfo info = track.getInfo();
-                builder.addField(
-                        (i + 1) + ". " + info.title + "\n (" + DurationUtil.formatDuration((int) (info.length / 1000)) + ")",
-                        info.uri,
-                        false
-                );
-            }
-            builder.setFooter("1 ~ " + max + " 를 채팅창에 입력해주세요.");
-
-            queries.put(member.getIdLong(), playlist);
-            replyTo.replyEmbeds(builder.build()).queue();
-        }
-
-        @Override
-        public void noMatches() {
-            EmbedBuilder builder = new EmbedBuilder()
-                    .setColor(Color.decode("#f1554a"))
-                    .setTitle("검색 데이터가 존재하지 않습니다")
-                    .setDescription(query)
-                    .setFooter(MemberUtil.getName(member));
-            replyTo.replyEmbeds(builder.build()).queue();
-        }
-
-        @Override
-        public void loadFailed(FriendlyException exception) {
-            final int maxAttempt = 3; // max retry attempt
-            if (++retryAttempt == maxAttempt) {
-                EmbedBuilder builder = new EmbedBuilder()
-                        .setColor(Color.decode("#f1554a"))
-                        .setTitle("검색 데이터 로드에 실패했습니다")
-                        .setDescription("해당 메시지 링크와 함께 관리자에게 문의해주세요")
-                        .setFooter(MemberUtil.getName(member))
-                        .addField(
-                                exception.getClass().getName(),
-                                StackTraceUtil.convertDiscord(exception),
-                                false
-                        );
-                replyTo.replyEmbeds(builder.build()).queue();
-                return;
-            }
-            EmbedBuilder builder = new EmbedBuilder()
-                    .setColor(Color.decode("#f1554a"))
-                    .setTitle("유튜브 서버와 통신에 실패했습니다.")
-                    .addField("재통신을 시도합니다.", "재시도 횟수 " + retryAttempt + "/" + maxAttempt, false)
-                    .setFooter(MemberUtil.getName(member));
-            replyTo.replyEmbeds(builder.build()).queue();
-            retry(this);
-        }
-    }
-
-    private void retry(ResultHandler handler) {
-        manager.loadItem(handler.identifier + handler.query, handler);
-    }
-
-    public void search(Member member, Message replyTo, String identifier, String query) {
-        retry(new ResultHandler(member, replyTo, identifier, query));
     }
 }
