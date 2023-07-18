@@ -21,8 +21,10 @@ import net.dv8tion.jda.api.exceptions.InsufficientPermissionException;
 import net.dv8tion.jda.api.managers.AudioManager;
 
 import java.awt.*;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 public class TrackScheduler extends AudioEventAdapter {
 
@@ -34,10 +36,13 @@ public class TrackScheduler extends AudioEventAdapter {
     private AudioTrack nowPlaying;
     private final MusicPlayerManager manager;
 
+    private final Map<Member, ResultHandler> handlers;
+
     public TrackScheduler(MusicPlayerManager manager, AudioPlayer player) {
         this.manager = manager;
         this.player = player;
         this.queue = new LinkedList<>();
+        this.handlers = new HashMap<>();
     }
 
     public AudioTrack getNowPlaying() {
@@ -185,7 +190,8 @@ public class TrackScheduler extends AudioEventAdapter {
 
     @Override
     public void onTrackStart(AudioPlayer player, AudioTrack track) {
-
+        TrackUserData data = track.getUserData(TrackUserData.class);
+        handlers.remove(data.message().getMember());
     }
 
     public void playNow(AudioTrack track, boolean silent) {
@@ -256,7 +262,6 @@ public class TrackScheduler extends AudioEventAdapter {
 
     @Override
     public void onTrackEnd(AudioPlayer player, AudioTrack track, AudioTrackEndReason endReason) {
-        System.out.println(endReason.mayStartNext + " " + endReason.name());
         if (endReason == AudioTrackEndReason.FINISHED) {
             nextQueue(endReason, track);
             return;
@@ -290,6 +295,8 @@ public class TrackScheduler extends AudioEventAdapter {
 
     @Override
     public void onTrackException(AudioPlayer player, AudioTrack track, FriendlyException exception) {
+
+        /*
         TrackUserData data = track.getUserData(TrackUserData.class);
         Message message = data.message();
         Member member = message.getMember();
@@ -305,6 +312,14 @@ public class TrackScheduler extends AudioEventAdapter {
                 );
         message.replyEmbeds(builder.build()).queue();
         skip();
+
+         */
+        TrackUserData data = track.getUserData(TrackUserData.class);
+        Message message = data.message();
+        ResultHandler handler = handlers.get(message.getMember());
+        if (handler != null) {
+            handler.loadFailed(exception);
+        }
     }
 
     @Override
@@ -342,6 +357,7 @@ public class TrackScheduler extends AudioEventAdapter {
             this.replyTo = replyTo;
             this.identifier = identifier;
             this.query = query;
+            handlers.put(member, this);
         }
 
         @Override
