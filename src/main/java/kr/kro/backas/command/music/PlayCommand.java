@@ -27,6 +27,7 @@ public class PlayCommand implements CommandSource {
         message.reply("\"" + arg + "\" 에 대한 검색 결과를 로딩중입니다... 잠시만 기다려주세요.").queue();
         Main.getLuffia()
                 .getMusicPlayerManager()
+                .getTrackScheduler()
                 .search(member, message, "ytsearch:", arg);
     }
 
