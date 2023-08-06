@@ -279,7 +279,12 @@ public class TrackScheduler extends AudioEventAdapter {
         if (endReason == AudioTrackEndReason.LOAD_FAILED) {
             builder.setDescription("데이터 로드에 실패했습니다. 다음 곡을 재생합니다.");
             message.replyEmbeds(builder.build()).queue();
-            nextQueue(track);
+            ResultHandler handler = handlers.get(message.getMember());
+            if (handler != null) {
+                handler.loadFailed(null);
+                return;
+            }
+            // nextQueue(track);
             return;
         }
         // TODO: queue == 0 exit
@@ -404,16 +409,12 @@ public class TrackScheduler extends AudioEventAdapter {
             final int maxAttempt = 3; // max retry attempt
             if (++retryAttempt == maxAttempt) {
                 EmbedBuilder builder = new EmbedBuilder()
-                        .setColor(Color.decode("#f1554a"))
+                        .setColor(Color.decode("#FF0000"))
                         .setTitle("검색 데이터 로드에 실패했습니다")
-                        .setDescription("해당 메시지 링크와 함께 관리자에게 문의해주세요")
-                        .setFooter(MemberUtil.getName(member))
-                        .addField(
-                                exception.getClass().getName(),
-                                StackTraceUtil.convertDiscord(exception),
-                                false
-                        );
+                        .setDescription("다음 곡을 재생합니다")
+                        .setFooter(MemberUtil.getName(member));
                 replyTo.replyEmbeds(builder.build()).queue();
+                skip();
                 return;
             }
             EmbedBuilder builder = new EmbedBuilder()
