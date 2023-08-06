@@ -241,29 +241,27 @@ public class TrackScheduler extends AudioEventAdapter {
         player.playTrack(nowPlaying = track.makeClone());
     }
 
-    private void nextQueue(AudioTrackEndReason endReason, AudioTrack track) {
-        if (endReason == AudioTrackEndReason.FINISHED) {
-            if (repeatMode == RepeatMode.NO_REPEAT) {
-                popAndPlay();
-                return;
-            }
-            if (repeatMode == RepeatMode.REPEAT_ALL) {
-                AudioTrack t = pop();
-                if (t == null) t = track.makeClone();
-                playNow(t, true);
-                queue.add(t);
-                return;
-            }
-            if (repeatMode == RepeatMode.REPEAT_CURRENT) {
-                playNow(track.makeClone(), true);
-            }
+    private void nextQueue(AudioTrack track) {
+        if (repeatMode == RepeatMode.NO_REPEAT) {
+            popAndPlay();
+            return;
+        }
+        if (repeatMode == RepeatMode.REPEAT_ALL) {
+            AudioTrack t = pop();
+            if (t == null) t = track.makeClone();
+            playNow(t, true);
+            queue.add(t);
+            return;
+        }
+        if (repeatMode == RepeatMode.REPEAT_CURRENT) {
+            playNow(track.makeClone(), true);
         }
     }
 
     @Override
     public void onTrackEnd(AudioPlayer player, AudioTrack track, AudioTrackEndReason endReason) {
         if (endReason == AudioTrackEndReason.FINISHED) {
-            nextQueue(endReason, track);
+            nextQueue(track);
             return;
         }
         TrackUserData data = track.getUserData(TrackUserData.class);
@@ -281,7 +279,7 @@ public class TrackScheduler extends AudioEventAdapter {
         if (endReason == AudioTrackEndReason.LOAD_FAILED) {
             builder.setDescription("데이터 로드에 실패했습니다. 다음 곡을 재생합니다.");
             message.replyEmbeds(builder.build()).queue();
-            nextQueue(endReason, track);
+            nextQueue(track);
             return;
         }
         // TODO: queue == 0 exit
