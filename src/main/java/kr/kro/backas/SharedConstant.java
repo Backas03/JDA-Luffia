@@ -9,7 +9,7 @@ public final class SharedConstant {
 
     public static final String RELEASE_VERSION = "Luffia/1.1.14-Unstable-Release";
 
-    public static final String LICENSE = "GPL-3.0 license";
+    public static final String LICENSE = "MIT license";
 
     public static final String GITHUB = "https://github.com/Backas03/JLuffia";
 }
