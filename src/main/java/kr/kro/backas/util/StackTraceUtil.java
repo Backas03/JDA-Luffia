@@ -17,6 +17,12 @@ public class StackTraceUtil {
         return "```" + lang + "\n" + convert(e) + "```";
     }
 
+    public static void replyConvertedError(String message, Message msg, Exception e) {
+        msg.reply(
+                message + "\n" + convertDiscord(e)
+        ).queue();
+    }
+
     public static String convertDiscord(Exception e) {
         return convertDiscord(e, "elm");
     }
