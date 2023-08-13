@@ -22,6 +22,10 @@ public class NowPlayingCommand implements CommandSource {
                 .getMusicPlayerManager()
                 .getTrackScheduler()
                 .getNowPlaying();
+        if (track == null) {
+            message.reply("현재 재생중인 곡이 없습니다").queue();
+            return;
+        }
         AudioTrackInfo info = track.getInfo();
         Luffia luffia = Main.getLuffia();
         EmbedBuilder builder = new EmbedBuilder()
