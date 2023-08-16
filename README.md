@@ -1,4 +1,4 @@
-# JLuffia
+# JDA-Luffia
 Provide various features with Java Discord API (JDA)
 
 ## Information
