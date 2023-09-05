@@ -115,7 +115,7 @@ public class CertificationManager {
             try {
                 MailUtil.sendCertificationMessage(email, finalCode); // 순서 중요
             } catch (Exception e) {
-                StackTraceUtil.replyError("인증 메일을 보내는 도중 에러가 발생했습니다.", message, e);
+                StackTraceUtil.replyConvertedError("인증 메일을 보내는 도중 에러가 발생했습니다.", message, e);
             }
             return null;
         }).thenApply(a -> {
