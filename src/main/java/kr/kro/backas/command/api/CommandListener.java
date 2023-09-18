@@ -1,9 +1,7 @@
 package kr.kro.backas.command.api;
 
-import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
 import kr.kro.backas.Main;
 import kr.kro.backas.SharedConstant;
-import kr.kro.backas.music.MusicPlayerManager;
 import kr.kro.backas.util.StackTraceUtil;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Role;
@@ -30,28 +28,6 @@ public class CommandListener extends ListenerAdapter {
             return;
         }
         String content = event.getMessage().getContentRaw();
-        /* music select command start */
-        try {
-            int number = Integer.parseInt(content);
-            Member member = event.getMember();
-            if (member != null) {
-                MusicPlayerManager manager = Main.getLuffia().getMusicPlayerManager();
-                AudioPlaylist playlist = manager.getQuery(member.getIdLong());
-                if (playlist != null) {
-                    int max = Math.min(5, playlist.getTracks().size());
-                    if (number > max) event.getMessage().reply("1 ~ " + max + "사이의 트랙 번호를 입력해주세요").queue();
-                    else {
-                        manager.enqueue(event.getMessage(), playlist.getTracks().get(number - 1));
-                        manager.getQueries().remove(member.getIdLong());
-                    }
-                }
-            }
-        } catch (Exception e) {
-            if (!(e instanceof NumberFormatException)) {
-                StackTraceUtil.replyError("커맨드를 실행하는 도중 예상치 못한 오류가 발생했습니다.", event.getMessage(), e);
-            }
-        }
-        /* music select command end */
         CommandManager commandManager = Main.getLuffia().getCommandManager();
         CommandSource command = commandManager.getSourceWithPrefix(content.split("\\s")[0]);
         if (command == null) {
