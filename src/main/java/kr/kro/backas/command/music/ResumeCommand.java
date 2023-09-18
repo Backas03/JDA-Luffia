@@ -5,7 +5,6 @@ import kr.kro.backas.SharedConstant;
 import kr.kro.backas.command.api.CommandSource;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
-import kr.kro.backas.music.RepeatMode;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Member;
@@ -15,10 +14,9 @@ import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 
 import java.awt.*;
 
-public class NoRepeatCommand implements CommandSource {
+public class ResumeCommand implements CommandSource {
     @Override
     public void onTriggered(MessageReceivedEvent event) {
-        int mode = RepeatMode.NO_REPEAT;
         Message message = event.getMessage();
         Member member = event.getMember();
         VoiceChannel voiceChannel = MemberUtil.getJoinedVoiceChannel(member); // 길드에서만 서비스시 member는 null 이 될수 없음
@@ -26,26 +24,29 @@ public class NoRepeatCommand implements CommandSource {
             EmbedBuilder builder = new EmbedBuilder()
                     .setColor(Color.decode("#f1554a"))
                     .setAuthor(MemberUtil.getName(member))
-                    .setTitle("반복재생 모드를 설정할 수 없습니다.")
-                    .setDescription("반복재생 모드를 설정하려면 음성채팅방에 먼저 참여해주세요.")
+                    .setTitle("음악 일시정지를 해제 할 수 없습니다.")
+                    .setDescription("음악 일시정지를 해제 하려면 음성채팅방에 먼저 참여해주세요.")
                     .setFooter(SharedConstant.RELEASE_VERSION);
             message.replyEmbeds(builder.build()).queue();
             return;
         }
         MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
         MusicPlayerClient client = controller.findFromVoiceChannel(voiceChannel);
-        if (client == null || !client.hasJoinedToVoiceChannel() || !client.isNowPlaying()) {
+        if (client == null || !client.hasJoinedToVoiceChannel()) {
             EmbedBuilder builder = new EmbedBuilder()
                     .setColor(Color.decode("#f1554a"))
                     .setAuthor(MemberUtil.getName(member))
-                    .setTitle("반복재생 모드를 설정할 수 없습니다.")
-                    .setDescription("현재 재생중인 곡이 없으므로 반복재생 모드를 설정할 수 없습니다")
+                    .setTitle("음악 일시정지를 해제 할 수 없습니다.")
+                    .setDescription("현재 재생중인 곡이 없으므로 일시정지를 해제 할 수 없습니다.")
                     .setFooter(SharedConstant.RELEASE_VERSION);
             message.replyEmbeds(builder.build()).queue();
             return;
         }
-        client.setRepeatMode(mode);
-        message.reply("반복 모드를 해제하였습니다.").queue();
+        if (client.resume()) {
+            message.reply("현재 재생중인 곡의 일시정지를 해제 했습니다.").queue();
+            return;
+        }
+        message.reply("일시정지 상태가 아닙니다!").queue();
     }
 
     @Override
@@ -55,7 +56,7 @@ public class NoRepeatCommand implements CommandSource {
 
     @Override
     public String getUsage() {
-        return "!반복해제 - 반복 모드를 해제합니다.";
+        return "!일시정지해제 - 현재 재생중인 곡의 일시정지를 해제합니다.";
     }
 
     @Override
