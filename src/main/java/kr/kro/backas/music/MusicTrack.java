@@ -76,7 +76,7 @@ public class MusicTrack {
         }
         // no repeat mode or repeat all mode
         if (!hasNextTrack()) {
-            startWaitQuitingThread();
+            client.disconnectToVoiceChannelAndResetTrack();
             return;
         }
         AudioTrack nextTrack = trackQueue.poll();
