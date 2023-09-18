@@ -25,7 +25,7 @@ dependencies {
     implementation("org.slf4j:slf4j-api:2.0.5")
     implementation("ch.qos.logback:logback-classic:1.4.7")
     implementation("com.sun.mail:javax.mail:1.6.2")
-    implementation("com.sedmelluq:lavaplayer:1.3.78")
+    implementation("com.github.walkyst:lavaplayer-fork:1.4.3")
     implementation("com.google.api-client:google-api-client:2.2.0")
     implementation("com.merakianalytics.orianna:orianna:4.0.0-SNAPSHOT")
     implementation("org.jsoup:jsoup:1.14.1")
