@@ -87,16 +87,4 @@ public class Luffia {
     public MusicPlayerController getMusicPlayerController() {
         return musicPlayerController;
     }
-
-    public void disconnectVoice() {
-        Guild guild = getPublishedGuild();
-        AudioManager audioManager = guild.getAudioManager();
-        if (audioManager.isConnected()) {
-            audioManager.closeAudioConnection();
-        }
-    }
-
-    public boolean isVoiceConnected() {
-        return getPublishedGuild().getAudioManager().isConnected();
-    }
 }

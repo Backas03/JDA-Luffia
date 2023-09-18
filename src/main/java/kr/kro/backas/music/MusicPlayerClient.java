@@ -9,6 +9,7 @@ import kr.kro.backas.Main;
 import kr.kro.backas.SharedConstant;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.entities.channel.unions.AudioChannelUnion;
 import net.dv8tion.jda.api.managers.AudioManager;
@@ -131,6 +132,7 @@ public class MusicPlayerClient {
         musicBot.getGuildById(SharedConstant.PUBLISHED_GUILD_ID)
                 .getAudioManager() // cannot be null
                 .openAudioConnection(channel);
+        musicBot.getPresence().setActivity(Activity.playing(channel.getName() + "에서 플레이"));
     }
 
     public void disconnectToVoiceChannelAndResetTrack() {
@@ -139,6 +141,8 @@ public class MusicPlayerClient {
                 .getAudioManager(); // cannot be null
         if (!manager.isConnected()) return;
         manager.closeAudioConnection();
+
+        musicBot.getPresence().setActivity(null);
 
         musicTrack.reset();
     }
