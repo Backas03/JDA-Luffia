@@ -21,7 +21,7 @@ public class Main {
         return luffia;
     }
 
-    public static final int SHUTDOWN_TIMEOUT = 10;
+    public static final int SHUTDOWN_TIMEOUT = 5;
 
     public static void main(String[] args) {
         JDABuilder builder = JDABuilder
@@ -57,7 +57,7 @@ public class Main {
                     }
                     System.out.println("stopping luffia...");
                     JDA discordAPI = luffia.getDiscordAPI();
-                    discordAPI.shutdown();
+                    luffia.getMusicPlayerController().shutdownGracefully();
                     if (!discordAPI.awaitShutdown(Duration.ofSeconds(SHUTDOWN_TIMEOUT))) {
                         discordAPI.shutdownNow();
                         discordAPI.awaitShutdown();
