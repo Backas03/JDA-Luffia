@@ -1,5 +1,6 @@
 package kr.kro.backas.music;
 
+import com.sedmelluq.discord.lavaplayer.player.AudioConfiguration;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager;
@@ -31,6 +32,10 @@ public class MusicPlayerClient {
         this.musicBot = musicBot;
         this.audioPlayerManager = new DefaultAudioPlayerManager();
         this.audioPlayerManager.registerSourceManager(new YoutubeAudioSourceManager());
+        this.audioPlayerManager.getConfiguration()
+                .setOpusEncodingQuality(AudioConfiguration.OPUS_QUALITY_MAX);
+        this.audioPlayerManager.getConfiguration()
+                .setResamplingQuality(AudioConfiguration.ResamplingQuality.HIGH);
         YoutubeAudioSourceManager youtubeAudioSourceManager =
                 this.audioPlayerManager.source(YoutubeAudioSourceManager.class);
         // there is 100 videos per page and the maximum playlist size is 5000
