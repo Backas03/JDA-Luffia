@@ -61,32 +61,7 @@ public class MusicTrackHandler extends AudioEventAdapter {
     }
 
     @Override
-    public void onPlayerPause(AudioPlayer player) {
-
-    }
-
-    @Override
-    public void onPlayerResume(AudioPlayer player) {
-        super.onPlayerResume(player);
-    }
-
-    @Override
     public void onTrackEnd(AudioPlayer player, AudioTrack track, AudioTrackEndReason endReason) {
         musicTrack.playNextTrack(track.makeClone());
-    }
-
-    @Override
-    public void onTrackException(AudioPlayer player, AudioTrack track, FriendlyException exception) {
-        super.onTrackException(player, track, exception);
-    }
-
-    @Override
-    public void onTrackStuck(AudioPlayer player, AudioTrack track, long thresholdMs) {
-        super.onTrackStuck(player, track, thresholdMs);
-    }
-
-    @Override
-    public void onTrackStuck(AudioPlayer player, AudioTrack track, long thresholdMs, StackTraceElement[] stackTrace) {
-        super.onTrackStuck(player, track, thresholdMs, stackTrace);
     }
 }

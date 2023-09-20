@@ -117,7 +117,10 @@ public class MusicPlayerController extends ListenerAdapter {
                         loader.getLoadedTracks().get(event.getValues().get(0))
                 ));
                 event.editSelectMenu(event.getComponent().asDisabled()).queue();
-                event.getMessage().replyEmbeds(result.build()).queue();
+                event.getMessage()
+                        .replyEmbeds(result.build())
+                        .mentionRepliedUser(false)
+                        .queue();
             } catch (MusicPlayerException e) {
                 switch (e.getErrorType()) {
                     case NOT_IN_VOICE_CHANNEL -> {

@@ -67,6 +67,7 @@ public class MusicTrack {
             MusicSelection selection = endedTrack.getUserData(MusicSelection.class);
             selection.getQueryMessage()
                     .replyEmbeds(MusicTrackHandler.getPlayMessage(endedTrack, musicBot).build())
+                    .mentionRepliedUser(false)
                     .queue();
             player.playTrack(endedTrack);
             return;
@@ -83,6 +84,7 @@ public class MusicTrack {
         MusicSelection selection = nextTrack.getUserData(MusicSelection.class);
         selection.getQueryMessage()
                 .replyEmbeds(MusicTrackHandler.getPlayMessage(nextTrack, musicBot).build())
+                .mentionRepliedUser(false)
                 .queue();
         player.playTrack(nextTrack); // nextTrack cannot be null
     }
