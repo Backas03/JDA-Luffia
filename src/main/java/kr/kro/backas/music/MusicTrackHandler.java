@@ -27,7 +27,8 @@ public class MusicTrackHandler extends AudioEventAdapter {
         AudioTrackInfo info = track.getInfo();
         return new EmbedBuilder()
                 .setColor(Color.decode("#5e71ef"))
-                .setTitle(info.title, YoutubeService.getThumbnailURL(info.uri))
+                .setTitle(info.title, info.uri)
+                .setThumbnail(YoutubeService.getThumbnailURL(info.uri))
                 .setDescription("음악을 재생합니다")
                 .addField("노래 봇",
                         MemberUtil.getName(MemberUtil.getMember(musicBot.getSelfUser().getIdLong())),
@@ -87,6 +88,4 @@ public class MusicTrackHandler extends AudioEventAdapter {
     public void onTrackStuck(AudioPlayer player, AudioTrack track, long thresholdMs, StackTraceElement[] stackTrace) {
         super.onTrackStuck(player, track, thresholdMs, stackTrace);
     }
-
-
 }
