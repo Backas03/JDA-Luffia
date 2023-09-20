@@ -1,7 +1,5 @@
 package kr.kro.backas.music;
 
-import net.dv8tion.jda.api.entities.Message;
-
 public class MusicPlayerException extends Exception {
 
     private final Type errorType;
