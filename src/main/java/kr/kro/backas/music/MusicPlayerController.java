@@ -103,7 +103,7 @@ public class MusicPlayerController extends ListenerAdapter {
 
             MusicLoader loader = searchSection.get(member.getIdLong());
             if (loader == null) return;
-            if (!loader.isTrackLoaded()) {
+            if (!loader.isTrackLoaded()) { // code may not reach here
                 event.getMessage()
                         .getChannel()
                         .sendMessage("서버에서 요청하신 음악을 가져오고 있습니다. 잠시만 기다려주세요")
@@ -152,7 +152,6 @@ public class MusicPlayerController extends ListenerAdapter {
     // result message 를 build
     public EmbedBuilder findClientAndEnqueue(MusicSelection selection) throws MusicPlayerException {
         Member requestedMember = selection.getRequestedMember();
-        Message queryMessage = selection.getQueryMessage();
         AudioChannelUnion joinedAudioChannel = MemberUtil.getJoinedAudioChannel(requestedMember);
         if (joinedAudioChannel == null) {
             throw new MusicPlayerException(MusicPlayerException.Type.NOT_IN_VOICE_CHANNEL);
