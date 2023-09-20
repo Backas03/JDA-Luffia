@@ -46,7 +46,8 @@ public class MusicTrackHandler extends AudioEventAdapter {
         AudioTrackInfo info = track.getInfo();
         return new EmbedBuilder()
                 .setColor(Color.decode("#5e71ef"))
-                .setTitle(info.title, YoutubeService.getThumbnailURL(info.uri))
+                .setTitle(info.title, info.uri)
+                .setThumbnail(YoutubeService.getThumbnailURL(info.uri))
                 .setDescription("해당 음악이 대기열 " + position + "번째에 추가되었습니다")
                 .addField("노래 봇",
                         MemberUtil.getName(MemberUtil.getMember(musicBot.getSelfUser().getIdLong())),
