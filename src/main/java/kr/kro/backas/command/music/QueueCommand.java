@@ -76,8 +76,11 @@ public class QueueCommand implements CommandSource {
                                 + " / " +
                                 DurationUtil.formatDurationColon((int) (currentPlayingInfo.length / 1000)),
                         false
-                )
-                .addField(
+                ).addField(
+                        "노래 봇",
+                        MemberUtil.getName(MemberUtil.getMember(client.getMusicBot().getSelfUser().getIdLong())),
+                        false
+                ).addField(
                         "반복 모드",
                         client.getRepeatModeName(),
                         false
