@@ -26,11 +26,11 @@ import java.util.Set;
 public class MusicPlayerController extends ListenerAdapter {
     private final Set<MusicPlayerClient> clients;
     // key: memberId
-    private final Map<Long, MusicLoader> searchSection;
+    private final Map<Long, MusicLoader> searchData;
 
     public MusicPlayerController() {
         this.clients = new HashSet<>();
-        this.searchSection = new HashMap<>();
+        this.searchData = new HashMap<>();
     }
 
     public void register(String botToken) throws InterruptedException {
@@ -87,7 +87,7 @@ public class MusicPlayerController extends ListenerAdapter {
                 message
         ));
         loader.loadMusic();
-        searchSection.put(member.getIdLong(), loader);
+        searchData.put(member.getIdLong(), loader);
     }
 
     public Set<MusicPlayerClient> getRegisteredClients() {
@@ -101,7 +101,7 @@ public class MusicPlayerController extends ListenerAdapter {
             // member cannot be null if bot services only guild channels.
             Member member = event.getMember();
 
-            MusicLoader loader = searchSection.get(member.getIdLong());
+            MusicLoader loader = searchData.get(member.getIdLong());
             if (loader == null) return;
             if (!loader.isTrackLoaded()) { // code may not reach here
                 event.getMessage()
@@ -168,8 +168,16 @@ public class MusicPlayerController extends ListenerAdapter {
         if (client == null) {
             throw new MusicPlayerException(MusicPlayerException.Type.NO_AVAILABLE_CLIENTS_FOUND);
         }
-        searchSection.remove(requestedMember.getIdLong());
+        searchData.remove(requestedMember.getIdLong());
         return client.enqueue(selection, joinedAudioChannel.asVoiceChannel());
+    }
+
+    public void expireSearchData(long memberId) {
+        this.searchData.remove(memberId);
+    }
+
+    public void expireSearchData(Member member) {
+        this.expireSearchData(member.getIdLong());
     }
 
     public @Nullable MusicPlayerClient findFromVoiceChannel(VoiceChannel channel) {
