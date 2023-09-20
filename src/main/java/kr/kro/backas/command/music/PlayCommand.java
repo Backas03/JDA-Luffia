@@ -3,6 +3,7 @@ package kr.kro.backas.command.music;
 import kr.kro.backas.Main;
 import kr.kro.backas.command.api.CommandSource;
 import kr.kro.backas.music.Identifier;
+import kr.kro.backas.music.service.youtube.YoutubeService;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 
@@ -14,6 +15,10 @@ public class PlayCommand implements CommandSource {
         if (arg == null) {
             message.reply("검색어를 입력해주세요").queue();
             return;
+        }
+        String youtubeURL = YoutubeService.extractVideoId(arg);
+        if (youtubeURL != null) {
+            arg = youtubeURL;
         }
         Main.getLuffia()
                 .getMusicPlayerController()
