@@ -18,7 +18,10 @@ public class MusicListener extends ListenerAdapter {
         if (channelLeft == null) {
             return;
         }
-        for (MusicPlayerClient client : Main.getLuffia().getMusicPlayerController().getRegisteredClients()) {
+        MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
+        controller.expireSearchData(event.getMember()); // 검색 데이터가 존재할 시 메모리 해제
+
+        for (MusicPlayerClient client : controller.getRegisteredClients()) {
             if (!client.hasJoinedToVoiceChannel()) {
                 continue;
             }
