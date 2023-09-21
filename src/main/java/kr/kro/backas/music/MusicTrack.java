@@ -75,7 +75,7 @@ public class MusicTrack {
         if (repeatMode == RepeatMode.REPEAT_ALL && endedTrack != null) {
             trackQueue.add(endedTrack); // 위에 적으면 queue 에 item 이 1개일때도 반복 재생 가능함
         }
-        // no repeat mode or repeat all mode
+        /* no repeat mode or repeat all mode */
         if (!hasNextTrack()) {
             client.disconnectToVoiceChannelAndResetTrack();
             return;
