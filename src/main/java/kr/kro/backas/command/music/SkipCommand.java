@@ -42,9 +42,8 @@ public class SkipCommand implements CommandSource {
             message.replyEmbeds(builder.build()).queue();
             return;
         }
-        message.reply("현재 재생중인 음악을 건너뛰었습니다.").queue(success -> {
-            client.skipNowPlaying();
-        });
+        client.skipNowPlaying();
+        message.reply("현재 재생중인 음악을 건너뛰었습니다.").queue();
     }
 
     @Override
