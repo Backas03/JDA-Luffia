@@ -16,7 +16,7 @@ public class MusicTrack {
     private final Queue<AudioTrack> trackQueue;
     private final JDA musicBot;
 
-    private int repeatMode;
+    private RepeatMode repeatMode;
     private Thread waitQuitingThread;
 
     public MusicTrack(MusicPlayerClient client, AudioPlayer player, JDA musicBot) {
@@ -29,10 +29,10 @@ public class MusicTrack {
     }
 
     public String getRepeatModeName() {
-        return RepeatMode.getName(repeatMode);
+        return repeatMode.getName();
     }
 
-    public void setRepeatMode(int mode) {
+    public void setRepeatMode(RepeatMode mode) {
         this.repeatMode = mode;
     }
 

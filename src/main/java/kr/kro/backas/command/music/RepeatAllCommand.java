@@ -18,7 +18,7 @@ import java.awt.*;
 public class RepeatAllCommand implements CommandSource {
     @Override
     public void onTriggered(MessageReceivedEvent event) {
-        int mode = RepeatMode.REPEAT_ALL;
+        RepeatMode mode = RepeatMode.REPEAT_ALL;
         Message message = event.getMessage();
         Member member = event.getMember();
         VoiceChannel voiceChannel = MemberUtil.getJoinedVoiceChannel(member); // 길드에서만 서비스시 member는 null 이 될수 없음

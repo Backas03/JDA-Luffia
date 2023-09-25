@@ -1,4 +1,4 @@
-import org.gradle.tooling.model.java.JavaRuntime
+import java.util.Properties
 
 plugins {
     id("java")
