@@ -114,7 +114,7 @@ public class MusicPlayerClient {
         return musicTrack.getRepeatModeName();
     }
 
-    public void setRepeatMode(int mode) {
+    public void setRepeatMode(RepeatMode mode) {
         musicTrack.setRepeatMode(mode);
     }
 
