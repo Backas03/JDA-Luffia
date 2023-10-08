@@ -52,8 +52,10 @@ public class CertificationInfoCommand implements CommandSource {
                 .setTitle(user.getName() + " 님의 인증 정보")
                 .setAuthor(user.getGlobalName(), url, url);
         if (info == null) {
+            builder = new EmbedBuilder();
             builder.setColor(Color.decode("#ff3434"))
                     .setDescription("인증 정보를 찾을 수 없습니다.");
+            event.getMessage().replyEmbeds(builder.build()).queue();
             return;
         }
 
