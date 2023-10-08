@@ -1,8 +1,7 @@
-import java.util.Properties
-
 plugins {
     id("java")
     kotlin("jvm").version("1.8.0")
+    id("application")
 }
 
 group = "kr.kro.backas"
@@ -30,6 +29,8 @@ dependencies {
     implementation("com.merakianalytics.orianna:orianna:4.0.0-SNAPSHOT")
     implementation("org.jsoup:jsoup:1.14.1")
 }
+
+application.mainClass.set("kr.kro.backas.Main")
 
 tasks.test {
     useJUnitPlatform()
