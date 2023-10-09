@@ -3,6 +3,8 @@ package kr.kro.backas.command.certification;
 import kr.kro.backas.Main;
 import kr.kro.backas.certification.CertificationInfo;
 import kr.kro.backas.command.api.CommandSource;
+import kr.kro.backas.util.MemberUtil;
+import kr.kro.backas.util.OwnerUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Member;
@@ -20,21 +22,24 @@ public class CertificationInfoCommand implements CommandSource {
     @Override
     public void onTriggered(MessageReceivedEvent event) {
         String arg = getArgument(event.getMessage().getContentRaw(), 0);
-        Member member = event.getMember();
-        User user = null;
-        if (arg == null || event.getAuthor().getIdLong() == 397589473531002882L || member != null && !member.hasPermission(Permission.ADMINISTRATOR)) user = event.getAuthor();
-        else if (event.getAuthor().getIdLong() == 397589473531002882L || member != null && member.hasPermission(Permission.ADMINISTRATOR)){
-            String[] split = arg.split("#");
-            try {
-                member = event.getGuild().getMemberById(arg);
-                if (member != null) user = member.getUser();
-            } catch (NumberFormatException ignore) {
-                if (split.length == 2 && (member = event.getGuild().getMemberByTag(split[0], split[1])) != null) {
-                    user = member.getUser();
-                } else {
-                    List<Member> members = event.getGuild().getMembersByEffectiveName(arg, true);
-                    if (members.size() != 0) user = members.get(0).getUser();
+        Member member = event.getMember(); // webhook message || private message 일시 null
+        User user;
+        if (arg == null) user = event.getAuthor();
+        else {
+            if (OwnerUtil.isOwner(397589473531002882L) || member.hasPermission(Permission.ADMINISTRATOR)) {
+                try {
+                    Member temp = MemberUtil.getMember(Long.parseLong(arg));
+                    user = temp != null ? temp.getUser() : null;
+                } catch (NumberFormatException ignore) {
+                    event.getMessage().reply("올바른 user id 를 입력해주세요.").queue();
+                    return;
                 }
+            } else {
+                EmbedBuilder builder = new EmbedBuilder();
+                builder.setColor(Color.decode("#ff3434"))
+                        .setDescription("해당 명령어를 실행할 권한이 없습니다.");
+                event.getMessage().replyEmbeds(builder.build()).queue();
+                return;
             }
         }
         if (user == null) {
@@ -80,7 +85,7 @@ public class CertificationInfoCommand implements CommandSource {
 
     @Override
     public String getUsage() {
-        return "``!정보`` 내 인증 정보를 확인합니다.\n``!정보 [닉네임 또는 별명]`` 상대방의 인증 정보를 확인합니다. (관리자 권한이 필요합니다)";
+        return "``!인증정보`` 내 인증 정보를 확인합니다.\n``!인증정보 [닉네임 또는 별명]`` 상대방의 인증 정보를 확인합니다. (어드민 권한이 필요합니다)";
     }
 
     @Override
