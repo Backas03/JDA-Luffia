@@ -37,7 +37,7 @@ public class Main {
 
             JDA jda = builder.build().awaitReady();
             luffia = new Luffia(jda);
-            initScanner();
+            // initScanner();
         } catch (InterruptedException | IOException e) {
             e.printStackTrace();
             System.exit(-1);
