@@ -7,7 +7,7 @@ Provide various features with Java Discord API (JDA)
 * 해당 봇의 오류나 건의, 문의사항이 있을시 제작자에게 문의 또는 Issue 바랍니다.
 [Issue 등록하기](https://github.com/Backas03/JLuffia/issues)
 
-* Luffia 봇은 GPL-3.0 licence 를 따르고 있습니다.
+* Luffia 봇은 MIT licence 를 따르고 있습니다.
 [Licence 확인](https://github.com/Backas03/JLuffia/blob/master/LICENSE)
 * Luffia 봇 개발에 기여를 해보세요! 당신의 만든 서비스가 Luffia에 적용될수도?
 [Pull Request](https://github.com/Backas03/JLuffia/pulls)
