@@ -7,13 +7,21 @@ import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.entities.channel.unions.AudioChannelUnion;
+import net.dv8tion.jda.api.exceptions.ErrorResponseException;
+import org.jetbrains.annotations.Nullable;
 
 public final class MemberUtil {
+
+    @Nullable
     public static Member getMember(long userId) {
         Guild guild = Main.getLuffia().getPublishedGuild();
         Member member = guild.getMemberById(userId);
         if (member != null) return member;
-        return guild.retrieveMemberById(userId).complete();
+        try {
+            return guild.retrieveMemberById(userId).complete();
+        } catch (ErrorResponseException ignore) {
+            return null;
+        }
     }
 
     public static String getName(Member member) {
