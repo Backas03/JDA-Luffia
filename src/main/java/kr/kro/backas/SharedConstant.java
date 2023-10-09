@@ -11,5 +11,5 @@ public final class SharedConstant {
 
     public static final String LICENSE = "MIT license";
 
-    public static final String GITHUB = "https://github.com/Backas03/JLuffia";
+    public static final String GITHUB = "https://github.com/Backas03/JDA-Luffia";
 }
