@@ -7,10 +7,14 @@ import kr.kro.backas.Main;
 import kr.kro.backas.SharedConstant;
 import kr.kro.backas.util.FileUtil;
 import kr.kro.backas.util.MailUtil;
+import kr.kro.backas.util.MemberUtil;
 import kr.kro.backas.util.StackTraceUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.*;
+import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.interactions.InteractionHook;
+import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
 import net.dv8tion.jda.api.utils.FileUpload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,25 +65,38 @@ public class CertificationManager {
         return email.matches("^[0-9a-zA-Z]([-_.]?[0-9a-zA-Z])*@daegu\\.ac\\.kr");
     }
 
-    public void requestCertification(String email, Message message, User user) {
+    public void requestCertification(String email, SlashCommandInteractionEvent event, User user) {
+
         if (!isValidEmail(email)) {
-            message.reply("올바른 학교 이메일을 입력해주세요.").queue();
+            event.replyEmbeds(new EmbedBuilder()
+                    .setAuthor(MemberUtil.getName(user), user.getAvatarUrl())
+                    .setColor(Color.decode("#ff7547"))
+                    .setTitle("명령어가 올바르지 않습니다. \"/" + event.getName() + "\"")
+                    .setDescription("이메일 형식을 확인해주세요.\n"+
+                            "ex) ``/인증 " + email + "@daegu.ac.kr``")
+                    .addField(
+                            "/인증 [대구대학교 이메일]",
+                            "```해당 대구대학교 이메일로 인증 코드를 받습니다\n" +
+                                    "ex) /인증 abc123@daegu.ac.kr```", false)
+                    .setFooter(SharedConstant.RELEASE_VERSION)
+                    .build()
+            ).queue();
             return;
         }
         if (certificationData.isCertificated(user)) {
-            message.reply(user.getName() + " 님은 이미 인증이 완료된 상태입니다.").queue();
+            event.reply(user.getName() + " 님은 이미 인증이 완료된 상태입니다.").queue();
             return;
         }
         if (certificationData.isCertificated(email)) {
-            message.reply("해당 이메일은 인증된 이메일 입니다.").queue();
+            event.reply("해당 이메일은 인증된 이메일 입니다.").queue();
             return;
         }
         if (emails.containsValue(email) && !email.equals(emails.get(user.getIdLong()))) {
-            message.reply("현재 이 메일은 인증이 진행중인 상태입니다. 다른 이메일로 다시 시도해주세요.").queue();
+            event.reply("현재 이 메일은 인증이 진행중인 상태입니다. 다른 이메일로 다시 시도해주세요.").queue();
             return;
         }
         if (!failed.contains(user.getIdLong()) && isCertificating(user.getIdLong())) {
-            if (!codes.containsKey(email)) message.reply("인증이 진행중입니다. 잠시만 기다려주세요.").queue();
+            if (!codes.containsKey(email)) event.reply("인증이 진행중입니다. 잠시만 기다려주세요.").queue();
             else {
                 EmbedBuilder builder = new EmbedBuilder()
                         .setTitle("이메일 인증이 진행중입니다")
@@ -89,8 +106,8 @@ public class CertificationManager {
                                         아래 명령어를 다시 한번 쳐주세요
                                         
                                         """ +
-                                "!인증 [대구대학교 이메일]");
-                message.replyEmbeds(builder.build()).queue();
+                                "/인증 [대구대학교 이메일]");
+                event.replyEmbeds(builder.build()).queue();
                 failed.add(user.getIdLong());
             }
             return;
@@ -106,39 +123,38 @@ public class CertificationManager {
         }
         failed.remove(user.getIdLong());
         emails.put(user.getIdLong(), email);
-        Message reply = message.reply("메일을 발송중에 있습니다. 잠시만 기다려주세요.").complete();
+        InteractionHook reply = event.reply("메일을 발송중에 있습니다. 잠시만 기다려주세요.").complete();
         int finalCode = code;
         CompletableFuture.supplyAsync(() -> {
             try {
                 MailUtil.sendCertificationMessage(email, finalCode); // 순서 중요
             } catch (Exception e) {
-                StackTraceUtil.replyConvertedError("인증 메일을 보내는 도중 에러가 발생했습니다.", message, e);
+                StackTraceUtil.replyConvertedError("인증 메일을 보내는 도중 에러가 발생했습니다.", event, e);
             }
             return null;
         }).thenApply(a -> {
-            sendCertification(email, reply, user);
+            sendCertification(reply, user);
             codes.put(email, finalCode);
             return null;
         });
     }
 
-    private void sendCertification(String email, Message message, User user) {
+    private void sendCertification(InteractionHook hook, User user) {
         String author = user.getGlobalName() != null ?
                 user.getGlobalName() :
                 String.format("%#s", user);
-        String imageURL = "attachment:/" + Main.class.getResource("/image/agreement.png").getPath();
         String url = user.getAvatarUrl() != null ? user.getAvatarUrl() : user.getDefaultAvatarUrl();
         EmbedBuilder builder = new EmbedBuilder()
                 .setAuthor(author, null, url)
                 .setTitle("대구대학교 인증 확인 (클릭)", "https://outlook.com/daegu.ac.kr")
                 .setDescription("해당 메일로 인증 코드를 보내드렸습니다.\n아래 절차를 따라 학교 인증을 완료해주세요.")
-                .addField("아래 명령어를 입력하여 학교 인증을 완료합니다.", "!인증 [6자리 인증 코드]", false)
+                .addField("아래 명령어를 입력하여 학교 인증을 완료합니다.", "/인증 인증코드:[6자리 인증코드]\nex) /인증 인증코드:116126", false)
                 .addField("아이디 또는 비밀번호를 잊어버리셨다면?", "[대구대학교 이메일 아이디/비밀번호 찾기](https://office.daegu.ac.kr/Case1/FindPwd.aspx)", false)
                 .addField("계정 중복인증 방지를 위해 아래 사진과 같이 개인정보를 수집하고 있습니다.", "해당 개인정보는 대구대학교 재학생 인증일로부터 해당 디스코드 커뮤니티 퇴장일까지 보관되며, 재학생 인증 절차 완료시 해당 동의서에 동의하는 것으로 간주합니다.", false)
                 .setFooter("대구대학교 이메일만 가지고 있으면 인증이 가능합니다.")
                 .setImage("attachment://agreement.png")
                 .setColor(Color.decode("#9047ff"));
-        message.editMessageEmbeds(builder.build())
+        hook.editOriginalEmbeds(builder.build())
                 .setFiles(
                         FileUpload.fromData(
                                 Main.class.getResourceAsStream("/image/agreement.png"),
@@ -148,9 +164,9 @@ public class CertificationManager {
     }
 
 
-    public void responseCertification(Message message, User user, int code) {
+    public void responseCertification(IReplyCallback callback, User user, int code) {
         if (!isCertificating(user.getIdLong())) {
-            message.reply("!인증 명령어를 사용하여 인증 절차를 먼저 시작해주세요.").queue();
+            callback.reply("!인증 명령어를 사용하여 인증 절차를 먼저 시작해주세요.").queue();
             return;
         }
         Instant now = Instant.now();
@@ -166,12 +182,12 @@ public class CertificationManager {
                         .setColor(Color.decode("#d90000"))
                         .setTitle("인증에 실패했습니다.")
                         .addField("인증 코드가 일치하지 않습니다.", "코드를 다시 입력하거나 재인증을 원하시면 !인증 명령어를 다시 입력해주세요.", false);
-                message.replyEmbeds(builder.build()).queue();
+                callback.replyEmbeds(builder.build()).queue();
                 return;
             }
 
             // 역할 지급
-            Member member = message.getMember();
+            Member member = callback.getMember();
             if (member == null) {
                 member = Main.getLuffia()
                                 .getPublishedGuild()
@@ -179,11 +195,11 @@ public class CertificationManager {
                                 .complete();
             }
             if (member == null) {
-                message.reply("member 데이터를 찾을 수 없습니다. 관리자에게 문의해주세요.").queue();
+                callback.reply("member 데이터를 찾을 수 없습니다. 관리자에게 문의해주세요.").queue();
                 return;
             }
             if (!member.getRoles().contains(role)) {
-                message.getGuild().addRoleToMember(user, role).queue();
+                callback.getGuild().addRoleToMember(user, role).queue();
             }
 
             // 인증 기록
@@ -208,10 +224,10 @@ public class CertificationManager {
                             false)
                     .setColor(Color.decode("#0ee111"))
                     .setFooter("이메일이 담긴 인증 명령어를 삭제하셔도 무관합니다.");
-            message.replyEmbeds(builder.build()).queue();
+            callback.replyEmbeds(builder.build()).queue();
 
         } catch (Exception e) {
-            StackTraceUtil.replyError("인증 절차를 완료하는 중 에러가 발생했습니다.", message, e);
+            StackTraceUtil.replyError("인증 절차를 완료하는 중 에러가 발생했습니다.", callback, e);
         }
     }
 

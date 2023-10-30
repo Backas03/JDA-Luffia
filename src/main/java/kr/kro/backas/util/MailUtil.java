@@ -44,7 +44,7 @@ public class MailUtil {
             stringBuilder.append(" ").append(split[i]);
         }
 
-        message.setText("인증 코드는 " + stringBuilder + " 입니다\n\n!인증 " + code + "\n명령어를 디스코드 채팅방에 입력해주세요.");
+        message.setText("인증 코드는 " + stringBuilder + " 입니다\n\n/인증 인증코드:" + code + "\n명령어를 디스코드 채팅방에 입력해주세요.");
         // 발송
         Transport.send(message);
     }
