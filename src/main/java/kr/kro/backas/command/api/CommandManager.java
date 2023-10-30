@@ -17,6 +17,7 @@ public class CommandManager {
     public CommandManager(String commandPrefix, Luffia luffia) {
         this.commandPrefix = commandPrefix;
         this.luffia = luffia;
+        luffia.getPublishedGuild().updateCommands().queue();
         this.luffia.getDiscordAPI().addEventListener(new CommandListener());
     }
 
