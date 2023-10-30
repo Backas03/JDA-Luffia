@@ -9,6 +9,7 @@ import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.ChunkingFilter;
 import net.dv8tion.jda.api.utils.MemberCachePolicy;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -24,6 +25,19 @@ public class Main {
     public static final int SHUTDOWN_TIMEOUT = 5;
 
     public static void main(String[] args) {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("stopping luffia...");
+            JDA discordAPI = luffia.getDiscordAPI();
+            luffia.getMusicPlayerController().shutdownGracefully();
+            try {
+                if (!discordAPI.awaitShutdown(Duration.ofSeconds(SHUTDOWN_TIMEOUT))) {
+                    discordAPI.shutdownNow();
+                    discordAPI.awaitShutdown();
+                }
+            } catch (InterruptedException e) {
+                LoggerFactory.getLogger("Luffia").debug("await shutdown failed", e);
+            }
+        }));
         JDABuilder builder = JDABuilder
                 .createDefault(SharedConstant.ON_DEV ? BotSecret.DEV_TOKEN : BotSecret.TOKEN)
                 .setChunkingFilter(ChunkingFilter.ALL) // enable member chunking for all guilds
