@@ -15,7 +15,6 @@ import java.awt.*;
 import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.util.Date;
-import java.util.List;
 
 public class CertificationInfoCommand implements CommandSource {
 

@@ -4,20 +4,19 @@ import kr.kro.backas.certification.CertificationManager;
 import kr.kro.backas.certification.listener.CertificationListener;
 import kr.kro.backas.command.*;
 import kr.kro.backas.command.api.CommandManager;
-import kr.kro.backas.command.certification.CertificationCommand;
 import kr.kro.backas.command.certification.CertificationInfoCommand;
 import kr.kro.backas.command.certification.CertificationRemoveCommand;
 import kr.kro.backas.command.certification.ForceCertificationCommand;
 import kr.kro.backas.command.lol.LOLUserInfoCommand;
 import kr.kro.backas.command.maplestory.MapleUserInfoCommand;
 import kr.kro.backas.command.music.*;
+import kr.kro.backas.command.slash.SlashCertificationCommand;
 import kr.kro.backas.music.MusicListener;
 import kr.kro.backas.music.MusicPlayerController;
 import kr.kro.backas.secret.BotSecret;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.Guild;
-import net.dv8tion.jda.api.managers.AudioManager;
 
 import java.io.IOException;
 
@@ -31,8 +30,10 @@ public class Luffia {
     public Luffia(JDA discordAPI) throws IOException, InterruptedException {
         this.discordAPI = discordAPI;
 
-        this.commandManager = new CommandManager("!", discordAPI);
-        this.commandManager.registerCommand("인증", new CertificationCommand());
+        this.commandManager = new CommandManager("!", this);
+
+        this.commandManager.registerSlashCommand(new SlashCertificationCommand());
+
         this.commandManager.registerCommand("인증정보", new CertificationInfoCommand());
         this.commandManager.registerCommand("인증해제", new CertificationRemoveCommand());
         this.commandManager.registerCommand("도움말", new HelpCommand());
