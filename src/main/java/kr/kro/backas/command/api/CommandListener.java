@@ -5,6 +5,7 @@ import kr.kro.backas.SharedConstant;
 import kr.kro.backas.util.StackTraceUtil;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Role;
+import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import org.jetbrains.annotations.NotNull;
@@ -14,6 +15,15 @@ import org.slf4j.LoggerFactory;
 public class CommandListener extends ListenerAdapter {
 
     public static final Logger LOGGER = LoggerFactory.getLogger(CommandListener.class);
+
+    @Override
+    public void onSlashCommandInteraction(@NotNull SlashCommandInteractionEvent event) {
+        String command = event.getName();
+        SlashCommandSource source = Main.getLuffia()
+                .getCommandManager()
+                .getSlashCommandSource(command);
+        source.onTriggered(event);
+    }
 
     @Override
     public void onMessageReceived(@NotNull MessageReceivedEvent event) {
