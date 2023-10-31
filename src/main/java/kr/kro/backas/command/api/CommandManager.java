@@ -24,7 +24,7 @@ public class CommandManager {
     }
 
     public void registerSlashCommand(SlashCommandSource source) {
-        luffia.getPublishedGuild()
+        luffia.getDiscordAPI()
                 .upsertCommand(source.buildCommand())
                 .queue(command -> {
                     // on success
