@@ -81,7 +81,7 @@ public class Luffia {
 
     public Guild getPublishedGuild() {
         return SharedConstant.ON_DEV ?
-                discordAPI.getGuildById(1121632283154202694L) :
+                discordAPI.getGuildById(SharedConstant.DEV_GUILD_ID) :
                 discordAPI.getGuildById(SharedConstant.PUBLISHED_GUILD_ID);
     }
 
