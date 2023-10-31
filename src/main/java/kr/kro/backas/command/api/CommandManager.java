@@ -7,7 +7,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class CommandManager {
-
     private final Map<String, CommandSource> REGISTERED = new HashMap<>();
     private final Map<String, SlashCommandSource> REGISTERED_SLASH_COMMAND = new HashMap<>();
 
@@ -17,7 +16,6 @@ public class CommandManager {
     public CommandManager(String commandPrefix, Luffia luffia) {
         this.commandPrefix = commandPrefix;
         this.luffia = luffia;
-        luffia.getPublishedGuild().updateCommands().queue();
         this.luffia.getDiscordAPI().addEventListener(new CommandListener());
     }
 
@@ -26,13 +24,12 @@ public class CommandManager {
     }
 
     public void registerSlashCommand(SlashCommandSource source) {
-        luffia.getPublishedGuild()
+        luffia.getDiscordAPI()
                 .upsertCommand(source.buildCommand())
                 .queue(command -> {
                     // on success
-                    REGISTERED_SLASH_COMMAND.put(command.getName(), source);
+                    REGISTERED_SLASH_COMMAND.put(source.buildCommand().getName(), source);
                 });
-
     }
 
     public SlashCommandSource getSlashCommandSource(String command) {
