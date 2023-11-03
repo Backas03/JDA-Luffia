@@ -9,9 +9,7 @@ Provide various features with Java Discord API (JDA)
 
 * Luffia 봇은 MIT licence 를 따르고 있습니다.
 [Licence 확인](https://github.com/Backas03/JLuffia/blob/master/LICENSE)
-* Luffia 봇 개발에 기여를 해보세요! 당신의 만든 서비스가 Luffia에 적용될수도?
-[Pull Request](https://github.com/Backas03/JLuffia/pulls)
-  * 모든 Pull Request(PR) 코드에는 시작과 끝 부분에 아래 형식과 같이 표기하여야 합니다.  아래는 예시입니다.
+* 모든 Pull Request(PR) 코드에는 시작과 끝 부분에 아래 형식과 같이 표기하여야 합니다. 아래는 예시입니다. </br>
   [[../kr/kro/backas/Luffia.java]](https://github.com/Backas03/JLuffia/blob/master/src/main/java/kr/kro/backas/Luffia.java)
   ```java
   public Luffia(JDA discordAPI) throws IOException {
