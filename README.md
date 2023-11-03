@@ -188,9 +188,9 @@ public Luffia(JDA discordAPI) throws IOException, InterruptedException {
     this.commandManager.registerCommand("스킵", new SkipCommand());
     this.commandManager.registerCommand("일시정지", new PauseCommand());
     this.commandManager.registerCommand("일시정지해제", new ResumeCommand());
-    //this.commandManager.registerCommand("전체반복", new RepeatAllCommand()); // 비활성화
-    //this.commandManager.registerCommand("반복", new RepeatCurrentCommand()); // 비활성화
-    //this.commandManager.registerCommand("반복해제", new NoRepeatCommand()); // 비활성화
+    //this.commandManager.registerCommand("전체반복", new RepeatAllCommand());
+    //this.commandManager.registerCommand("반복", new RepeatCurrentCommand());
+    //this.commandManager.registerCommand("반복해제", new NoRepeatCommand());
     this.commandManager.registerCommand("대기열", new QueueCommand());
 
     this.commandManager.registerCommand("롤정보", new LOLUserInfoCommand());
