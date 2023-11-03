@@ -57,7 +57,7 @@ public final class BotSecret {
     // 롤 전적 검색 기능을 위한 라이엇 API key
     public static final String RIOT_API_KEY = "RGAPI-6asdhgas79-0qw1-4aa1-98dd-ede3asda137d76";
 
-    // 여러 음악을 재생시키기 위한 봇 토큰
+    // 하나의 서버에 여러 음성채팅방에서 음악을 재생시키기 위한 봇 토큰
     public static final List<String> MUSIC_BOT_TOKENS = List.of(
             "ggg1MzI1MzkasdExODMwNA.Gm3wvS.sfasfas4pPi9d_a4zrqHClEp3IxPpqkGWrYQ3h1t-Tk", // bot 1 (해당 토큰은 실제 존재하지 않는 토큰입니다)
             "eeeasdNzQ2NTEyNzAzNDg4MA.G6etwH.CSwxF9TkKeosfasfasfasasrqwrw" // bot 2 (해당 토큰은 실제 존재하지 않는 토큰입니다)
