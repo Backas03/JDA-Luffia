@@ -103,7 +103,7 @@ public final class SharedConstant {
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/3893ce5e-ec5d-41b6-b208-baae0970d518)
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/938c3751-957c-4a38-aaae-43f726eb01a6)
 3. 뮤직 플레이어 기능
-LavaPlayer 라이브러리를 사용하여 유튜브에서 노래를 검색 후 디스코드에서 음악을 재생할 수 있습니다
+LavaPlayer 라이브러리를 사용하여 유튜브에서 노래를 검색 후 디스코드에서 음악을 재생할 수 있습니다 </br>
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/8850d664-b12c-4569-b403-59e358bb796c) </br>
 추가적으로 봇을 추가하여 하나의 디코방에서 여려 음성채팅방에서 음악을 재생할 수 있습니다 (봇 상태메시지에 현재 재생중인 음성채팅방의 이름을 표기합니다) </br>
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/95db993f-c22c-4c16-86cd-f8f3a28da4b5) </br>
