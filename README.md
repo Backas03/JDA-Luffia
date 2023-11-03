@@ -174,7 +174,11 @@ Luffia.java에서 this.commandManager = new CommandManager("!", this); 의 "!" �
 public Luffia(JDA discordAPI) throws IOException, InterruptedException {
     this.discordAPI = discordAPI;
 
-    this.commandManager = new CommandManager("&&", this); // 커멘드를 ! 에서 && 으로 변경. ex) !인증정보 >> &&인증정보
+    /*
+     * 커멘드 prefix를 ! 에서 && 으로 변경.
+     * ex) !인증정보 >> &&인증정보
+     */ 
+    this.commandManager = new CommandManager("&&", this);
 
     this.commandManager.registerSlashCommand(new SlashCertificationCommand());
 
