@@ -167,3 +167,47 @@ public Luffia(JDA discordAPI) throws IOException, InterruptedException {
     this.discordAPI.getPresence().setActivity(Activity.playing("!도움말 명령어로 기능 확인"));
 }
 ```
+## 커멘드 prefix 변경방법
+Luffia.java에서 this.commandManager = new CommandManager("!", this); 의 "!" 부분을 원하는 prefix로 변경하면 됩니다.
+- kr/kro/backas/Luffia.java
+```java
+public Luffia(JDA discordAPI) throws IOException, InterruptedException {
+    this.discordAPI = discordAPI;
+
+    this.commandManager = new CommandManager("&&", this); // 커멘드를 ! 에서 && 으로 변경. ex) !인증정보 >> &&인증정보
+
+    this.commandManager.registerSlashCommand(new SlashCertificationCommand());
+
+    this.commandManager.registerCommand("인증정보", new CertificationInfoCommand());
+    this.commandManager.registerCommand("인증해제", new CertificationRemoveCommand());
+    this.commandManager.registerCommand("도움말", new HelpCommand());
+    this.commandManager.registerCommand("강제인증", new ForceCertificationCommand());
+
+    this.commandManager.registerCommand("재생", new PlayCommand());
+    this.commandManager.registerCommand("나가기", new QuitCommand());
+    this.commandManager.registerCommand("스킵", new SkipCommand());
+    this.commandManager.registerCommand("일시정지", new PauseCommand());
+    this.commandManager.registerCommand("일시정지해제", new ResumeCommand());
+    //this.commandManager.registerCommand("전체반복", new RepeatAllCommand()); // 비활성화
+    //this.commandManager.registerCommand("반복", new RepeatCurrentCommand()); // 비활성화
+    //this.commandManager.registerCommand("반복해제", new NoRepeatCommand()); // 비활성화
+    this.commandManager.registerCommand("대기열", new QueueCommand());
+
+    this.commandManager.registerCommand("롤정보", new LOLUserInfoCommand());
+
+    this.commandManager.registerCommand("메이플정보", new MapleUserInfoCommand());
+
+    this.certificationManager = new CertificationManager(discordAPI);
+
+    this.musicPlayerController = new MusicPlayerController();
+    discordAPI.addEventListener(this.musicPlayerController);
+    for (String botToken : BotSecret.MUSIC_BOT_TOKENS) {
+        this.musicPlayerController.register(botToken);
+    }
+
+
+    this.discordAPI.addEventListener(new MusicListener());
+    this.discordAPI.addEventListener(new CertificationListener());
+    this.discordAPI.getPresence().setActivity(Activity.playing("!도움말 명령어로 기능 확인"));
+}
+```
