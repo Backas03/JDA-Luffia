@@ -66,6 +66,29 @@ public final class BotSecret {
     );
 }
 ```
+3. SharedConstant.java 에서 MAIN_GUILD_ID 를 서비스 할 서버 guild id로 수정합니다 </br>
+해당 서버에서만 명령어를 작동하도록 설정하는 부분으로, 수정하지 않으면 명령어가 작동하지 않습니다.
+- kr/kro/backas/SharedConstant.java
+```java
+package kr.kro.backas;
+
+public final class SharedConstant {
+    public static final long MAIN_GUILD_ID = 791974345965961237L; // 봇을 초대할 서버 id 로 변경
+
+    public static final long DEV_GUILD_ID = 1121632283154202694L;
+    public static final long PUBLISHED_GUILD_ID = MAIN_GUILD_ID;
+
+    public static final boolean ON_DEV = false;
+
+    public static final String RELEASE_VERSION = "Luffia/2.1.0-Stable-Release";
+
+    public static final String LICENSE = "MIT license";
+
+    public static final String GITHUB = "https://github.com/Backas03/JDA-Luffia";
+}
+```
+4. 봇을 실행하려면 ```./gradlew run``` 을 입력합니다 </br>
+![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/b0b3160c-d048-433a-b56d-f2349edc7306)
 ## 기능 소개
 1. 대학교 인증 기능
 - 대학교 이메일로 인증 코드를 받아 학교 인증을 진행 할 수 있습니다
