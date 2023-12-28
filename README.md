@@ -4,12 +4,9 @@ Provide various features with Java Discord API (JDA)
 ## Information
 이 봇은 Discord bagkaseu(박카스#9970) 에 의해 제작되었습니다.
 
-* 해당 봇의 오류나 건의, 문의사항이 있을시 제작자에게 문의 또는 Issue 바랍니다.
-[Issue 등록하기](https://github.com/Backas03/JLuffia/issues)
+* 해당 봇의 오류나 건의, 문의사항이 있을시 제작자에게 문의 또는 [Issue](https://github.com/Backas03/JDA-Luffia/issues) 바랍니다.
 
-* Luffia 봇은 MIT licence 를 따르고 있습니다.
-[Licence 확인](https://github.com/Backas03/JLuffia/blob/master/LICENSE)
-* 모든 Pull Request(PR) 코드에는 시작과 끝 부분에 아래 형식과 같이 표기하여야 합니다. 아래는 예시입니다. </br>
+* 모든 Pull Request 코드에는 시작과 끝 부분에 아래 형식과 같이 표기하여야 합니다. 아래는 예시입니다. </br>
   [[../kr/kro/backas/Luffia.java]](https://github.com/Backas03/JLuffia/blob/master/src/main/java/kr/kro/backas/Luffia.java)
   ```java
   public Luffia(JDA discordAPI) throws IOException {
