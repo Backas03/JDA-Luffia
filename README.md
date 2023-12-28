@@ -2,10 +2,8 @@
 해당 디스코드 봇을 사용하여 길드 내 여러 음성채팅방에서 노래 재생, 이메일 본인인증, 게임 전적 검색 기능을 서비스 할 수 있습니다
 
 ## Information
-이 봇은 Discord bagkaseu(박카스#9970) 에 의해 제작되었습니다.
-
+### 이 봇은 Discord bagkaseu(박카스#9970) 에 의해 제작되었습니다.
 * 해당 봇의 오류나 건의, 문의사항이 있을시 제작자에게 문의 또는 [Issue](https://github.com/Backas03/JDA-Luffia/issues) 바랍니다.
-
 * 모든 Pull Request 코드에는 시작과 끝 부분에 아래 형식과 같이 표기하여야 합니다. 아래는 예시입니다. </br>
   [[../kr/kro/backas/Luffia.java]](https://github.com/Backas03/JLuffia/blob/master/src/main/java/kr/kro/backas/Luffia.java)
   ```java
