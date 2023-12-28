@@ -30,8 +30,7 @@
   }
   ```
 ## 봇 사용방법
-1. src/main/java/kr/kro/backas/secret/ 폴더에 BotSecret.java 파일을 추가합니다
-2. 아래를 완성합니다
+### 1. src/main/java/kr/kro/backas/secret/ 폴더에 BotSecret.java 파일을 생성하고 아래와 같이 작성합니다
 - src/main/java/kr/kro/backas/secret/BotSecret.java
 ```java
 package kr.kro.backas.secret;
@@ -55,14 +54,15 @@ public final class BotSecret {
     public static final String RIOT_API_KEY = "RGAPI-6asdhgas79-0qw1-4aa1-98dd-ede3asda137d76";
 
     // 하나의 서버에 여러 음성채팅방에서 음악을 재생시키기 위한 봇 토큰
+    // (해당 토큰은 실제 존재하지 않는 토큰입니다)
     public static final List<String> MUSIC_BOT_TOKENS = List.of(
-            "ggg1MzI1MzkasdExODMwNA.Gm3wvS.sfasfas4pPi9d_a4zrqHClEp3IxPpqkGWrYQ3h1t-Tk", // bot 1 (해당 토큰은 실제 존재하지 않는 토큰입니다)
-            "eeeasdNzQ2NTEyNzAzNDg4MA.G6etwH.CSwxF9TkKeosfasfasfasasrqwrw" // bot 2 (해당 토큰은 실제 존재하지 않는 토큰입니다)
+            "ggg1MzI1MzkasdExODMwNA.Gm3wvS.sfasfas4pPi9d_a4zrqHClEp3IxPpqkGWrYQ3h1t-Tk", // bot 1
+            "eeeasdNzQ2NTEyNzAzNDg4MA.G6etwH.CSwxF9TkKeosfasfasfasasrqwrw" // bot 2
     );
 }
 ```
-3. SharedConstant.java 에서 MAIN_GUILD_ID 를 서비스 할 서버 guild id로 수정합니다 </br>
-해당 서버에서만 명령어를 작동하도록 설정하는 부분으로, 수정하지 않으면 명령어가 작동하지 않습니다.
+### 2. SharedConstant.java 에서 MAIN_GUILD_ID 를 서비스 할 서버 guild id로 수정합니다 </br>
+(해당 서버에서만 명령어를 작동하도록 설정하는 부분으로, 수정하지 않으면 명령어가 작동하지 않습니다.)
 - kr/kro/backas/SharedConstant.java
 ```java
 package kr.kro.backas;
@@ -82,39 +82,42 @@ public final class SharedConstant {
     public static final String GITHUB = "https://github.com/Backas03/JDA-Luffia";
 }
 ```
-4. 봇을 실행하려면 ```./gradlew run``` 을 입력합니다 </br>
+### 3. 봇을 실행하려면 ```./gradlew run``` 을 입력합니다 </br>
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/b0b3160c-d048-433a-b56d-f2349edc7306)
 ## 기능 소개
-1. 대학교 인증 기능
-- 대학교 이메일로 인증 코드를 받아 학교 인증을 진행 할 수 있습니다
-- 해당 기능을 사용하여 인증 역할을 부여할 수 있습니다
-지원 명령어
+### 1. 이메일 본인인증 기능
+ - 이메일로 인증 코드를 받아 본인 인증을 진행 할 수 있습니다
+ - 해당 기능을 사용하여 인증 역할을 부여할 수 있습니다
 ```
-/인증 :학교 이메일: - 해당 학교 이메일로 인증 코드를 전송받습니다
+/인증 [이메일]: - 해당 학교 이메일로 인증 코드를 전송받습니다
 
 ---- 관리자 명령어 ----
 !인증해제 [userId] - 해당 유저의 인증 데이터를 해제합니다.
 !인증정보 [userId] - 해당 유저의 인증 데이터를 확인합니다.
-!강제인증 [userId] [학교 이메일] - 해당 유저를 관리자의 권한으로 강제 인증시킵니다.
+!강제인증 [userId] [이메일] - 해당 유저를 관리자의 권한으로 강제 인증시킵니다.
 ```
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/3893ce5e-ec5d-41b6-b208-baae0970d518)
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/938c3751-957c-4a38-aaae-43f726eb01a6)
-3. 뮤직 플레이어 기능
-LavaPlayer 라이브러리를 사용하여 유튜브에서 노래를 검색 후 디스코드에서 음악을 재생할 수 있습니다 </br>
-![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/8850d664-b12c-4569-b403-59e358bb796c) </br>
-추가적으로 봇을 추가하여 하나의 디코방에서 여려 음성채팅방에서 음악을 재생할 수 있습니다 (봇 상태메시지에 현재 재생중인 음성채팅방의 이름을 표기합니다) </br>
+### 2. 뮤직 플레이어 기능
+ - LavaPlayer 라이브러리를 사용하여 유튜브에서 노래를 검색 후 디스코드에서 음악을 재생할 수 있습니다 </br>
+ - 추가적으로 봇을 추가하여 하나의 디코방에서 여려 음성채팅방에서 음악을 재생할 수 있습니다 </br>
+   (봇 상태메시지에 현재 재생중인 음성채팅방의 이름을 표기합니다) </br>
+![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/8850d664-b12c-4569-b403-59e358bb796c)
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/95db993f-c22c-4c16-86cd-f8f3a28da4b5) </br>
-해당 기능을 사용하기 위해서는 secret/BotSecret.java 파일 생성 후 public static final List<String> MUSIC_BOT_TOKENS 항목에 값을 추가해주시면 됩니다 </br>
+
+해당 기능을 사용하기 위해서는 secret/BotSecret.java 파일의</br>
+``public static final List<String> MUSIC_BOT_TOKENS`` 항목에 값을 추가해주시면 됩니다 </br>
 - secret/BotSecret.java
 ``` java
+// (해당 토큰은 실제 존재하지 않는 토큰입니다)
 public static final List<String> MUSIC_BOT_TOKENS = List.of(
-            "MTE1MzI1MzkasdExODMwNA.Gm3wvS.sfasfas4pPi9d_a4zrqHClEp3IxPpqkGWrYQ3h1t-Tk", // bot 1 (해당 토큰은 실제 존재하지 않는 토큰입니다)
-            "MTEasdNzQ2NTEyNzAzNDg4MA.G6etwH.CSwxF9TkKeosfasfasfasasrqwrw" // bot 2 (해당 토큰은 실제 존재하지 않는 토큰입니다)
+            "MTE1MzI1MzkasdExODMwNA.Gm3wvS.sfasfas4pPi9d_a4zrqHClEp3IxPpqkGWrYQ3h1t-Tk", // bot 1
+            "MTEasdNzQ2NTEyNzAzNDg4MA.G6etwH.CSwxF9TkKeosfasfasfasasrqwrw" // bot 2
 );
 ```
 
 
-5. 게임 전적 검색 기능 </br>
+### 3. 게임 전적 검색 기능 </br>
 - !롤정보 [닉네임] 으로 정보를 검색할 수 있습니다 </br>
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/6d5395d0-db25-4b94-bb34-c98561824c17) </br>
 - !메이플정보 [닉네임] 으로 정보를 검색할 수 있습니다 (unstable) </br>
