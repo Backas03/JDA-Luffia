@@ -59,6 +59,7 @@ public class LOLUserInfo implements GameUserInfo {
         builder.addField("", "", false);
 
         String encodedNickname = URLEncoder.encode(nickname, StandardCharsets.UTF_8);
+        String encodedTag = URLEncoder.encode(tag, StandardCharsets.UTF_8);
 
         ChampionMasteries masteries = Orianna.championMasteriesForSummoner(summoner).get();
         for (int i=0; i<Math.min(3, masteries.size()); i++) {
@@ -74,9 +75,9 @@ public class LOLUserInfo implements GameUserInfo {
             );
         }
         builder.addField("전적 검색 사이트로 이동하기",
-                "[오피지지](https://www.op.gg/summoners/kr/" + encodedNickname + ")\n" +
-                        "[롤PS](https://lol.ps/summoner/" + encodedNickname + "?region=kr)\n" +
-                        "[포우](https://fow.kr/find/" + encodedNickname + ")",
+                "[오피지지](https://www.op.gg/summoners/kr/" + encodedNickname + "-" + encodedTag + ")\n" +
+                        "[롤PS](https://lol.ps/summoner/" + encodedNickname + "_" + encodedTag + "?region=kr)\n" +
+                        "[포우](https://fow.kr/find/" + encodedNickname + "-" + encodedTag + ")",
                 false
         );
 
