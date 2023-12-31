@@ -5,6 +5,7 @@ import kr.kro.backas.SharedConstant;
 import kr.kro.backas.util.StackTraceUtil;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Role;
+import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
@@ -22,7 +23,16 @@ public class CommandListener extends ListenerAdapter {
         SlashCommandSource source = Main.getLuffia()
                 .getCommandManager()
                 .getSlashCommandSource(command);
-        source.onTriggered(event);
+        if (source != null) source.onTriggered(event);
+    }
+
+    @Override
+    public void onCommandAutoCompleteInteraction(@NotNull CommandAutoCompleteInteractionEvent event) {
+        String command = event.getName();
+        SlashCommandSource source = Main.getLuffia()
+                .getCommandManager()
+                .getSlashCommandSource(command);
+        if (source != null) source.onCommandAutoCompleteInteraction(event);
     }
 
     @Override
