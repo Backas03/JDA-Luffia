@@ -2,11 +2,16 @@ package kr.kro.backas.command.api;
 
 import kr.kro.backas.Luffia;
 import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.interactions.commands.build.Commands;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public class CommandManager {
+    private static final Logger LOGGER = LoggerFactory.getLogger("JDA-Luffia CommandManager");
+
     private final Map<String, CommandSource> REGISTERED = new HashMap<>();
     private final Map<String, SlashCommandSource> REGISTERED_SLASH_COMMAND = new HashMap<>();
 
@@ -29,6 +34,7 @@ public class CommandManager {
                 .queue(command -> {
                     // on success
                     REGISTERED_SLASH_COMMAND.put(source.buildCommand().getName(), source);
+                    LOGGER.debug("Slash Command registered: /" + command.getName());
                 });
     }
 
