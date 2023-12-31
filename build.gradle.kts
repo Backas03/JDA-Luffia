@@ -22,12 +22,12 @@ dependencies {
     // unused implementation("com.github.in-seo:univcert:master-SNAPSHOT")
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.15.2")
     implementation("org.slf4j:slf4j-api:2.0.5")
-    implementation("ch.qos.logback:logback-classic:1.4.7")
+    implementation("ch.qos.logback:logback-classic:1.4.12")
     implementation("com.sun.mail:javax.mail:1.6.2")
     implementation("com.github.walkyst:lavaplayer-fork:1.4.3")
     implementation("com.google.api-client:google-api-client:2.2.0")
     implementation("com.merakianalytics.orianna:orianna:4.0.0-SNAPSHOT")
-    implementation("org.jsoup:jsoup:1.14.1")
+    implementation("org.jsoup:jsoup:1.15.3")
 }
 
 application.mainClass.set("kr.kro.backas.Main")
