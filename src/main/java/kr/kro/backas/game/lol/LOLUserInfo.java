@@ -49,8 +49,8 @@ public class LOLUserInfo implements GameUserInfo {
         EmbedBuilder builder = new EmbedBuilder();
         builder.setColor(Color.decode("#ff8c00"));
         builder.setAuthor(
-                "Lv." + summoner.getLevel() + "    " + nickname + "  #" + tag + "",
-                "https://www.op.gg/summoners/kr/" + URLEncoder.encode(nickname, StandardCharsets.UTF_8),
+                "Lv." + summoner.getLevel() + "    " + nickname + "  #" + tag,
+                "https://www.op.gg/summoners/kr/" + URLEncoder.encode(nickname + "-" + tag, StandardCharsets.UTF_8),
                 imageURL
         );
         builder.addField("개인/듀오 랭크", getTier(Queue.RANKED_SOLO), true);
