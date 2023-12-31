@@ -34,7 +34,7 @@ public class HelpCommand implements CommandSource {
                             아래는 해당 봇의 기능입니다.""");
         for (Map.Entry<String, SlashCommandSource> entry : slashCommandSources.entrySet()) {
             SlashCommandSource slashCommandSource = entry.getValue();
-            builder.addField(getUsage(), getDescription(), false);
+            builder.addField(slashCommandSource.getUsage(), slashCommandSource.getDescription(), false);
         }
         /* chat command info
         for (Map.Entry<String, CommandSource> entry : sources.entrySet()) {
