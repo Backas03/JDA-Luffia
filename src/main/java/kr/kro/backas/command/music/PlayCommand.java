@@ -7,6 +7,7 @@ import kr.kro.backas.music.service.youtube.YoutubeService;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 
+@Deprecated(forRemoval = true)
 public class PlayCommand implements CommandSource {
     @Override
     public void onTriggered(MessageReceivedEvent event) {
@@ -20,9 +21,11 @@ public class PlayCommand implements CommandSource {
         if (youtubeURL != null) {
             arg = youtubeURL;
         }
-        Main.getLuffia()
+        /* Main.getLuffia()
                 .getMusicPlayerController()
                 .search(Identifier.YOUTUBE, arg, message);
+
+         */
     }
 
     @Override

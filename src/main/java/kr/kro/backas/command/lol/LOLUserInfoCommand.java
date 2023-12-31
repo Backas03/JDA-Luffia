@@ -7,6 +7,7 @@ import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 
 import java.util.concurrent.CompletableFuture;
 
+@Deprecated(forRemoval = true)
 public class LOLUserInfoCommand implements CommandSource {
     @Override
     public void onTriggered(MessageReceivedEvent event) {
@@ -17,7 +18,7 @@ public class LOLUserInfoCommand implements CommandSource {
             message.reply("닉네임을 입력해주세요.").queue();
             return;
         }
-        LOLUserInfo info = new LOLUserInfo(nickname);
+        LOLUserInfo info = new LOLUserInfo(nickname, "KR1");
         if (!info.exists()) {
             message.reply("해당 사용자를 찾을 수 없습니다. \"" + nickname + "\"").queue();
             return;
