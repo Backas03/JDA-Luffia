@@ -3,6 +3,7 @@ package kr.kro.backas.music;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 
 import java.util.LinkedList;
 import java.util.Queue;
@@ -65,7 +66,7 @@ public class MusicTrack {
         if (repeatMode == RepeatMode.REPEAT_CURRENT) {
             if (endedTrack == null) return;
             MusicSelection selection = endedTrack.getUserData(MusicSelection.class);
-            selection.getQueryMessage()
+            selection.getSlashCommandInteractionEvent()
                     .replyEmbeds(MusicTrackHandler.getPlayMessage(endedTrack, musicBot).build())
                     .mentionRepliedUser(false)
                     .queue();
@@ -76,16 +77,21 @@ public class MusicTrack {
             trackQueue.add(endedTrack); // 위에 적으면 queue 에 item 이 1개일때도 반복 재생 가능함
         }
         /* no repeat mode or repeat all mode */
-        if (!hasNextTrack()) {
-            client.disconnectToVoiceChannelAndResetTrack();
+        if (trackQueue.isEmpty()) {
+            client.disconnectFromVoiceChannelAndResetTrack();
             return;
         }
         AudioTrack nextTrack = trackQueue.poll();
         MusicSelection selection = nextTrack.getUserData(MusicSelection.class);
-        selection.getQueryMessage()
-                .replyEmbeds(MusicTrackHandler.getPlayMessage(nextTrack, musicBot).build())
-                .mentionRepliedUser(false)
-                .queue();
+        SlashCommandInteractionEvent slashCommandInteractionEvent = selection.getSlashCommandInteractionEvent();
+
+        // 슬래쉬 커멘드가 reply 되어있지 않았다면 reply (반복 모드 설정시 이벤트를 중복으로 reply하는데 이벤트는 1번만 reply 되어야함)
+        if (!slashCommandInteractionEvent.isAcknowledged()) {
+            slashCommandInteractionEvent
+                    .replyEmbeds(MusicTrackHandler.getPlayMessage(nextTrack, musicBot).build())
+                    .mentionRepliedUser(false)
+                    .queue();
+        }
         player.playTrack(nextTrack); // nextTrack cannot be null
     }
 
@@ -101,7 +107,7 @@ public class MusicTrack {
                 if (hasPlayingTrack()) { // playing 중이라면 무시
                     return;
                 }
-                client.disconnectToVoiceChannelAndResetTrack();
+                client.disconnectFromVoiceChannelAndResetTrack();
             });
             this.waitQuitingThread.start();
         }

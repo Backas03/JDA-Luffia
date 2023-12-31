@@ -3,11 +3,14 @@ package kr.kro.backas.music;
 import kr.kro.backas.SharedConstant;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
+import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.entities.channel.unions.AudioChannelUnion;
+import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.requests.GatewayIntent;
@@ -44,8 +47,11 @@ public class MusicPlayerController extends ListenerAdapter {
         this.clients.add(client);
     }
 
-    public void search(Identifier id, String query, Message message) {
-        Member member = message.getMember(); // member cannot be null if bot services only guild channels.
+    public void register(JDA discordAPI) {
+        this.clients.add(new MusicPlayerClient(discordAPI));
+    }
+
+    public void search(Identifier id, String query, Member member, SlashCommandInteractionEvent slashEvent) {
         VoiceChannel joinedVoiceChannel = MemberUtil.getJoinedVoiceChannel(member);
         if (joinedVoiceChannel == null) {
             EmbedBuilder builder = new EmbedBuilder()
@@ -54,8 +60,7 @@ public class MusicPlayerController extends ListenerAdapter {
                     .setTitle("음악을 검색할 수 없습니다.")
                     .setDescription("음악을 재생하려면 음성채팅방에 먼저 참여해주세요.")
                     .setFooter(SharedConstant.RELEASE_VERSION);
-            message.getChannel()
-                    .sendMessageEmbeds(builder.build())
+            slashEvent.replyEmbeds(builder.build())
                     .queue();
             return;
         }
@@ -75,8 +80,7 @@ public class MusicPlayerController extends ListenerAdapter {
                     .setTitle("음악을 재생할 수 없습니다.")
                     .setDescription("현재 모든 노래봇이 음악을 재생중 입니다. 나중에 다시 시도해주세요.")
                     .setFooter(SharedConstant.RELEASE_VERSION);
-            message.getChannel()
-                    .sendMessageEmbeds(builder.build())
+            slashEvent.replyEmbeds(builder.build())
                     .queue();
             return;
         }
@@ -84,7 +88,7 @@ public class MusicPlayerController extends ListenerAdapter {
                 id,
                 query,
                 member,
-                message
+                slashEvent
         ));
         loader.loadMusic();
         searchData.put(member.getIdLong(), loader);
