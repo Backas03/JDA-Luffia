@@ -18,13 +18,14 @@ import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import java.awt.*;
 
 public class PauseOrResumeSlashCommand implements SlashCommandSource {
+    public static final String COMMAND_NAME = "일시정지";
     public static final String COMMAND_ARGUMENT = "해제여부";
 
     @Override
     public SlashCommandData buildCommand() {
-        return Commands.slash("일시정지", "노래를 일시정지 하거나 일시정지를 해제합니다")
+        return Commands.slash("일시정지", getDescription())
                 .addOption(OptionType.STRING,
-                        COMMAND_ARGUMENT,
+                        COMMAND_NAME,
                         "일시 정지 모드를 해제하려면 해제를 입력하세요",
                         false);
     }
@@ -95,5 +96,16 @@ public class PauseOrResumeSlashCommand implements SlashCommandSource {
             return;
         }
         event.reply("일시정지 상태가 아닙니다!").queue();
+    }
+
+    @Override
+    public String getDescription() {
+        return "노래를 일시정지 하거나 일시정지를 해제합니다";
+    }
+
+    @Override
+    public String getUsage() {
+        return "/" + COMMAND_NAME + "\n" +
+               "/" + COMMAND_NAME + " 해제";
     }
 }

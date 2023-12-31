@@ -16,9 +16,11 @@ import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import java.awt.*;
 
 public class QuitSlashCommand implements SlashCommandSource {
+    public static final String COMMAND_NAME = "나가기";
+
     @Override
     public SlashCommandData buildCommand() {
-        return Commands.slash("나가기", "노래 대기열을 전부 삭제하고 음성채팅방에서 퇴장시킵니다.");
+        return Commands.slash("나가기", getDescription());
     }
 
     @Override
@@ -52,5 +54,15 @@ public class QuitSlashCommand implements SlashCommandSource {
         }
         client.disconnectFromVoiceChannelAndResetTrack();
         event.reply("전체 음악 재생 대기열이 삭제되었으며, 음성채팅방과 연결을 끊었습니다.").queue();
+    }
+
+    @Override
+    public String getDescription() {
+        return "노래 대기열을 전부 삭제하고 음성채팅방에서 퇴장시킵니다.";
+    }
+
+    @Override
+    public String getUsage() {
+        return "/" + COMMAND_NAME;
     }
 }

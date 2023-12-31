@@ -30,7 +30,7 @@ public class SetRepeatModeSlashCommand implements SlashCommandSource {
 
     @Override
     public SlashCommandData buildCommand() {
-        return Commands.slash(COMMAND_NAME, "반복 모드를 설정합니다")
+        return Commands.slash(COMMAND_NAME, getDescription())
                 .addOption(OptionType.STRING,
                         COMMAND_ARGUMENT_NAME,
                         "반복 모드를 설정합니다",
@@ -98,5 +98,15 @@ public class SetRepeatModeSlashCommand implements SlashCommandSource {
             System.out.println(optionsList);
             event.replyChoices(optionsList).queue();
         }
+    }
+
+    @Override
+    public String getDescription() {
+        return "반복 모드를 설정합니다";
+    }
+
+    @Override
+    public String getUsage() {
+        return "/" + COMMAND_NAME + " [반복모드]";
     }
 }

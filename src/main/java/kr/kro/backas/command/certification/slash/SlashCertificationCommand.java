@@ -1,4 +1,4 @@
-package kr.kro.backas.command.slash;
+package kr.kro.backas.command.certification.slash;
 
 import kr.kro.backas.Main;
 import kr.kro.backas.SharedConstant;
@@ -17,13 +17,13 @@ import java.awt.*;
 
 public class SlashCertificationCommand implements SlashCommandSource {
 
+    public static final String COMMAND_NAME = "인증";
     public static final String COMMAND_ARGUMENT_CODE = "인증코드";
     public static final String COMMAND_ARGUMENT_EMAIL = "대구대이메일";
 
     @Override
     public SlashCommandData buildCommand() {
-        return Commands.slash("인증", "대구대학교 이메일로 재학생 인증을 진행합니다. \n" +
-                        "인증 완료로 학교 인증이 필요한 모든 이벤트에 참여하실 수 있습니다")
+        return Commands.slash("인증", getDescription())
                 .addOption(OptionType.INTEGER,
                         COMMAND_ARGUMENT_CODE,
                         "이메일로 받은 6자리 인증 코드를 입력하여 인증을 마무리합니다",
@@ -65,5 +65,17 @@ public class SlashCertificationCommand implements SlashCommandSource {
                 .setFooter(SharedConstant.RELEASE_VERSION)
                 .build()
         ).queue();
+    }
+
+    @Override
+    public String getDescription() {
+        return "대구대학교 이메일로 재학생 인증을 진행합니다. \n" +
+               "인증 완료로 학교 인증이 필요한 모든 이벤트에 참여하실 수 있습니다";
+    }
+
+    @Override
+    public String getUsage() {
+        return "/" + COMMAND_NAME + "[인증코드]\n" +
+               "/" + COMMAND_NAME + "[이메일]";
     }
 }

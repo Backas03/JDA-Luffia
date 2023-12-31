@@ -4,9 +4,7 @@ import kr.kro.backas.SharedConstant;
 import kr.kro.backas.command.api.SlashCommandSource;
 import kr.kro.backas.game.lol.LOLUserInfo;
 import net.dv8tion.jda.api.EmbedBuilder;
-import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
-import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
@@ -16,10 +14,11 @@ import java.awt.*;
 import java.util.concurrent.CompletableFuture;
 
 public class LOLUserInfoSlashCommand implements SlashCommandSource {
+    private static final String COMMAND_NAME = "롤정보";
     private static final String COMMAND_ARGUMENT_NAME = "닉네임";
     @Override
     public SlashCommandData buildCommand() {
-        return Commands.slash("롤정보", "플레이어의 롤 정보를 확인합니다")
+        return Commands.slash(COMMAND_NAME, getDescription())
                 .addOption(OptionType.STRING,
                         COMMAND_ARGUMENT_NAME,
                         "닉네임으로 롤 정보를 확인합니다",
@@ -57,5 +56,15 @@ public class LOLUserInfoSlashCommand implements SlashCommandSource {
             event.replyEmbeds(info.getInfoMessage().build()).queue();
             return false;
         });
+    }
+
+    @Override
+    public String getDescription() {
+        return "플레이어의 롤 정보를 확인합니다";
+    }
+
+    @Override
+    public String getUsage() {
+        return "/" + COMMAND_NAME + " [닉네임]";
     }
 }
