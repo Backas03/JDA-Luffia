@@ -2,6 +2,7 @@ package kr.kro.backas.game.lol;
 
 import com.merakianalytics.orianna.Orianna;
 import com.merakianalytics.orianna.types.common.Queue;
+import com.merakianalytics.orianna.types.core.account.Account;
 import com.merakianalytics.orianna.types.core.championmastery.ChampionMasteries;
 import com.merakianalytics.orianna.types.core.championmastery.ChampionMastery;
 import com.merakianalytics.orianna.types.core.league.LeagueEntry;
@@ -19,17 +20,23 @@ import java.nio.charset.StandardCharsets;
 public class LOLUserInfo implements GameUserInfo {
 
     public String nickname;
+    public String tag;
 
-    public LOLUserInfo(String nickname) throws IllegalArgumentException {
+    public LOLUserInfo(String nickname, String tag) throws IllegalArgumentException {
         this.nickname = nickname;
+        this.tag = tag;
     }
 
     public boolean exists() {
-        return getSummoner().exists();
+        return getAccount().exists();
+    }
+
+    public Account getAccount() {
+        return Orianna.accountWithRiotId(nickname, tag).get();
     }
 
     public Summoner getSummoner() {
-        return Orianna.summonerNamed(nickname).get();
+        return Summoner.withPuuid(getAccount().getPuuid()).get();
     }
 
     public EmbedBuilder getInfoMessage() {
@@ -42,7 +49,7 @@ public class LOLUserInfo implements GameUserInfo {
         EmbedBuilder builder = new EmbedBuilder();
         builder.setColor(Color.decode("#ff8c00"));
         builder.setAuthor(
-                "Lv." + summoner.getLevel() + "    " + nickname,
+                "Lv." + summoner.getLevel() + "    " + nickname + "  #" + tag + "",
                 "https://www.op.gg/summoners/kr/" + URLEncoder.encode(nickname, StandardCharsets.UTF_8),
                 imageURL
         );
