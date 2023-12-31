@@ -1,8 +1,8 @@
 package kr.kro.backas;
 
 public final class SharedConstant {
-    public static final long MAIN_GUILD_ID = 293977417482108930L;
-    public static final long DEV_GUILD_ID = 293977417482108930L;
+    public static final long MAIN_GUILD_ID = 1173281289470758913L;
+    public static final long DEV_GUILD_ID = 1173281289470758913L;
     public static final long PUBLISHED_GUILD_ID = MAIN_GUILD_ID;
 
     public static final boolean ON_DEV = false;

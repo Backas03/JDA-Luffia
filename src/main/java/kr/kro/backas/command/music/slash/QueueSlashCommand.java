@@ -13,7 +13,6 @@ import kr.kro.backas.util.DurationUtil;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Member;
-import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
@@ -23,9 +22,10 @@ import java.awt.*;
 import java.util.List;
 
 public class QueueSlashCommand implements SlashCommandSource {
+    public static final String COMMAND_NAME = "대기열";
     @Override
     public SlashCommandData buildCommand() {
-        return Commands.slash("대기열", "현재 노래 재생정보와 대기열 정보를 확인합니다");
+        return Commands.slash(COMMAND_NAME, getDescription());
     }
 
     @Override
@@ -105,5 +105,15 @@ public class QueueSlashCommand implements SlashCommandSource {
             }
         }
         event.replyEmbeds(builder.build()).queue();
+    }
+
+    @Override
+    public String getDescription() {
+        return "현재 노래 재생정보와 대기열 정보를 확인합니다";
+    }
+
+    @Override
+    public String getUsage() {
+        return "/" + COMMAND_NAME;
     }
 }

@@ -10,7 +10,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class CommandManager {
-    private static final Logger LOGGER = LoggerFactory.getLogger("JDA-Luffia CommandManager");
+    private static final Logger LOGGER = LoggerFactory.getLogger("[JDA-Luffia CommandManager]");
 
     private final Map<String, CommandSource> REGISTERED = new HashMap<>();
     private final Map<String, SlashCommandSource> REGISTERED_SLASH_COMMAND = new HashMap<>();
@@ -36,6 +36,10 @@ public class CommandManager {
                     REGISTERED_SLASH_COMMAND.put(source.buildCommand().getName(), source);
                     LOGGER.debug("Slash Command registered: /" + command.getName());
                 });
+    }
+
+    public Map<String, SlashCommandSource> getSlashCommandSources() {
+        return REGISTERED_SLASH_COMMAND;
     }
 
     public SlashCommandSource getSlashCommandSource(String command) {

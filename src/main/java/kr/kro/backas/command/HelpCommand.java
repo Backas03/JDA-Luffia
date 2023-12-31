@@ -4,6 +4,7 @@ import kr.kro.backas.Main;
 import kr.kro.backas.SharedConstant;
 import kr.kro.backas.command.api.CommandManager;
 import kr.kro.backas.command.api.CommandSource;
+import kr.kro.backas.command.api.SlashCommandSource;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
@@ -17,6 +18,7 @@ public class HelpCommand implements CommandSource {
         CommandManager commandManager = Main.getLuffia()
                 .getCommandManager();
         Map<String, CommandSource> sources = commandManager.getSources();
+        Map<String, SlashCommandSource> slashCommandSources = commandManager.getSlashCommandSources();
 
         // * 현재 Luffia는 오전 0시 ~ 10시 사이동안 서비스를 하지 않습니다.
         // * 24시간 서비스시 해당 문구가 사라질 예정입니다.
@@ -25,11 +27,16 @@ public class HelpCommand implements CommandSource {
                 .setTitle("Luffia 도움말")
                 .setDescription("""
                             Java Discord API(JDA) 로 여러 기능을 서비스하는 디스코드 봇 Luffia 입니다.
-                            이 봇은 <@397589473531002882> bagkaseu(박카스#9970) 에 의해 제작되었으며, 대구대 게임 전공 서버 이외에 서비스를 하지 않습니다.
+                            이 봇은 <@397589473531002882> bagkaseu(박카스#9970) 에 의해 제작되었습니다.
                             해당 봇의 오류나 건의, 문의사항이 있을시 제작자에게 문의 또는 Luffia Github에 Issue 바랍니다.
                             
 
                             아래는 해당 봇의 기능입니다.""");
+        for (Map.Entry<String, SlashCommandSource> entry : slashCommandSources.entrySet()) {
+            SlashCommandSource slashCommandSource = entry.getValue();
+            builder.addField(getUsage(), getDescription(), false);
+        }
+        /* chat command info
         for (Map.Entry<String, CommandSource> entry : sources.entrySet()) {
             CommandSource source = entry.getValue();
             if (source instanceof HelpCommand) continue; // bypass
@@ -61,7 +68,7 @@ public class HelpCommand implements CommandSource {
                     value + ">>> " + source.getUsage() + perm,
                     false
             );
-        }
+        } */
         /*
         builder.addField(
                 "아래 기능들은 discord.py 로 구동되며, Java Discord API(JDA)로 서비스 되지않습니다. 기능이 정상 작동하지 않을수도 있습니다.",

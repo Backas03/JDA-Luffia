@@ -11,11 +11,12 @@ import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 
 public class PlaySlashCommand implements SlashCommandSource {
-    public static final String COMMAND_ARGUMENT = "검색어or유튜브url";
+    public static final String COMMAND_NAME = "재생";
+    public static final String COMMAND_ARGUMENT = "검색어";
 
     @Override
     public SlashCommandData buildCommand() {
-        return Commands.slash("재생", "유튜브에서 노래를 검색 후 재생합니다")
+        return Commands.slash("재생", getDescription())
                 .addOption(OptionType.STRING,
                         COMMAND_ARGUMENT,
                         "검색어로 검색 또는 유튜브 URL 을 통한 검색으로 노래를 검색합니다",
@@ -37,5 +38,15 @@ public class PlaySlashCommand implements SlashCommandSource {
         Main.getLuffia()
                 .getMusicPlayerController()
                 .search(Identifier.YOUTUBE, arg, event.getMember(), event);
+    }
+
+    @Override
+    public String getDescription() {
+        return "유튜브에서 노래를 검색 후 재생합니다";
+    }
+
+    @Override
+    public String getUsage() {
+        return "/" + COMMAND_ARGUMENT + " [검색어]";
     }
 }

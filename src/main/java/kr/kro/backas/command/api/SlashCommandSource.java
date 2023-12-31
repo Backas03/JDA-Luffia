@@ -4,7 +4,7 @@ import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInterac
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 
-public interface SlashCommandSource {
+public interface SlashCommandSource extends CommandInfo {
     SlashCommandData buildCommand();
     void onTriggered(SlashCommandInteractionEvent event);
 
