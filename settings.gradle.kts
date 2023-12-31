@@ -1,2 +1,2 @@
-rootProject.name = "JLuffia"
+rootProject.name = "JDA-Luffia"
 
