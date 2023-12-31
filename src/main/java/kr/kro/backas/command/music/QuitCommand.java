@@ -14,6 +14,7 @@ import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 
 import java.awt.*;
 
+@Deprecated
 public class QuitCommand implements CommandSource {
     @Override
     public void onTriggered(MessageReceivedEvent event) {
@@ -45,7 +46,7 @@ public class QuitCommand implements CommandSource {
             message.replyEmbeds(builder.build()).queue();
             return;
         }
-        client.disconnectToVoiceChannelAndResetTrack();
+        client.disconnectFromVoiceChannelAndResetTrack();
         message.reply("전체 음악 재생 대기열이 삭제되었으며, 음성채팅방과 연결을 끊었습니다.").queue();
     }
 

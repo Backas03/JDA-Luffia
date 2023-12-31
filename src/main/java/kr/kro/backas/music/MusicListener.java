@@ -30,7 +30,7 @@ public class MusicListener extends ListenerAdapter {
                 List<Member> members = new ArrayList<>(channelLeft.getMembers());
                 members.removeIf(member -> member != null && member.getUser().isBot());
                 if (members.isEmpty()) {
-                    client.disconnectToVoiceChannelAndResetTrack();
+                    client.disconnectFromVoiceChannelAndResetTrack();
                 }
             }
         }
