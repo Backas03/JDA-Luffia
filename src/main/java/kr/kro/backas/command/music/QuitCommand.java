@@ -14,7 +14,7 @@ import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 
 import java.awt.*;
 
-@Deprecated
+@Deprecated(forRemoval = true)
 public class QuitCommand implements CommandSource {
     @Override
     public void onTriggered(MessageReceivedEvent event) {

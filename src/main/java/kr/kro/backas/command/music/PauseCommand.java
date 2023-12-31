@@ -14,6 +14,7 @@ import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 
 import java.awt.*;
 
+@Deprecated(forRemoval = true)
 public class PauseCommand implements CommandSource {
     @Override
     public void onTriggered(MessageReceivedEvent event) {

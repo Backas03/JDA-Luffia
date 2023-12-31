@@ -15,6 +15,7 @@ import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 
 import java.awt.*;
 
+@Deprecated(forRemoval = true)
 public class NoRepeatCommand implements CommandSource {
     @Override
     public void onTriggered(MessageReceivedEvent event) {
