@@ -82,7 +82,7 @@ public class MusicPlayerClient {
                         .setTitle("음악을 재생할 수 없습니다.")
                         .setDescription("참여한 음성채팅방을 찾을 수 없습니다. 재생을 종료합니다")
                         .setFooter(SharedConstant.RELEASE_VERSION);
-                disconnectToVoiceChannelAndResetTrack();
+                disconnectFromVoiceChannelAndResetTrack();
                 return builder;
             }
             connectToVoiceChannel(memberChannel);
@@ -143,7 +143,7 @@ public class MusicPlayerClient {
         musicBot.getPresence().setActivity(Activity.playing(channel.getName() + "에서 플레이"));
     }
 
-    public void disconnectToVoiceChannelAndResetTrack() {
+    public void disconnectFromVoiceChannelAndResetTrack() {
         AudioManager manager = musicBot
                 .getGuildById(SharedConstant.PUBLISHED_GUILD_ID)
                 .getAudioManager(); // cannot be null

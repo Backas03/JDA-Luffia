@@ -62,6 +62,8 @@ public class MusicTrackHandler extends AudioEventAdapter {
 
     @Override
     public void onTrackEnd(AudioPlayer player, AudioTrack track, AudioTrackEndReason endReason) {
-        musicTrack.playNextTrack(track.makeClone());
+        if (endReason == AudioTrackEndReason.FINISHED) {
+            musicTrack.playNextTrack(track.makeClone());
+        }
     }
 }
