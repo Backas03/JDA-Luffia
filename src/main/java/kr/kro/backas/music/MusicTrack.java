@@ -91,6 +91,10 @@ public class MusicTrack {
                     .replyEmbeds(MusicTrackHandler.getPlayMessage(nextTrack, musicBot).build())
                     .mentionRepliedUser(false)
                     .queue();
+        } else {
+            slashCommandInteractionEvent.getMessageChannel()
+                    .sendMessageEmbeds(MusicTrackHandler.getPlayMessage(nextTrack, musicBot).build())
+                    .queue();
         }
         player.playTrack(nextTrack); // nextTrack cannot be null
     }
