@@ -17,34 +17,12 @@ public class MapleUserInfo {
     public static final String MAPLE_GG_BASE_URL = "https://maple.gg/";
 
     private final String nickname;
-    private String userProfileImageURL;
-    private String worldImageURL;
-    private String world;
-    private String job;
-    private String levelData;
-    private String popularity;
-    private String guild;
-    private String totalRank;
-    private String worldRank;
-    private String jobRankWorld;
-    private String jobRankTotal;
-    private String mureungFloor;
-    private String mureungWorldRank;
-    private String mureungRank;
-    private String mureungInfo;
-    private String mureungDate;
-    private String mureungTime;
-    private String unionName;
-    private String unionWorldRank;
-    private String unionRank;
-    private String unionLevel;
-    private String unionImageURL;
-    private String unionDate;
-    private String unionPower;
-    private String lastUpdate;
-    private String lastActiveDate;
-
     private final Map<String, String> codies;
+
+    private String userProfileImageURL, worldImageURL, world, job, levelData, popularity, guild,
+            totalRank, worldRank, jobRankWorld, jobRankTotal, mureungFloor, mureungWorldRank, mureungRank,
+            mureungInfo, mureungDate, mureungTime, unionName, unionWorldRank, unionRank, unionLevel,
+            unionImageURL, unionDate, unionPower, lastUpdate, lastActiveDate;
 
     public enum Cody {
         HAT("모자"),
