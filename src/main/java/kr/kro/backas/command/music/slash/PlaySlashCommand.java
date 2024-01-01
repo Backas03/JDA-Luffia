@@ -47,6 +47,6 @@ public class PlaySlashCommand implements SlashCommandSource {
 
     @Override
     public String getUsage() {
-        return "/" + COMMAND_ARGUMENT + " [검색어]";
+        return "/" + COMMAND_NAME + " [검색어]";
     }
 }
