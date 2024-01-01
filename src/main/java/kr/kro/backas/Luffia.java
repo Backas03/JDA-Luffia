@@ -2,9 +2,11 @@ package kr.kro.backas;
 
 import kr.kro.backas.certification.CertificationManager;
 import kr.kro.backas.certification.listener.CertificationListener;
+import kr.kro.backas.command.HelpCommand;
 import kr.kro.backas.command.api.CommandManager;
 import kr.kro.backas.command.lol.slash.LOLUserInfoSlashCommand;
 import kr.kro.backas.command.maplestory.MapleUserInfoCommand;
+import kr.kro.backas.command.music.HelpSlashCommand;
 import kr.kro.backas.command.music.slash.*;
 import kr.kro.backas.music.MusicListener;
 import kr.kro.backas.music.MusicPlayerController;
@@ -32,11 +34,13 @@ public class Luffia {
         this.commandManager.registerSlashCommand(new QuitSlashCommand());
         this.commandManager.registerSlashCommand(new SetRepeatModeSlashCommand());
         this.commandManager.registerSlashCommand(new PauseOrResumeSlashCommand());
+        this.commandManager.registerSlashCommand(new SkipSlashCommand());
         this.commandManager.registerSlashCommand(new LOLUserInfoSlashCommand());
+        this.commandManager.registerSlashCommand(new HelpSlashCommand());
 
         //this.commandManager.registerCommand("인증정보", new CertificationInfoCommand());
         //this.commandManager.registerCommand("인증해제", new CertificationRemoveCommand());
-        //this.commandManager.registerCommand("도움말", new HelpCommand());
+        this.commandManager.registerCommand("도움말", new HelpCommand());
         //this.commandManager.registerCommand("강제인증", new ForceCertificationCommand());
 
         //this.commandManager.registerCommand("재생", new PlayCommand());
@@ -58,7 +62,7 @@ public class Luffia {
 
         this.discordAPI.addEventListener(new MusicListener());
         this.discordAPI.addEventListener(new CertificationListener());
-        this.discordAPI.getPresence().setActivity(Activity.playing("!도움말 명령어로 기능 확인"));
+        this.discordAPI.getPresence().setActivity(Activity.playing("/도움말 또는 !도움말  명령어로 기능 확인"));
     }
 
     public JDA getDiscordAPI() {
