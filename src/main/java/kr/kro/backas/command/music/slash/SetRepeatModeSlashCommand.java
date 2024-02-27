@@ -82,7 +82,7 @@ public class SetRepeatModeSlashCommand implements SlashCommandSource {
             return;
         }
         client.setRepeatMode(mode);
-        event.reply("반복 모드를 \"" + mode.getName() + "\" (으)로 설정했습니다.").queue();
+        event.reply("반복 모드를 ``" + mode.getName() + "`` (으)로 설정했습니다.").queue();
     }
 
     @Override
