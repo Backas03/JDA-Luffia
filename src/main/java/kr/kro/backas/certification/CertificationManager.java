@@ -73,7 +73,7 @@ public class CertificationManager {
                     .setColor(Color.decode("#ff7547"))
                     .setTitle("명령어가 올바르지 않습니다. \"/" + event.getName() + "\"")
                     .setDescription("이메일 형식을 확인해주세요.\n"+
-                            "ex) ``/인증 " + email + "@daegu.ac.kr``")
+                            "ex) ``/인증 " + email + "``")
                     .addField(
                             "/인증 [대구대학교 이메일]",
                             "```해당 대구대학교 이메일로 인증 코드를 받습니다\n" +
@@ -83,6 +83,16 @@ public class CertificationManager {
             ).queue();
             return;
         }
+
+        // 대구대 역할이 있으면 인증이 되어있는 상태 (인증 데이터에는 없을 수 있음)
+        Member member = Main.getLuffia()
+                .getPublishedGuild()
+                .getMember(user);
+        if (member != null && member.getRoles().contains(this.role)) {
+            event.reply(user.getName() + " 님은 이미 인증이 완료된 상태입니다.").queue();
+            return;
+        }
+
         if (certificationData.isCertificated(user)) {
             event.reply(user.getName() + " 님은 이미 인증이 완료된 상태입니다.").queue();
             return;
