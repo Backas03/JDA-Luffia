@@ -23,7 +23,9 @@ import java.awt.*;
 import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
@@ -228,7 +230,8 @@ public class CertificationManager {
                                     "```email=%s\nuserId=%d\ndate=%s\nknownAs=%s\nunivCheck=%b```",
                                     "비공개"/*email*/,
                                     user.getIdLong(),
-                                    new SimpleDateFormat("yyyy-MM-dd hh:mm:ss.SSS").format(Date.from(now)),
+                                    new SimpleDateFormat("yyyy-MM-dd hh:mm:ss.SSS")
+                                            .format(Date.from(Instant.now(Clock.system(ZoneId.of(SharedConstant.ZONE_ID))))),
                                     info.knownAs(),
                                     info.univCheck()),
                             false)
