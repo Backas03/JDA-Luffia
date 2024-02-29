@@ -12,7 +12,8 @@ import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.entities.channel.unions.AudioChannelUnion;
 
-import java.util.*;
+import java.util.LinkedList;
+import java.util.Queue;
 
 public class LOLRecruitmentRoom implements RecruitmentRoom<LOLGameTeam> {
 
