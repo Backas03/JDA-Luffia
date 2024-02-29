@@ -226,7 +226,7 @@ public class MusicPlayerClient {
         if (!manager.isConnected()) return;
         manager.closeAudioConnection();
 
-        musicBot.getPresence().setActivity(null);
+        musicBot.getPresence().setActivity(Activity.playing(SharedConstant.DEFAULT_ACTIVITY));
 
         musicTrack.reset();
     }
