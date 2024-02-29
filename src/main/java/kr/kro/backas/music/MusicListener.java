@@ -21,6 +21,7 @@ public class MusicListener extends ListenerAdapter {
         MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
         controller.expireSearchData(event.getMember()); // 검색 데이터가 존재할 시 메모리 해제
 
+        // 음성채팅방에 아무도 없을시 나가고 음악 재생 중지
         for (MusicPlayerClient client : controller.getRegisteredClients()) {
             if (!client.hasJoinedToVoiceChannel()) {
                 continue;
