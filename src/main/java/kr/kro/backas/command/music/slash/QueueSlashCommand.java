@@ -78,7 +78,7 @@ public class QueueSlashCommand implements SlashCommandSource {
                 .addField(
                         "재생 시간",
                         DurationUtil.formatDurationColon(
-                                (int) (currentPlaying.getPosition() / 1000))
+                                (int) (client.getRealPositionMs() / 1000))
                                 + " / " +
                                 DurationUtil.formatDurationColon((int) (currentPlayingInfo.length / 1000)),
                         false
@@ -89,6 +89,18 @@ public class QueueSlashCommand implements SlashCommandSource {
                 ).addField(
                         "반복 모드",
                         client.getRepeatModeName(),
+                        false
+                ).addField(
+                        "재생 속도",
+                        client.getCurrentPlaySpeed() + "배속",
+                        false
+                ).addField(
+                        "노래방모드",
+                        client.isKaraokeMode() ? "사용 중" : "사용 안함",
+                        false
+                ).addField(
+                        "이퀄라이저",
+                        client.getCurrentEqualizer().getName(),
                         false
                 );
         List<AudioTrack> queue = client.getTrackQueue();
