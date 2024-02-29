@@ -12,6 +12,7 @@ import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.components.selections.StringSelectMenu;
 
 import java.awt.*;
@@ -30,11 +31,14 @@ public class MusicLoader implements AudioLoadResultHandler {
     private Map<String, AudioTrack> loadedTracks;
     private Message repliedMessage;
     private int retryAttempt;
+    private InteractionHook deferReplyInteractionHook;
 
     public MusicLoader(MusicPlayerClient musicPlayerClient, MusicSearchQueryInfo queryInfo) {
         this.queryInfo = queryInfo;
         this.musicPlayerClient = musicPlayerClient;
         this.retryAttempt = 0;
+        this.deferReplyInteractionHook = queryInfo.getSlashCommandInteractionEvent()
+                .deferReply().complete();
     }
 
     public void loadMusic() {
@@ -80,20 +84,19 @@ public class MusicLoader implements AudioLoadResultHandler {
             );
             this.loadedTracks.put(selectMenuValue, track);
         }
-        SlashCommandInteractionEvent slashCommandInteractionEvent = queryInfo.getSlashCommandInteractionEvent();
-        if (!slashCommandInteractionEvent.isAcknowledged() && repliedMessage == null) {
+        if (repliedMessage == null) {
             // event reply 안됨
-            slashCommandInteractionEvent.reply(
+            deferReplyInteractionHook.editOriginal(
                             "다음은 ``" + queryInfo.getQuery() + "`` 에 대한 검색 결과입니다. (" + tracks.size() + "개)\n" +
                                     "재생할 곡을 선택해주세요.")
-                    .addActionRow(builder.build())
+                    .setActionRow(builder.build())
                     .queue();
             return;
         }
         // event 가 reply 되어있으면 통신오류로 리퀘스트 다시 넣고 재검색한 상태
         repliedMessage.editMessage(
-                        "다음은 ``" + queryInfo.getQuery() + "`` 에 대한 검색 결과입니다. (" + tracks.size() + "개)\n" +
-                                "재생할 곡을 선택해주세요.")
+                "다음은 ``" + queryInfo.getQuery() + "`` 에 대한 검색 결과입니다. (" + tracks.size() + "개)\n" +
+                        "재생할 곡을 선택해주세요.")
                 .setActionRow(builder.build())
                 .queue();
         repliedMessage.editMessageEmbeds(new EmbedBuilder()
