@@ -1,7 +1,7 @@
 package kr.kro.backas.command.lol;
 
-import kr.kro.backas.game.lol.LOLUserInfo;
 import kr.kro.backas.command.api.CommandSource;
+import kr.kro.backas.game.lol.LOLUserInfo;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 
