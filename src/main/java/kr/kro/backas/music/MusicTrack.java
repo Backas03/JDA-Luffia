@@ -66,10 +66,17 @@ public class MusicTrack {
         if (repeatMode == RepeatMode.REPEAT_CURRENT) {
             if (endedTrack == null) return;
             MusicSelection selection = endedTrack.getUserData(MusicSelection.class);
-            selection.getSlashCommandInteractionEvent()
-                    .replyEmbeds(MusicTrackHandler.getPlayMessage(endedTrack, musicBot).build())
-                    .mentionRepliedUser(false)
-                    .queue();
+            SlashCommandInteractionEvent event = selection.getSlashCommandInteractionEvent();
+            if (event.isAcknowledged()) {
+                event.getMessageChannel()
+                        .sendMessageEmbeds(MusicTrackHandler.getPlayMessage(endedTrack, musicBot).build())
+                        .queue();
+            }
+            else {
+                event.replyEmbeds(MusicTrackHandler.getPlayMessage(endedTrack, musicBot).build())
+                        .mentionRepliedUser(false)
+                        .queue();
+            }
             player.playTrack(endedTrack);
             return;
         }

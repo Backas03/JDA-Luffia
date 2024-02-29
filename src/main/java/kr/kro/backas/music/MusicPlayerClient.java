@@ -1,14 +1,19 @@
 package kr.kro.backas.music;
 
+import com.github.natanbc.lavadsp.timescale.TimescalePcmAudioFilter;
+import com.sedmelluq.discord.lavaplayer.filter.equalizer.Equalizer;
 import com.sedmelluq.discord.lavaplayer.format.StandardAudioDataFormats;
 import com.sedmelluq.discord.lavaplayer.player.AudioConfiguration;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager;
+import com.sedmelluq.discord.lavaplayer.player.event.AudioEventAdapter;
 import com.sedmelluq.discord.lavaplayer.source.youtube.YoutubeAudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import kr.kro.backas.Main;
 import kr.kro.backas.SharedConstant;
+import kr.kro.backas.music.filter.ConfiguredEqualizer;
+import kr.kro.backas.music.filter.EchoFilter;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Activity;
@@ -28,6 +33,11 @@ public class MusicPlayerClient {
     private final JDA musicBot;
     private final MusicTrack musicTrack;
     private final AudioPlayer audioPlayer;
+    private double currentPlaySpeed = 1.0;
+    private boolean karaokeMode = false;
+    /* lavaplayer position is wrong if you change the speed */
+    private double realPositionMs;
+    private ConfiguredEqualizer currentEqualizer = ConfiguredEqualizer.NORMAL;
 
     public MusicPlayerClient(JDA musicBot) {
         this.musicBot = musicBot;
@@ -45,17 +55,75 @@ public class MusicPlayerClient {
         youtubeAudioSourceManager.setPlaylistPageCount(50);
 
         this.audioPlayer = this.audioPlayerManager.createPlayer();
+        this.audioPlayer.addListener(new AudioEventAdapter() {
+            @Override
+            public void onTrackStart(AudioPlayer player, AudioTrack track) {
+                realPositionMs = track.getPosition();
+            }
+        });
+
         this.musicTrack = new MusicTrack(this, this.audioPlayer, this.musicBot);
         MusicTrackHandler trackHandler = new MusicTrackHandler(this.musicTrack);
         this.audioPlayer.addListener(trackHandler);
 
         musicBot.getGuildById(SharedConstant.PUBLISHED_GUILD_ID)
                 .getAudioManager()
-                .setSendingHandler(new AudioForwarder(this.audioPlayer));
+                .setSendingHandler(new AudioForwarder(this));
+        updateFilter();
+    }
+
+    public AudioPlayer getAudioPlayer() {
+        return audioPlayer;
     }
 
     public JDA getMusicBot() {
         return musicBot;
+    }
+
+
+    // 재생중에는 한번만 변경 가능 그 노래가 끝나고 설정됨
+    public void setPlaySpeed(double speed) {
+        this.currentPlaySpeed = speed;
+        updateFilter();
+    }
+
+    public void setKaraokeMode(boolean status) {
+        this.karaokeMode = status;
+        updateFilter();
+    }
+
+    public void setEqualizer(ConfiguredEqualizer equalizer) {
+        this.currentEqualizer = equalizer;
+        updateFilter();
+    }
+
+    public ConfiguredEqualizer getCurrentEqualizer() {
+        return currentEqualizer;
+    }
+
+    private void updateFilter() {
+        this.audioPlayer.setFilterFactory((track, format, output) -> {
+            TimescalePcmAudioFilter speedFilter = new TimescalePcmAudioFilter(output, format.channelCount, format.sampleRate)
+                    .setSpeed(currentPlaySpeed);
+
+            EchoFilter echoFilter = new EchoFilter(speedFilter, format.sampleRate, format.channelCount);
+            if (karaokeMode) {
+                echoFilter.setEchoLength(0.47f);
+                echoFilter.setEchoDecay(0.22f);
+            }
+            Equalizer equalizer = new Equalizer(format.channelCount, echoFilter);
+            currentEqualizer.applyTo(equalizer);
+
+            return List.of(equalizer, echoFilter, speedFilter);
+        });
+    }
+
+    public boolean isKaraokeMode() {
+        return karaokeMode;
+    }
+
+    public double getCurrentPlaySpeed() {
+        return currentPlaySpeed;
     }
 
     public VoiceChannel getJoinedVoiceChannel() {
@@ -68,6 +136,10 @@ public class MusicPlayerClient {
 
     public boolean isPaused() {
         return audioPlayer.isPaused();
+    }
+
+    public double getRealPositionMs() {
+        return realPositionMs;
     }
 
     public boolean hasJoinedToVoiceChannel() {
@@ -108,6 +180,10 @@ public class MusicPlayerClient {
 
     public AudioTrack getCurrentPlaying() {
         return audioPlayer.getPlayingTrack();
+    }
+
+    public void updatePosition() {
+        realPositionMs = realPositionMs + 20 * currentPlaySpeed;
     }
 
     public String getRepeatModeName() {
