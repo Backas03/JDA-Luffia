@@ -1,8 +1,6 @@
 package kr.kro.backas.command.api;
 
 import kr.kro.backas.Luffia;
-import net.dv8tion.jda.api.JDA;
-import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
