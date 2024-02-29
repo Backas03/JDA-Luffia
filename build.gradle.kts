@@ -22,6 +22,7 @@ dependencies {
     // unused implementation("com.github.in-seo:univcert:master-SNAPSHOT")
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.15.2")
     implementation("org.slf4j:slf4j-api:2.0.5")
+    implementation("com.github.JustRed23:lavadsp:0.7.7-1")
     implementation("ch.qos.logback:logback-classic:1.4.12")
     implementation("com.sun.mail:javax.mail:1.6.2")
     implementation("com.github.walkyst:lavaplayer-fork:1.4.3")
