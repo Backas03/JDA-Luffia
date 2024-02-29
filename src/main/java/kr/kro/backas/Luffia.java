@@ -33,8 +33,11 @@ public class Luffia {
         this.commandManager.registerSlashCommand(new QueueSlashCommand());
         this.commandManager.registerSlashCommand(new QuitSlashCommand());
         this.commandManager.registerSlashCommand(new SetRepeatModeSlashCommand());
+        this.commandManager.registerSlashCommand(new PlaySpeedSlashCommand());
         this.commandManager.registerSlashCommand(new PauseOrResumeSlashCommand());
         this.commandManager.registerSlashCommand(new SkipSlashCommand());
+        this.commandManager.registerSlashCommand(new EqualizerSlashCommand());
+        this.commandManager.registerSlashCommand(new KaraokeModeSlashCommand());
         this.commandManager.registerSlashCommand(new LOLUserInfoSlashCommand());
         this.commandManager.registerSlashCommand(new HelpSlashCommand());
 
@@ -58,7 +61,6 @@ public class Luffia {
         this.musicPlayerController = new MusicPlayerController();
         this.musicPlayerController.register(discordAPI);
         discordAPI.addEventListener(this.musicPlayerController);
-
 
         this.discordAPI.addEventListener(new MusicListener());
         this.discordAPI.addEventListener(new CertificationListener());
