@@ -1,22 +1,26 @@
 package kr.kro.backas.music;
 
-import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
 import com.sedmelluq.discord.lavaplayer.track.playback.AudioFrame;
 import net.dv8tion.jda.api.audio.AudioSendHandler;
+
 import java.nio.ByteBuffer;
 
 public class AudioForwarder implements AudioSendHandler {
-    private final AudioPlayer audioPlayer;
+    private final MusicPlayerClient client;
     private AudioFrame lastFrame;
 
-    public AudioForwarder(AudioPlayer audioPlayer) {
-        this.audioPlayer = audioPlayer;
+    public AudioForwarder(MusicPlayerClient client) {
+        this.client = client;
     }
 
     @Override
     public boolean canProvide() {
-        lastFrame = audioPlayer.provide();
-        return lastFrame != null;
+        lastFrame = client.getAudioPlayer().provide();
+        if (lastFrame != null) { // can provide
+            client.updatePosition();
+            return true;
+        }
+        return false;
     }
 
     @Override
