@@ -95,7 +95,6 @@ public class SetRepeatModeSlashCommand implements SlashCommandSource {
                             .filter(word -> word.isEmpty() || word.startsWith(event.getFocusedOption().getValue()))
                             .map(word -> new Command.Choice(word, word))
                             .toList();
-            System.out.println(optionsList);
             event.replyChoices(optionsList).queue();
         }
     }
