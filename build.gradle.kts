@@ -12,6 +12,7 @@ repositories {
     maven("https://jitpack.io")
     maven("https://m2.dv8tion.net/releases")
     maven("https://oss.sonatype.org/content/repositories/snapshots")
+    maven("https://s01.oss.sonatype.org/content/repositories/snapshots") // lavaplayer
 }
 
 dependencies {
@@ -25,7 +26,8 @@ dependencies {
     implementation("com.github.JustRed23:lavadsp:0.7.7-1")
     implementation("ch.qos.logback:logback-classic:1.4.12")
     implementation("com.sun.mail:javax.mail:1.6.2")
-    implementation("com.github.walkyst:lavaplayer-fork:1.4.3")
+    // 재생시 400에러 뜨는 이슈 : implementation("com.github.walkyst:lavaplayer-fork:1.4.3")
+    implementation("dev.arbjerg:lavaplayer:727959e9f621fc457b3a5adafcfffb55fdeaa538-SNAPSHOT")
     implementation("com.google.api-client:google-api-client:2.2.0")
     implementation("com.merakianalytics.orianna:orianna:4.0.0-SNAPSHOT")
     implementation("org.jsoup:jsoup:1.15.3")
