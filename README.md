@@ -125,8 +125,6 @@ public final class SharedConstant {
 !인증정보 [userId] - 해당 유저의 인증 데이터를 확인합니다.
 !강제인증 [userId] [이메일] - 해당 유저를 관리자의 권한으로 강제 인증시킵니다.
 ```
-![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/3893ce5e-ec5d-41b6-b208-baae0970d518)
-![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/938c3751-957c-4a38-aaae-43f726eb01a6)
 ### 2. 뮤직 플레이어 기능
  - LavaPlayer 라이브러리를 사용하여 유튜브에서 노래를 검색 후 디스코드에서 음악을 재생할 수 있습니다 </br>
  - 추가적으로 봇을 추가하여 하나의 디코방에서 여려 음성채팅방에서 음악을 재생할 수 있습니다 </br>
