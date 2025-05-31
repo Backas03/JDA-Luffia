@@ -112,7 +112,6 @@ public final class SharedConstant {
 }
 ```
 ### 3. 봇을 실행하려면 ```./gradlew run``` 을 입력합니다 </br>
-![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/b0b3160c-d048-433a-b56d-f2349edc7306)
 ## 기능 소개
 ### 1. 이메일 본인인증 기능
  - 이메일로 인증 코드를 받아 본인 인증을 진행 할 수 있습니다
