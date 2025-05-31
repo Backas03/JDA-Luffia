@@ -146,8 +146,7 @@ public static final List<String> MUSIC_BOT_TOKENS = List.of(
 ### 3. 게임 전적 검색 기능 </br>
 - !롤정보 [닉네임] 으로 정보를 검색할 수 있습니다 </br>
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/6d5395d0-db25-4b94-bb34-c98561824c17) </br>
-- !메이플정보 [닉네임] 으로 정보를 검색할 수 있습니다 (unstable) </br>
-![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/6c12ac59-bbda-4cab-a40c-f8dbcb10181c)
+- !메이플정보 [닉네임] 으로 정보를 검색할 수 있습니다 (unstable ~~지원 중단~~) </br>
 
 ## 명령어 비활성화 방법
 Luffia.java에서 this.commandManager.registerCommand를 주석처리하면 됩니다
