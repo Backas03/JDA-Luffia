@@ -28,7 +28,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.function.BiConsumer;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 
 public final class LyricsPresenter {
@@ -36,7 +37,6 @@ public final class LyricsPresenter {
     private static final Logger LOGGER = LoggerFactory.getLogger(LyricsPresenter.class);
     private static final int EMBED_TEXT_LIMIT = 4000;
     private static final int MESSAGE_TEXT_BUDGET = 5800;
-    private static final int TRANSLATION_BATCH = 400;
     private static final String TRUNCATED_NOTE = "… (이하 생략)";
     public static final String MACHINE_TRANSLATION_NOTE = "기계 번역한 가사입니다. 올바르지 않을 수 있습니다.";
 
@@ -140,9 +140,28 @@ public final class LyricsPresenter {
                 ProgressiveEditor editor = new ProgressiveEditor(message.getChannel().getIdLong(), () ->
                         message.editMessageEmbeds(buildFullEmbeds(track, lines, cache, initialFooter))
                                 .queue(null, e -> LOGGER.debug("progressive lyrics edit failed", e)));
-                Map<Integer, String> translations = translateAll(translator, track.getIdentifier() + ":plain", lines,
+                TranslationJobs.Job job = TranslationJobs.submit(translator, track.getIdentifier() + ":plain", lines, true,
                         (index, text) -> editor.requestEdit());
+                boolean demoted = false;
+                while (!job.done().isDone()) {
+                    if (!demoted && !client.isCurrentTrack(track)) {
+                        demoted = true;
+                        if (requester == null) job.cancel();
+                        else job.demote();
+                    }
+                    try {
+                        job.done().get(500, TimeUnit.MILLISECONDS);
+                    } catch (TimeoutException ignored) {
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    } catch (ExecutionException ignored) {
+                        break;
+                    }
+                }
+                Map<Integer, String> translations = cache;
                 editor.cancel();
+                if (job.isCancelled()) return;
                 String doneFooter = translations.isEmpty()
                         ? finalFooter + "\n번역에 실패했습니다"
                         : finalFooter + "\n" + machineTranslationNote(translator);
@@ -224,13 +243,13 @@ public final class LyricsPresenter {
                 List<String> lines = new ArrayList<>();
                 lyrics.synced().forEach(line -> lines.add(line.text()));
                 if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lyrics.synced()))) return;
-                translateAll(translator, key, lines);
+                TranslationJobs.submit(translator, key, lines, false, null).done().join();
             } else if (lyrics.hasPlain()) {
                 List<String> lines = fullLines(lyrics);
                 List<LyricLine> asLines = new ArrayList<>();
                 for (String line : lines) asLines.add(new LyricLine(0, line));
                 if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(asLines))) return;
-                translateAll(translator, key + ":plain", lines);
+                TranslationJobs.submit(translator, key + ":plain", lines, false, null).done().join();
             }
             LOGGER.info("prefetched lyrics translation for {}", next.getInfo().title);
         } catch (Exception e) {
@@ -238,40 +257,6 @@ public final class LyricsPresenter {
         } finally {
             PREFETCHING.remove(key);
         }
-    }
-
-    private static Map<Integer, String> translateAll(TranslationClient translator, String cacheKey, List<String> lines) {
-        return translateAll(translator, cacheKey, lines, null);
-    }
-
-    private static Map<Integer, String> translateAll(TranslationClient translator, String cacheKey, List<String> lines,
-                                                     @Nullable BiConsumer<Integer, String> onLine) {
-        Map<Integer, String> cache = translator.cacheFor(cacheKey);
-        List<Integer> pending = new ArrayList<>();
-        for (int i = 0; i < lines.size(); i++) {
-            if (!cache.containsKey(i) && LyricsLanguage.needsTranslation(lines.get(i))) pending.add(i);
-        }
-        for (int from = 0; from < pending.size(); from += TRANSLATION_BATCH) {
-            List<Integer> indices = pending.subList(from, Math.min(pending.size(), from + TRANSLATION_BATCH));
-            List<String> sources = new ArrayList<>(indices.size());
-            for (int index : indices) sources.add(lines.get(index));
-            try {
-                List<String> translated = translator.translate("auto", sources, onLine == null ? null : (offset, text) -> {
-                    if (offset >= 0 && offset < indices.size() && text != null && !text.isBlank() && !text.equals(sources.get(offset))) {
-                        cache.put(indices.get(offset), text);
-                        onLine.accept(indices.get(offset), text);
-                    }
-                });
-                for (int i = 0; i < indices.size(); i++) {
-                    String text = translated.get(i);
-                    if (text != null && !text.isBlank() && !text.equals(sources.get(i))) cache.put(indices.get(i), text);
-                }
-            } catch (Exception e) {
-                LOGGER.warn("full lyrics translation failed ({} lines)", indices.size(), e);
-                break;
-            }
-        }
-        return cache;
     }
 
     private static List<String> fullLines(Lyrics lyrics) {

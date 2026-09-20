@@ -15,7 +15,6 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -40,6 +39,7 @@ public class LyricsSession {
     private final Map<Integer, String> translations;
     private volatile long offsetMs;
     private volatile boolean translating;
+    private volatile TranslationJobs.Job job;
     private ScheduledFuture<?> ticker;
     private int shownIndex = -2;
     private String shownTranslation;
@@ -90,6 +90,8 @@ public class LyricsSession {
     public void stop(String reason) {
         if (!stopped.compareAndSet(false, true)) return;
         if (ticker != null) ticker.cancel(false);
+        TranslationJobs.Job current = job;
+        if (current != null) current.cancel();
         try {
             message.editMessageComponents(buildView(track, lyrics, shownIndex, translationFor(shownIndex), reason, translator, false))
                     .useComponentsV2(true)
@@ -103,41 +105,21 @@ public class LyricsSession {
         if (translator == null) return false;
         List<LyricLine> lines = lyrics.synced();
         if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lines))) return false;
-        List<Integer> pending = new ArrayList<>();
+        boolean pending = false;
+        List<String> sources = new ArrayList<>(lines.size());
         for (int i = 0; i < lines.size(); i++) {
-            if (!translations.containsKey(i) && LyricsLanguage.needsTranslation(lines.get(i).text())) pending.add(i);
+            String text = lines.get(i).text();
+            sources.add(text);
+            if (!translations.containsKey(i) && LyricsLanguage.needsTranslation(text)) pending = true;
         }
-        if (pending.isEmpty()) return false;
+        if (!pending) return false;
         translating = true;
-        CompletableFuture.runAsync(() -> {
-            try {
-                translateChunk(lines, pending);
-            } finally {
-                translating = false;
-                LyricsPresenter.prefetchNext(client);
-            }
+        job = TranslationJobs.submit(translator, track.getIdentifier(), sources, true, null);
+        job.done().whenComplete((result, error) -> {
+            translating = false;
+            LyricsPresenter.prefetchNext(client);
         });
         return true;
-    }
-
-    private void translateChunk(List<LyricLine> lines, List<Integer> indices) {
-        List<String> sources = new ArrayList<>(indices.size());
-        for (int index : indices) sources.add(lines.get(index).text());
-        try {
-            List<String> translated = translator.translate("auto", sources, (offset, text) -> {
-                if (offset >= 0 && offset < indices.size() && text != null && !text.isBlank() && !text.equals(sources.get(offset))) {
-                    translations.put(indices.get(offset), text);
-                }
-            });
-            for (int i = 0; i < indices.size(); i++) {
-                String text = translated.get(i);
-                if (text != null && !text.isBlank() && !text.equals(sources.get(i))) {
-                    translations.put(indices.get(i), text);
-                }
-            }
-        } catch (Exception e) {
-            LOGGER.warn("lyrics translation failed for {} ({} lines)", track.getInfo().title, indices.size(), e);
-        }
     }
 
     @Nullable
