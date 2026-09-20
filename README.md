@@ -175,13 +175,19 @@ public static final List<String> MUSIC_BOT_TOKENS = List.of(
 로그인한 계정이 만들었거나 라이브러리에 저장한 플레이리스트만 읽을 수 있습니다. 다른 사람의 플레이리스트를 재생하려면 해당 계정에서 먼저 저장해 두어야 합니다.
 
 #### 가사 번역 설정
-`/가사` 실시간 표시에서 현재 줄 아래에 한국어 번역을 붙이려면 번역 사이드카(Python, CPU 전용, GPU 불필요)를 같은 서버에 띄웁니다. Meta NLLB-200 3.3B 모델을 CTranslate2 int8 로 실행하며 RAM 약 5GB 를 사용합니다. (더 가볍게 쓰려면 setup.sh 와 server.py 의 모델 이름을 ``facebook/nllb-200-distilled-1.3B`` 또는 ``600M`` 으로 바꾸면 됩니다)
-1. 서버에 Python 3.10 이상을 준비합니다.
-2. ``translator/setup.sh`` 를 실행합니다. 의존성 설치와 모델 변환(약 7GB 다운로드, 10분 내외)을 한 번만 합니다.
-3. ``translator/run.sh`` 로 사이드카를 실행합니다. (기본 127.0.0.1:8765, ``TRANSLATOR_PORT`` 로 변경)
-4. ``BotSecret.TRANSLATOR_URL`` 에 ``http://127.0.0.1:8765`` 를 넣고 봇을 다시 시작합니다.
+`/가사` 표시에 한국어 번역을 붙이려면 번역 서버를 같은 머신에 띄웁니다. GPU 는 필요 없습니다. 두 가지 중 하나를 고릅니다.
 
-번역은 곡마다 앞 5줄을 먼저, 이후 10줄씩 이어서 처리하며 결과는 메모리에 캐시됩니다. 한국어 가사는 번역하지 않습니다.
+**A. LLM (권장, 품질 좋음)**: llama.cpp + Qwen2.5-7B-Instruct 4비트. RAM 약 6GB, 6코어 CPU 기준 5줄에 10초 안팎.
+1. ``translator/llm/setup.sh`` 실행 (llama.cpp 바이너리 17MB + 모델 4.7GB 다운로드, 한 번만)
+2. ``translator/llm/run.sh`` 로 실행 (기본 127.0.0.1:8765, ``TRANSLATOR_PORT`` 로 변경, ``LLM_THREADS`` 로 스레드 수 조정)
+3. ``BotSecret.TRANSLATOR_URL`` 에 ``http://127.0.0.1:8765`` 를 넣고 봇 재시작
+
+**B. NLLB (가볍지만 가사 품질 낮음)**: Meta NLLB-200 을 CTranslate2 로 실행. Python 3.10 이상 필요.
+1. ``translator/setup.sh`` 실행 (모델 다운로드와 int8 변환, 한 번만)
+2. ``translator/run.sh`` 로 실행
+3. ``BotSecret.TRANSLATOR_URL`` 에 같은 주소를 넣고 봇 재시작
+
+봇은 주소에 접속해 두 서버를 자동으로 구분합니다. 번역은 곡마다 앞 5줄을 먼저, 이후 10줄씩 이어서 처리하며 결과는 메모리에 캐시됩니다. 한국어 가사는 번역하지 않습니다.
 타임스탬프가 없어 전체 가사로 표시되는 곡은 원문을 먼저 띄운 뒤 번역이 끝나면 같은 메시지를 수정해 각 줄 아래에 번역을 끼워 넣습니다. (임베드 글자 제한을 넘는 뒷부분은 생략 표시)
 
 ### 3. 게임 전적 검색 기능 </br>
