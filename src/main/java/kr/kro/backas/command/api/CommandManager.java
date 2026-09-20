@@ -1,10 +1,12 @@
 package kr.kro.backas.command.api;
 
 import kr.kro.backas.Luffia;
+import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class CommandManager {
@@ -27,13 +29,20 @@ public class CommandManager {
     }
 
     public void registerSlashCommand(SlashCommandSource source) {
+        REGISTERED_SLASH_COMMAND.put(source.buildCommand().getName(), source);
+    }
+
+    public void commitSlashCommands() {
+        List<SlashCommandData> commands = REGISTERED_SLASH_COMMAND.values().stream()
+                .map(SlashCommandSource::buildCommand)
+                .toList();
         luffia.getDiscordAPI()
-                .upsertCommand(source.buildCommand())
-                .queue(command -> {
-                    // on success
-                    REGISTERED_SLASH_COMMAND.put(source.buildCommand().getName(), source);
-                    LOGGER.debug("Slash Command registered: /" + command.getName());
-                });
+                .updateCommands()
+                .addCommands(commands)
+                .queue(
+                        registered -> LOGGER.info("Slash commands synced: {}", registered.stream().map(c -> "/" + c.getName()).toList()),
+                        error -> LOGGER.error("Slash command sync failed", error)
+                );
     }
 
     public Map<String, SlashCommandSource> getSlashCommandSources() {
