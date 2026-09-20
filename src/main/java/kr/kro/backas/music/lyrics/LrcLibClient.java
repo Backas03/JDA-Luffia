@@ -26,6 +26,8 @@ public class LrcLibClient {
     private static final String API_BASE = "https://lrclib.net/api/";
     private static final String USER_AGENT = "JDA-Luffia/1.0 (https://github.com/Backas03/JDA-Luffia)";
     private static final long DURATION_TOLERANCE_SEC = 5;
+    private static final int RETRY_ATTEMPTS = 4;
+    private static final long RETRY_BASE_DELAY_MS = 1000;
     private static final Pattern LRC_LINE = Pattern.compile("\\[(\\d{1,2}):(\\d{2})(?:[.:](\\d{1,3}))?](.*)");
     private static final Pattern TITLE_NOISE = Pattern.compile(
             "(?i)\\s*[\\[(【].*?(official|mv|m/v|music video|lyric|audio|visualizer|ver\\.?|version|remaster).*?[\\])】]\\s*|\\s*[|_]\\s*(mv|m/v|official.*)$");
@@ -62,8 +64,8 @@ public class LrcLibClient {
                 .GET()
                 .build();
         HttpResponse<String> response = send(request);
-        if (response.statusCode() == 503 || response.statusCode() == 429) {
-            sleepQuietly(1200);
+        for (int attempt = 1; attempt <= RETRY_ATTEMPTS && (response.statusCode() == 503 || response.statusCode() == 429); attempt++) {
+            sleepQuietly(RETRY_BASE_DELAY_MS * attempt);
             response = send(request);
         }
         if (response.statusCode() == 404) return null;

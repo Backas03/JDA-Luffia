@@ -7,6 +7,7 @@ import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
 import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.components.container.Container;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageEmbed;
@@ -35,19 +36,19 @@ public final class LyricsPresenter {
                                       long offsetMs, boolean liveWanted, @Nullable Member requester) {
         present(client, track, offsetMs, liveWanted, requester,
                 embeds -> hook.editOriginalEmbeds(embeds).queue(),
-                embed -> hook.editOriginalEmbeds(embed).submit());
+                view -> hook.editOriginalComponents(view).useComponentsV2(true).submit());
     }
 
     public static void presentInChannel(MusicPlayerClient client, AudioTrack track, MessageChannel channel, long offsetMs) {
         present(client, track, offsetMs, true, null,
                 embeds -> channel.sendMessageEmbeds(embeds).queue(),
-                embed -> channel.sendMessageEmbeds(embed).submit());
+                view -> channel.sendMessageComponents(view).useComponentsV2(true).submit());
     }
 
     private static void present(MusicPlayerClient client, AudioTrack track, long offsetMs, boolean liveWanted,
                                 @Nullable Member requester,
                                 Consumer<List<MessageEmbed>> sendMany,
-                                Function<MessageEmbed, CompletableFuture<Message>> sendOne) {
+                                Function<Container, CompletableFuture<Message>> sendOne) {
         MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
         CompletableFuture
                 .supplyAsync(() -> {
@@ -76,7 +77,7 @@ public final class LyricsPresenter {
                     if (!client.isCurrentTrack(track)) return;
                     if (liveWanted && lyrics.hasSynced()) {
                         client.stopLyrics("새 가사 표시로 대체되었습니다");
-                        MessageEmbed initial = LyricsSession.buildEmbed(track, lyrics, -1, "가사 동기화 준비 중");
+                        Container initial = LyricsSession.buildView(track, lyrics, -1, "가사 동기화 준비 중");
                         sendOne.apply(initial).whenComplete((message, sendError) -> {
                             if (sendError != null || message == null) {
                                 LOGGER.warn("failed to send lyrics message", sendError);
