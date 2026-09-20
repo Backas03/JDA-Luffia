@@ -14,7 +14,9 @@ import kr.kro.backas.SharedConstant;
 import kr.kro.backas.music.filter.ConfiguredEqualizer;
 import kr.kro.backas.music.filter.KaraokeMode;
 import kr.kro.backas.music.filter.VocalEchoFilter;
+import kr.kro.backas.music.lyrics.LyricsPresenter;
 import kr.kro.backas.music.lyrics.LyricsSession;
+import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import org.jetbrains.annotations.Nullable;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
@@ -45,6 +47,8 @@ public class MusicPlayerClient {
     private volatile double realPositionMs;
     private volatile ConfiguredEqualizer currentEqualizer = ConfiguredEqualizer.NORMAL;
     private volatile LyricsSession lyricsSession;
+    private volatile MessageChannel lyricsChannel;
+    private volatile long lyricsOffsetMs = LyricsSession.DEFAULT_OFFSET_MS;
 
     public MusicPlayerClient(JDA musicBot, AudioPlayerManager sharedAudioPlayerManager) {
         this.musicBot = musicBot;
@@ -56,6 +60,7 @@ public class MusicPlayerClient {
             @Override
             public void onTrackStart(AudioPlayer player, AudioTrack track) {
                 realPositionMs = track.getPosition();
+                onTrackStarted(track);
             }
         });
 
@@ -155,6 +160,43 @@ public class MusicPlayerClient {
         lyricsSession = null;
         session.stop(reason);
         return true;
+    }
+
+    public void enableAutoLyrics(MessageChannel channel, long offsetMs) {
+        this.lyricsChannel = channel;
+        this.lyricsOffsetMs = offsetMs;
+    }
+
+    public boolean disableAutoLyrics(String reason) {
+        boolean wasEnabled = lyricsChannel != null;
+        lyricsChannel = null;
+        boolean stopped = stopLyrics(reason);
+        return wasEnabled || stopped;
+    }
+
+    public boolean isAutoLyricsEnabled() {
+        return lyricsChannel != null;
+    }
+
+    public long getLyricsOffsetMs() {
+        return lyricsOffsetMs;
+    }
+
+    public void setLyricsOffsetMs(long offsetMs) {
+        this.lyricsOffsetMs = offsetMs;
+    }
+
+    public boolean isCurrentTrack(AudioTrack track) {
+        AudioTrack playing = audioPlayer.getPlayingTrack();
+        return playing != null && track != null && playing.getIdentifier().equals(track.getIdentifier());
+    }
+
+    private void onTrackStarted(AudioTrack track) {
+        MessageChannel channel = lyricsChannel;
+        if (channel == null) return;
+        LyricsSession current = lyricsSession;
+        if (current != null && current.isForTrack(track)) return;
+        LyricsPresenter.presentInChannel(this, track, channel, lyricsOffsetMs);
     }
 
     public int getVolume() {

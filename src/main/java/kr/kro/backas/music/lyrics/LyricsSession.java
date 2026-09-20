@@ -72,7 +72,7 @@ public class LyricsSession {
         if (!stopped.compareAndSet(false, true)) return;
         if (ticker != null) ticker.cancel(false);
         try {
-            message.editMessageEmbeds(buildEmbed(shownIndex, reason)).queue(null, e -> {});
+            message.editMessageEmbeds(buildEmbed(track, lyrics, shownIndex, reason)).queue(null, e -> {});
         } catch (RuntimeException e) {
             LOGGER.debug("failed to finalize lyrics message", e);
         }
@@ -82,7 +82,7 @@ public class LyricsSession {
         try {
             if (stopped.get()) return;
             if (!isForTrack(client.getCurrentPlaying())) {
-                stop("재생이 끝나 가사 표시를 종료했습니다");
+                stop("재생이 끝났습니다");
                 return;
             }
             if (client.isPaused()) return;
@@ -94,7 +94,7 @@ public class LyricsSession {
             if (!editInFlight.compareAndSet(false, true)) return;
             shownIndex = index;
             lastEditAt = now;
-            message.editMessageEmbeds(buildEmbed(index, null)).queue(
+            message.editMessageEmbeds(buildEmbed(track, lyrics, index, null)).queue(
                     m -> editInFlight.set(false),
                     e -> {
                         editInFlight.set(false);
@@ -116,22 +116,21 @@ public class LyricsSession {
         return index;
     }
 
-    private MessageEmbed buildEmbed(int index, String footerOverride) {
+    public static MessageEmbed buildEmbed(AudioTrack track, Lyrics lyrics, int index, String footer) {
         List<LyricLine> lines = lyrics.synced();
         String previous = lineText(lines, index - 1);
-        String current = index < 0 ? "♪" : lineText(lines, index);
+        String current = lineText(lines, index);
         String next = lineText(lines, index + 1);
+        StringBuilder body = new StringBuilder();
+        body.append(previous.isBlank() ? "​" : "*" + previous + "*").append("\n\n");
+        body.append("**").append(current.isBlank() ? "♪" : current).append("**").append("\n\n");
+        body.append(next.isBlank() ? "​" : "*" + next + "*");
         EmbedBuilder builder = new EmbedBuilder()
                 .setColor(MusicEmbeds.PRIMARY)
-                .setTitle(track.getInfo().title, track.getInfo().uri)
+                .setAuthor(track.getInfo().author + " - " + track.getInfo().title, track.getInfo().uri)
                 .setThumbnail(MusicEmbeds.thumbnailOf(track))
-                .setDescription("**" + (current.isBlank() ? "♪" : current) + "**");
-        if (!previous.isBlank()) builder.setAuthor(previous);
-        if (footerOverride != null) {
-            builder.setFooter(footerOverride);
-        } else if (!next.isBlank()) {
-            builder.setFooter(next);
-        }
+                .setDescription(body);
+        if (footer != null) builder.setFooter(footer);
         return builder.build();
     }
 

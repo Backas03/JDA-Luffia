@@ -35,7 +35,7 @@ public class MusicTrack {
     }
 
     public void reset() {
-        client.stopLyrics("재생을 중지해 가사 표시를 종료했습니다");
+        client.disableAutoLyrics("재생을 중지했습니다");
         this.player.stopTrack();
         this.trackQueue.clear();
         this.repeatMode = RepeatMode.NO_REPEAT;
@@ -55,7 +55,7 @@ public class MusicTrack {
     }
 
     public synchronized void playNextTrack(@Nullable AudioTrack endedTrack, boolean requeueEnded) {
-        client.stopLyrics("곡이 바뀌어 가사 표시를 종료했습니다");
+        client.stopLyrics("곡이 바뀌었습니다");
         player.stopTrack();
         if (requeueEnded && endedTrack != null) {
             if (repeatMode == RepeatMode.REPEAT_CURRENT) {
