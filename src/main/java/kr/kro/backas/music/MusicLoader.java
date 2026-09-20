@@ -78,7 +78,7 @@ public class MusicLoader implements AudioLoadResultHandler {
             return;
         }
         EmbedBuilder result = musicPlayerClient.enqueue(new MusicSelection(queryInfo, track), channel);
-        hook.editOriginalEmbeds(result.build()).queue();
+        hook.editOriginal(MusicEmbeds.previewLinkOf(track)).setEmbeds(result.build()).queue();
     }
 
     @Override
@@ -124,7 +124,7 @@ public class MusicLoader implements AudioLoadResultHandler {
         AudioTrack selected = playlist.getSelectedTrack();
         if (selected != null) {
             EmbedBuilder result = musicPlayerClient.enqueue(new MusicSelection(queryInfo, selected), channel);
-            hook.editOriginalEmbeds(result.build()).queue();
+            hook.editOriginal(MusicEmbeds.previewLinkOf(selected)).setEmbeds(result.build()).queue();
             return;
         }
         List<AudioTrack> tracks = playlist.getTracks();
@@ -147,7 +147,7 @@ public class MusicLoader implements AudioLoadResultHandler {
         }
         EmbedBuilder result = MusicEmbeds.playlistEnqueued(
                 playlist, added, total, startedPlaying, musicPlayerClient.getMusicBot(), requester());
-        hook.editOriginalEmbeds(result.build()).queue();
+        hook.editOriginal(MusicEmbeds.previewLinkOf(playlist, added.get(0))).setEmbeds(result.build()).queue();
     }
 
     @Override

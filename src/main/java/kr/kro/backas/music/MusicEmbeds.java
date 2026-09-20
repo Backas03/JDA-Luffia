@@ -103,13 +103,10 @@ public final class MusicEmbeds {
         if (artwork == null) artwork = thumbnailOf(first);
 
         StringBuilder description = new StringBuilder();
-        description.append(added.size()).append("곡을 대기열에 추가했습니다.");
+        description.append(added.size()).append(startedPlaying ? "곡을 대기열에 추가 & 재생합니다" : "곡을 대기열에 추가했습니다");
         if (total > added.size()) {
             description.append("\n(전체 ").append(total).append("곡 중 최대 ")
                     .append(added.size()).append("곡까지만 추가됩니다)");
-        }
-        if (startedPlaying) {
-            description.append("\n첫 곡부터 바로 재생합니다.");
         }
 
         EmbedBuilder builder = new EmbedBuilder()
@@ -140,6 +137,22 @@ public final class MusicEmbeds {
             builder.addField("사유", reason.length() > 1000 ? reason.substring(0, 1000) : reason, false);
         }
         return builder;
+    }
+
+    public static String previewLinkOf(AudioTrack track) {
+        AudioSourceManager source = track.getSourceManager();
+        if (source != null && "spotify".equals(source.getSourceName()) && track.getInfo().uri != null) {
+            return track.getInfo().uri;
+        }
+        return "";
+    }
+
+    public static String previewLinkOf(AudioPlaylist playlist, AudioTrack firstTrack) {
+        if (playlist instanceof ExtendedAudioPlaylist extended && extended.getUrl() != null
+                && !previewLinkOf(firstTrack).isEmpty()) {
+            return extended.getUrl();
+        }
+        return "";
     }
 
     public static EmbedBuilder error(@Nullable Member member, String title, @Nullable String description) {
