@@ -15,7 +15,7 @@ start_translator() {
   if is_running "$TRANSLATOR_SCREEN"; then
     echo "${TRANSLATOR_SCREEN} is already running."
   else
-    screen -dmS "$TRANSLATOR_SCREEN" bash -c "cd '$TRANSLATOR_DIR' && ./run.sh"
+    screen -dmS "$TRANSLATOR_SCREEN" bash -c "cd '$TRANSLATOR_DIR' && bash run.sh"
     echo "${TRANSLATOR_SCREEN} started."
   fi
 }
