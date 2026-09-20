@@ -25,6 +25,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class MusicPlayerClient {
+    public static final int DEFAULT_VOLUME = 50;
+
     private final AudioPlayerManager audioPlayerManager;
     private final JDA musicBot;
     private final MusicTrack musicTrack;
@@ -39,6 +41,7 @@ public class MusicPlayerClient {
         this.audioPlayerManager = sharedAudioPlayerManager;
 
         this.audioPlayer = this.audioPlayerManager.createPlayer();
+        this.audioPlayer.setVolume(DEFAULT_VOLUME);
         this.audioPlayer.addListener(new AudioEventAdapter() {
             @Override
             public void onTrackStart(AudioPlayer player, AudioTrack track) {
@@ -104,6 +107,14 @@ public class MusicPlayerClient {
 
             return List.of(equalizer, echoFilter, speedFilter);
         });
+    }
+
+    public int getVolume() {
+        return audioPlayer.getVolume();
+    }
+
+    public void setVolume(int volume) {
+        audioPlayer.setVolume(volume);
     }
 
     public boolean isKaraokeMode() {
@@ -209,6 +220,7 @@ public class MusicPlayerClient {
         musicBot.getPresence().setActivity(Activity.playing(SharedConstant.DEFAULT_ACTIVITY));
 
         musicTrack.reset();
+        audioPlayer.setVolume(DEFAULT_VOLUME);
     }
 
     public void shutdownGracefully() throws InterruptedException {
