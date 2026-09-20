@@ -177,7 +177,7 @@ public static final List<String> MUSIC_BOT_TOKENS = List.of(
 #### 가사 번역 설정
 `/가사` 표시에 한국어 번역을 붙이려면 번역 서버를 같은 머신에 띄웁니다. GPU 는 필요 없습니다. 두 가지 중 하나를 고릅니다.
 
-**A. LLM (권장, 품질 좋음)**: llama.cpp + Qwen2.5-7B-Instruct 4비트. RAM 약 6GB, 6코어 CPU 기준 5줄에 10초 안팎.
+**A. LLM (권장, 품질 좋음)**: llama.cpp + EXAONE-3.5-7.8B-Instruct(LG AI연구원) 4비트. RAM 약 6GB, 6코어 CPU 기준 5줄에 10초 안팎. 일본어·영어 가사를 자연스러운 한국어로 옮깁니다.
 1. ``translator/llm/setup.sh`` 실행 (llama.cpp 바이너리 17MB + 모델 4.7GB 다운로드, 한 번만)
 2. ``translator/llm/run.sh`` 로 실행 (기본 127.0.0.1:8765, ``TRANSLATOR_PORT`` 로 변경, ``LLM_THREADS`` 로 스레드 수 조정)
 3. ``BotSecret.TRANSLATOR_URL`` 에 ``http://127.0.0.1:8765`` 를 넣고 봇 재시작

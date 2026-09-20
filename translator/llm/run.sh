@@ -1,6 +1,6 @@
 #!/bin/bash
 cd "$(dirname "$0")"
-MODEL_FILE="${MODEL_FILE:-Qwen2.5-7B-Instruct-Q4_K_M.gguf}"
+MODEL_FILE="${MODEL_FILE:-EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf}"
 THREADS="${LLM_THREADS:-6}"
 PORT="${TRANSLATOR_PORT:-8765}"
 export LD_LIBRARY_PATH="$(pwd)/bin:${LD_LIBRARY_PATH}"
