@@ -3,9 +3,11 @@ package kr.kro.backas.music.lyrics;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
-import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.components.container.Container;
+import net.dv8tion.jda.api.components.section.Section;
+import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
+import net.dv8tion.jda.api.components.thumbnail.Thumbnail;
 import net.dv8tion.jda.api.entities.Message;
-import net.dv8tion.jda.api.entities.MessageEmbed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,6 +23,7 @@ public class LyricsSession {
     public static final long TICK_MS = 200;
     public static final long MIN_EDIT_INTERVAL_MS = 1200;
     public static final long DEFAULT_OFFSET_MS = 600;
+    private static final String BLANK = "​";
 
     private final MusicPlayerClient client;
     private final AudioTrack track;
@@ -72,7 +75,9 @@ public class LyricsSession {
         if (!stopped.compareAndSet(false, true)) return;
         if (ticker != null) ticker.cancel(false);
         try {
-            message.editMessageEmbeds(buildEmbed(track, lyrics, shownIndex, reason)).queue(null, e -> {});
+            message.editMessageComponents(buildView(track, lyrics, shownIndex, reason))
+                    .useComponentsV2(true)
+                    .queue(null, e -> {});
         } catch (RuntimeException e) {
             LOGGER.debug("failed to finalize lyrics message", e);
         }
@@ -94,12 +99,14 @@ public class LyricsSession {
             if (!editInFlight.compareAndSet(false, true)) return;
             shownIndex = index;
             lastEditAt = now;
-            message.editMessageEmbeds(buildEmbed(track, lyrics, index, null)).queue(
-                    m -> editInFlight.set(false),
-                    e -> {
-                        editInFlight.set(false);
-                        LOGGER.debug("lyrics edit failed", e);
-                    });
+            message.editMessageComponents(buildView(track, lyrics, index, null))
+                    .useComponentsV2(true)
+                    .queue(
+                            m -> editInFlight.set(false),
+                            e -> {
+                                editInFlight.set(false);
+                                LOGGER.debug("lyrics edit failed", e);
+                            });
         } catch (RuntimeException e) {
             LOGGER.warn("lyrics tick failed", e);
             stop("가사 표시 중 오류가 발생했습니다");
@@ -116,20 +123,22 @@ public class LyricsSession {
         return index;
     }
 
-    public static MessageEmbed buildEmbed(AudioTrack track, Lyrics lyrics, int index, String footer) {
+    public static Container buildView(AudioTrack track, Lyrics lyrics, int index, String footer) {
         List<LyricLine> lines = lyrics.synced();
         String previous = lineText(lines, index - 1);
         String current = lineText(lines, index);
         String next = lineText(lines, index + 1);
         String song = track.getInfo().author + " - " + track.getInfo().title;
-        EmbedBuilder builder = new EmbedBuilder()
-                .setColor(MusicEmbeds.PRIMARY)
-                .setAuthor(previous.isBlank() ? "​" : previous)
-                .setTitle(current.isBlank() ? "♪" : current)
-                .setDescription(next.isBlank() ? "​" : "*" + next + "*")
-                .setThumbnail(MusicEmbeds.thumbnailOf(track))
-                .setFooter(footer == null ? song : song + " · " + footer);
-        return builder.build();
+        String text = (previous.isBlank() ? BLANK : "*" + previous + "*") + "\n"
+                + "## " + (current.isBlank() ? "♪" : current) + "\n"
+                + (next.isBlank() ? BLANK : "*" + next + "*") + "\n"
+                + "-# " + (footer == null ? song : song + " · " + footer);
+        TextDisplay body = TextDisplay.of(text);
+        String artwork = MusicEmbeds.thumbnailOf(track);
+        Container container = artwork == null
+                ? Container.of(body)
+                : Container.of(Section.of(Thumbnail.fromUrl(artwork), body));
+        return container.withAccentColor(MusicEmbeds.PRIMARY);
     }
 
     private static String lineText(List<LyricLine> lines, int index) {
