@@ -147,6 +147,10 @@ public final class SharedConstant {
  - 스포티파이 곡/앨범/플레이리스트 링크는 곡 정보를 읽어 유튜브에서 같은 곡을 찾아 재생합니다 (미러링) </br>
  - 추가적으로 봇을 추가하여 하나의 디코방에서 여려 음성채팅방에서 음악을 재생할 수 있습니다 </br>
    (봇 상태메시지에 현재 재생중인 음성채팅방의 이름을 표기합니다) </br>
+
+
+https://github.com/user-attachments/assets/2fdf645c-b733-4fd6-8d7b-6f126b6d4650
+
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/8850d664-b12c-4569-b403-59e358bb796c)
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/95db993f-c22c-4c16-86cd-f8f3a28da4b5) </br>
 
