@@ -235,8 +235,13 @@ public class TranslationClient {
             for (int index : retry) {
                 if (cancellation != null && cancellation.isRequested()) throw new IOException("translation cancelled");
                 String source = lines.get(index);
-                List<String> retried = translateWithLlm(List.of(source), null, null);
-                String fixed = isAcceptable(source, retried.get(0)) ? retried.get(0) : source;
+                String fixed = source;
+                try {
+                    List<String> retried = translateWithLlm(List.of(source), null, null);
+                    if (isAcceptable(source, retried.get(0))) fixed = retried.get(0);
+                } catch (IOException e) {
+                    LOGGER.debug("single line retry failed for line {}", index + 1, e);
+                }
                 result.set(index, fixed);
                 if (onLine != null && !fixed.equals(source)) onLine.accept(index, fixed);
             }

@@ -136,11 +136,12 @@ public final class LyricsPresenter {
             }
             if (!willTranslate) return;
             CompletableFuture.runAsync(() -> {
-                Map<Integer, String> cache = translator.cacheFor(track.getIdentifier() + ":plain");
+                String cacheKey = TranslationJobs.cacheKey("plain", lines);
+                Map<Integer, String> cache = translator.cacheFor(cacheKey);
                 ProgressiveEditor editor = new ProgressiveEditor(message.getChannel().getIdLong(), () ->
                         message.editMessageEmbeds(buildFullEmbeds(track, lines, cache, initialFooter))
                                 .queue(null, e -> LOGGER.debug("progressive lyrics edit failed", e)));
-                TranslationJobs.Job job = TranslationJobs.submit(translator, track.getIdentifier() + ":plain", lines, true,
+                TranslationJobs.Job job = TranslationJobs.submit(translator, cacheKey, lines, true,
                         (index, text) -> editor.requestEdit());
                 boolean demoted = false;
                 while (!job.done().isDone()) {
@@ -243,13 +244,13 @@ public final class LyricsPresenter {
                 List<String> lines = new ArrayList<>();
                 lyrics.synced().forEach(line -> lines.add(line.text()));
                 if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lyrics.synced()))) return;
-                TranslationJobs.submit(translator, key, lines, false, null).done().join();
+                TranslationJobs.submit(translator, TranslationJobs.cacheKey("synced", lines), lines, false, null).done().join();
             } else if (lyrics.hasPlain()) {
                 List<String> lines = fullLines(lyrics);
                 List<LyricLine> asLines = new ArrayList<>();
                 for (String line : lines) asLines.add(new LyricLine(0, line));
                 if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(asLines))) return;
-                TranslationJobs.submit(translator, key + ":plain", lines, false, null).done().join();
+                TranslationJobs.submit(translator, TranslationJobs.cacheKey("plain", lines), lines, false, null).done().join();
             }
             LOGGER.info("prefetched lyrics translation for {}", next.getInfo().title);
         } catch (Exception e) {
