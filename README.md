@@ -152,9 +152,6 @@ public final class SharedConstant {
  - 추가적으로 봇을 추가하여 하나의 디코방에서 여려 음성채팅방에서 음악을 재생할 수 있습니다 </br>
    (봇 상태메시지에 현재 재생중인 음성채팅방의 이름을 표기합니다) </br>
 
-
-https://github.com/user-attachments/assets/2fdf645c-b733-4fd6-8d7b-6f126b6d4650
-
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/8850d664-b12c-4569-b403-59e358bb796c)
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/95db993f-c22c-4c16-86cd-f8f3a28da4b5) </br>
 
@@ -192,7 +189,19 @@ public static final List<String> MUSIC_BOT_TOKENS = List.of(
 3. ``BotSecret.TRANSLATOR_URL`` 에 같은 주소를 넣고 봇 재시작
 
 봇은 주소에 접속해 두 서버를 자동으로 구분합니다. 번역은 곡마다 앞 5줄을 먼저, 이후 10줄씩 이어서 처리하며 결과는 메모리에 캐시됩니다. 한국어 가사는 번역하지 않습니다.
-타임스탬프가 없어 전체 가사로 표시되는 곡은 원문을 먼저 띄운 뒤 번역이 끝나면 같은 메시지를 수정해 각 줄 아래에 번역을 끼워 넣습니다. (임베드 글자 제한을 넘는 뒷부분은 생략 표시)
+타임스탬프가 없어 전체 가사로 표시되는 곡은 원문을 먼저 띄운 뒤 번역이 끝나면 같은 메시지를 수정해 각 줄 아래에 번역을 끼워 넣습니다. (임베드 글자 제한을 넘는 뒷부분은 생략 표시)</br>
+</br>
+**본 데모 영상은 6코어 CPU로 LLM 모델을 돌리는 영상으로, GPU 사용 시 더 나은 퍼포먼스를 기대할 수 있습니다**
+</br>
+
+
+https://github.com/user-attachments/assets/7bd6bd92-021b-4578-8bd5-e2e310b9ec6b
+
+</br>
+
+
+https://github.com/user-attachments/assets/5cb94339-9e2c-490b-86a9-42d63d0af4d4
+
 
 ### 3. 게임 전적 검색 기능 </br>
 - !롤정보 [닉네임] 으로 정보를 검색할 수 있습니다 </br>
