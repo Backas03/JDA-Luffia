@@ -3,12 +3,19 @@ package kr.kro.backas.music.filter;
 import com.sedmelluq.discord.lavaplayer.filter.equalizer.Equalizer;
 
 public enum ConfiguredEqualizer {
-    /* -0.25 = muted, 0 = origin, 0.25 = amp x2 */
-    NORMAL("일반", new float[] { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f }),
-    BASS_BOOST("저음 강조", new float[] {0.f, 0.f, 0.05f, 0.125f, 0.25f}),
-    SUPER_BASS_BOOST("초저음 강조", new float[] {-0.07f, -0.02f, 0.05f, 0.2f, 0.3f}),
-    TREBLE_BOOST("고음 강조", new float[] {0.3125f, 0.25f, 0.1875f, 0.f, 0.f}),
-    SUPER_TREBLE_BOOST("초고음 강조", new float[] {0.5f, 0.375f, 0.1f, -0.1f, -0.125f});
+    NORMAL("일반", new float[Equalizer.BAND_COUNT]),
+    BASS_BOOST("저음 강조", new float[] {
+            0.20f, 0.25f, 0.25f, 0.20f, 0.15f, 0.10f, 0.05f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f
+    }),
+    SUPER_BASS_BOOST("초저음 강조", new float[] {
+            0.35f, 0.40f, 0.40f, 0.35f, 0.25f, 0.15f, 0.05f, 0f, 0f, 0f, -0.05f, -0.05f, -0.05f, -0.05f, -0.05f
+    }),
+    TREBLE_BOOST("고음 강조", new float[] {
+            0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0.05f, 0.15f, 0.20f, 0.25f, 0.25f, 0.20f
+    }),
+    SUPER_TREBLE_BOOST("초고음 강조", new float[] {
+            -0.05f, -0.05f, -0.05f, 0f, 0f, 0f, 0f, 0f, 0f, 0.10f, 0.25f, 0.35f, 0.40f, 0.40f, 0.35f
+    });
 
     private final String name;
     private final float[] bands;
@@ -26,6 +33,13 @@ public enum ConfiguredEqualizer {
         for (int i = 0; i < bands.length; i++) {
             equalizer.setGain(i, bands[i]);
         }
+    }
+
+    public boolean isFlat() {
+        for (float gain : bands) {
+            if (gain != 0f) return false;
+        }
+        return true;
     }
 
     public String getName() {

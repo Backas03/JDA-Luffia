@@ -41,6 +41,7 @@ public final class MusicSourceRegistry {
         configuration.setOpusEncodingQuality(AudioConfiguration.OPUS_QUALITY_MAX);
         configuration.setResamplingQuality(AudioConfiguration.ResamplingQuality.HIGH);
         configuration.setOutputFormat(StandardAudioDataFormats.DISCORD_OPUS);
+        configuration.setFilterHotSwapEnabled(true);
 
         YoutubeAudioSourceManager youtube = new YoutubeAudioSourceManager(
                 true,

@@ -53,7 +53,6 @@ public class KaraokeModeSlashCommand implements SlashCommandSource {
                 .setColor(Color.GREEN)
                 .setAuthor(MemberUtil.getName(event.getMember()))
                 .setTitle("노래방 모드가 변경됩니다")
-                .setDescription("노래방 모드로 변경되지 않을 경우 다음 곡부터 적용됩니다")
                 .addField("노래방 모드",
                         client.isKaraokeMode() ? "비활성화 -> 활성화" : "활성화 -> 비활성화"
                         , false)

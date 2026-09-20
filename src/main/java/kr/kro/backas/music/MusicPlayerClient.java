@@ -1,6 +1,8 @@
 package kr.kro.backas.music;
 
 import com.github.natanbc.lavadsp.timescale.TimescalePcmAudioFilter;
+import com.sedmelluq.discord.lavaplayer.filter.AudioFilter;
+import com.sedmelluq.discord.lavaplayer.filter.FloatPcmAudioFilter;
 import com.sedmelluq.discord.lavaplayer.filter.equalizer.Equalizer;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
@@ -26,6 +28,8 @@ import java.util.stream.Collectors;
 
 public class MusicPlayerClient {
     public static final int DEFAULT_VOLUME = 50;
+    public static final float KARAOKE_ECHO_SECONDS = 0.25f;
+    public static final float KARAOKE_ECHO_DECAY = 0.35f;
 
     private final AudioPlayerManager audioPlayerManager;
     private final JDA musicBot;
@@ -93,19 +97,34 @@ public class MusicPlayerClient {
     }
 
     private void updateFilter() {
+        double speed = currentPlaySpeed;
+        boolean karaoke = karaokeMode;
+        ConfiguredEqualizer equalizerPreset = currentEqualizer;
+        boolean speedActive = Math.abs(speed - 1.0) > 0.001;
+        if (!speedActive && !karaoke && equalizerPreset.isFlat()) {
+            this.audioPlayer.setFilterFactory(null);
+            return;
+        }
         this.audioPlayer.setFilterFactory((track, format, output) -> {
-            TimescalePcmAudioFilter speedFilter = new TimescalePcmAudioFilter(output, format.channelCount, format.sampleRate)
-                    .setSpeed(currentPlaySpeed);
-
-            EchoFilter echoFilter = new EchoFilter(speedFilter, format.sampleRate, format.channelCount);
-            if (karaokeMode) {
-                echoFilter.setEchoLength(0.47f);
-                echoFilter.setEchoDecay(0.22f);
+            List<AudioFilter> chain = new ArrayList<>();
+            FloatPcmAudioFilter downstream = output;
+            if (speedActive) {
+                TimescalePcmAudioFilter speedFilter = new TimescalePcmAudioFilter(downstream, format.channelCount, format.sampleRate)
+                        .setSpeed(speed);
+                chain.add(0, speedFilter);
+                downstream = speedFilter;
             }
-            Equalizer equalizer = new Equalizer(format.channelCount, echoFilter);
-            currentEqualizer.applyTo(equalizer);
-
-            return List.of(equalizer, echoFilter, speedFilter);
+            if (karaoke) {
+                EchoFilter echoFilter = new EchoFilter(downstream, format.sampleRate, format.channelCount, KARAOKE_ECHO_SECONDS, KARAOKE_ECHO_DECAY);
+                chain.add(0, echoFilter);
+                downstream = echoFilter;
+            }
+            if (!equalizerPreset.isFlat()) {
+                Equalizer equalizer = new Equalizer(format.channelCount, downstream);
+                equalizerPreset.applyTo(equalizer);
+                chain.add(0, equalizer);
+            }
+            return chain;
         });
     }
 
