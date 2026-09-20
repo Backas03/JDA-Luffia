@@ -59,9 +59,9 @@ case "$1" in
     [ "$TARGET" = "all" ] || [ "$TARGET" = "translator" ] && stop_translator
     ;;
   restart)
-    "$0" stop "$TARGET"
+    bash "$0" stop "$TARGET"
     sleep 2
-    "$0" start "$TARGET"
+    bash "$0" start "$TARGET"
     ;;
   view)
     if [ "$TARGET" = "translator" ]; then
