@@ -168,6 +168,7 @@ public class LyricsSession {
             if (sameLine && sameTranslation && pending == shownPending) return;
             long now = System.currentTimeMillis();
             if (now - lastEditAt < MIN_EDIT_INTERVAL_MS) return;
+            if (!EditRateLimiter.tryAcquire(message.getChannel().getIdLong())) return;
             if (!editInFlight.compareAndSet(false, true)) return;
             shownIndex = index;
             shownTranslation = translation;
