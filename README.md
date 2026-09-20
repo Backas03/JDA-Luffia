@@ -129,7 +129,8 @@ public final class SharedConstant {
 ```
 ### 3. 봇을 실행하려면 ```./gradlew run``` 을 입력합니다 </br>
 - JDK 25 이상이 필요합니다. Discord 음성 채널이 2026년 3월부터 DAVE(종단간 암호화)를 필수로 요구하며, 이를 구현한 JDAVE 라이브러리가 Java 25 이상에서만 동작합니다.
-- ```./gradlew run``` 은 필요한 JVM 옵션(--enable-native-access=ALL-UNNAMED)을 자동으로 넣습니다. jar 를 직접 실행할 때는 해당 옵션을 붙여야 합니다.
+- ```./gradlew run``` 은 필요한 JVM 옵션(--enable-native-access=ALL-UNNAMED)을 자동으로 넣습니다.
+- 서버에 배포할 때는 ```./gradlew fatJar``` 로 ```build/libs/JDA-Luffia-1.0.0-SNAPSHOT-all.jar``` 를 만들고 ```java -Dfile.encoding=UTF-8 -jar JDA-Luffia-1.0.0-SNAPSHOT-all.jar``` 로 실행합니다. (매니페스트에 네이티브 접근 옵션이 포함되어 있습니다)
 ## 기능 소개
 ### 1. 이메일 본인인증 기능
  - 이메일로 인증 코드를 받아 본인 인증을 진행 할 수 있습니다
