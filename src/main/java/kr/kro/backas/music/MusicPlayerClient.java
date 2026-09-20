@@ -1,5 +1,6 @@
 package kr.kro.backas.music;
 
+import com.github.natanbc.lavadsp.karaoke.KaraokePcmAudioFilter;
 import com.github.natanbc.lavadsp.timescale.TimescalePcmAudioFilter;
 import com.sedmelluq.discord.lavaplayer.filter.AudioFilter;
 import com.sedmelluq.discord.lavaplayer.filter.FloatPcmAudioFilter;
@@ -11,7 +12,8 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import kr.kro.backas.Main;
 import kr.kro.backas.SharedConstant;
 import kr.kro.backas.music.filter.ConfiguredEqualizer;
-import kr.kro.backas.music.filter.EchoFilter;
+import kr.kro.backas.music.filter.KaraokeMode;
+import kr.kro.backas.music.filter.VocalEchoFilter;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Activity;
@@ -28,15 +30,16 @@ import java.util.stream.Collectors;
 
 public class MusicPlayerClient {
     public static final int DEFAULT_VOLUME = 10;
-    public static final float KARAOKE_ECHO_SECONDS = 0.25f;
-    public static final float KARAOKE_ECHO_DECAY = 0.35f;
+    public static final float KARAOKE_ECHO_SECONDS = 0.30f;
+    public static final float KARAOKE_ECHO_DECAY = 0.50f;
+    public static final float KARAOKE_CENTER_GAIN = 0.85f;
 
     private final AudioPlayerManager audioPlayerManager;
     private final JDA musicBot;
     private final MusicTrack musicTrack;
     private final AudioPlayer audioPlayer;
     private volatile double currentPlaySpeed = 1.0;
-    private volatile boolean karaokeMode = false;
+    private volatile KaraokeMode karaokeMode = KaraokeMode.OFF;
     private volatile double realPositionMs;
     private volatile ConfiguredEqualizer currentEqualizer = ConfiguredEqualizer.NORMAL;
 
@@ -82,8 +85,8 @@ public class MusicPlayerClient {
         updateFilter();
     }
 
-    public void setKaraokeMode(boolean status) {
-        this.karaokeMode = status;
+    public void setKaraokeMode(KaraokeMode mode) {
+        this.karaokeMode = mode;
         updateFilter();
     }
 
@@ -98,10 +101,10 @@ public class MusicPlayerClient {
 
     private void updateFilter() {
         double speed = currentPlaySpeed;
-        boolean karaoke = karaokeMode;
+        KaraokeMode karaoke = karaokeMode;
         ConfiguredEqualizer equalizerPreset = currentEqualizer;
         boolean speedActive = Math.abs(speed - 1.0) > 0.001;
-        if (!speedActive && !karaoke && equalizerPreset.isFlat()) {
+        if (!speedActive && !karaoke.isActive() && equalizerPreset.isFlat()) {
             this.audioPlayer.setFilterFactory(null);
             return;
         }
@@ -114,10 +117,17 @@ public class MusicPlayerClient {
                 chain.add(0, speedFilter);
                 downstream = speedFilter;
             }
-            if (karaoke) {
-                EchoFilter echoFilter = new EchoFilter(downstream, format.sampleRate, format.channelCount, KARAOKE_ECHO_SECONDS, KARAOKE_ECHO_DECAY);
+            if (karaoke == KaraokeMode.ECHO) {
+                VocalEchoFilter echoFilter = new VocalEchoFilter(downstream, format.sampleRate, format.channelCount,
+                        KARAOKE_ECHO_SECONDS, KARAOKE_ECHO_DECAY, KARAOKE_CENTER_GAIN);
                 chain.add(0, echoFilter);
                 downstream = echoFilter;
+            } else if (karaoke == KaraokeMode.VOCAL_REMOVE) {
+                KaraokePcmAudioFilter vocalRemove = new KaraokePcmAudioFilter(downstream, format.channelCount, format.sampleRate)
+                        .setLevel(1.0f)
+                        .setMonoLevel(1.0f);
+                chain.add(0, vocalRemove);
+                downstream = vocalRemove;
             }
             if (!equalizerPreset.isFlat()) {
                 Equalizer equalizer = new Equalizer(format.channelCount, downstream);
@@ -136,7 +146,7 @@ public class MusicPlayerClient {
         audioPlayer.setVolume(volume);
     }
 
-    public boolean isKaraokeMode() {
+    public KaraokeMode getKaraokeMode() {
         return karaokeMode;
     }
 

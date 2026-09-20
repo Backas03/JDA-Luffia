@@ -74,7 +74,7 @@ public class QueueSlashCommand implements SlashCommandSource {
                 .addField("반복 모드", client.getRepeatModeName(), true)
                 .addField("재생 속도", client.getCurrentPlaySpeed() + "배속", true)
                 .addField("볼륨", client.getVolume() + "%", true)
-                .addField("노래방모드", client.isKaraokeMode() ? "사용 중" : "사용 안함", true)
+                .addField("노래방모드", client.getKaraokeMode().getName(), true)
                 .addField("이퀄라이저", client.getCurrentEqualizer().getName(), true);
         List<AudioTrack> queue = client.getTrackQueue();
         if (!queue.isEmpty()) {
