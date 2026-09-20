@@ -104,6 +104,9 @@ public final class BotSecret {
 
     // 스포티파이 플레이리스트 링크 지원용. 아래 "스포티파이 플레이리스트 설정" 절을 참고해 발급받습니다. 비워두면 플레이리스트만 비활성화됩니다.
     public static final String SPOTIFY_REFRESH_TOKEN = "";
+
+    // 가사 한국어 번역 사이드카 주소 (예: "http://127.0.0.1:8765"). 아래 "가사 번역 설정" 절 참고. 비워두면 번역만 비활성화됩니다.
+    public static final String TRANSLATOR_URL = "";
 }
 ```
 ### 2. SharedConstant.java 에서 MAIN_GUILD_ID 를 서비스 할 서버 guild id로 수정합니다 </br>
@@ -170,6 +173,15 @@ public static final List<String> MUSIC_BOT_TOKENS = List.of(
 3. 터미널에 출력된 refresh token 을 ``BotSecret.SPOTIFY_REFRESH_TOKEN`` 에 넣고 봇을 다시 시작합니다.
 
 로그인한 계정이 만들었거나 라이브러리에 저장한 플레이리스트만 읽을 수 있습니다. 다른 사람의 플레이리스트를 재생하려면 해당 계정에서 먼저 저장해 두어야 합니다.
+
+#### 가사 번역 설정
+`/가사` 실시간 표시에서 현재 줄 아래에 한국어 번역을 붙이려면 번역 사이드카(Python, CPU 전용, GPU 불필요)를 같은 서버에 띄웁니다. Meta NLLB-200 모델을 CTranslate2 int8 로 실행하며 RAM 약 2GB 를 사용합니다.
+1. 서버에 Python 3.10 이상을 준비합니다.
+2. ``translator/setup.sh`` 를 실행합니다. 의존성 설치와 모델 변환(약 2.5GB 다운로드)을 한 번만 합니다.
+3. ``translator/run.sh`` 로 사이드카를 실행합니다. (기본 127.0.0.1:8765, ``TRANSLATOR_PORT`` 로 변경)
+4. ``BotSecret.TRANSLATOR_URL`` 에 ``http://127.0.0.1:8765`` 를 넣고 봇을 다시 시작합니다.
+
+번역은 곡마다 앞 5줄을 먼저, 이후 10줄씩 이어서 처리하며 결과는 메모리에 캐시됩니다. 한국어 가사는 번역하지 않습니다.
 
 ### 3. 게임 전적 검색 기능 </br>
 - !롤정보 [닉네임] 으로 정보를 검색할 수 있습니다 </br>
