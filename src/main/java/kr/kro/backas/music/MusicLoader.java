@@ -10,7 +10,8 @@ import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.interactions.InteractionHook;
-import net.dv8tion.jda.api.interactions.components.selections.StringSelectMenu;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.selections.StringSelectMenu;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -107,7 +108,7 @@ public class MusicLoader implements AudioLoadResultHandler {
                         + queryInfo.getIdentifier().getDisplayName() + " 검색 결과입니다. (" + count + "개)\n"
                         + "재생할 곡을 선택해주세요.")
                 .setEmbeds()
-                .setActionRow(builder.build())
+                .setComponents(ActionRow.of(builder.build()))
                 .queue();
     }
 

@@ -2,7 +2,7 @@ package kr.kro.backas;
 
 public final class SharedConstant {
     public static final long EMAIL_VERIFICATION_ROLE_ID = -1L;
-    public static final long MAIN_GUILD_ID = 1173281289470758913L;
+    public static final long MAIN_GUILD_ID = 1076827296318627941L;
     public static final long DEV_GUILD_ID = 1173281289470758913L;
     public static final long PUBLISHED_GUILD_ID = MAIN_GUILD_ID;
     public static final String DEFAULT_ACTIVITY = "/도움말 또는 !도움말  명령어로 기능 확인";

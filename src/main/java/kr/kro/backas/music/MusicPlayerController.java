@@ -1,10 +1,12 @@
 package kr.kro.backas.music;
 
+import club.minnced.discord.jdave.interop.JDaveSessionFactory;
 import kr.kro.backas.music.source.MusicSourceRegistry;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
+import net.dv8tion.jda.api.audio.AudioModuleConfig;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.entities.channel.unions.AudioChannelUnion;
@@ -41,7 +43,8 @@ public class MusicPlayerController extends ListenerAdapter {
                 .setChunkingFilter(ChunkingFilter.ALL)
                 .setMemberCachePolicy(MemberCachePolicy.ALL)
                 .enableIntents(GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MEMBERS)
-                .enableCache(CacheFlag.ROLE_TAGS);
+                .enableCache(CacheFlag.ROLE_TAGS)
+                .setAudioModuleConfig(new AudioModuleConfig().withDaveSessionFactory(new JDaveSessionFactory()));
         register(builder.build().awaitReady());
     }
 

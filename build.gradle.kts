@@ -19,7 +19,10 @@ dependencies {
     implementation("commons-configuration:commons-configuration:1.10")
     testImplementation(platform("org.junit:junit-bom:5.9.2"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.9.2")
-    implementation("net.dv8tion:JDA:5.0.0-beta.11")
+    implementation("net.dv8tion:JDA:6.6.0")
+    implementation("club.minnced:jdave-api:0.1.8")
+    runtimeOnly("club.minnced:jdave-native-win-x86-64:0.1.8")
+    runtimeOnly("club.minnced:jdave-native-linux-x86-64:0.1.8")
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.15.2")
     implementation("org.slf4j:slf4j-api:2.0.5")
     implementation("com.github.JustRed23:lavadsp:0.7.7-1")
@@ -35,17 +38,21 @@ dependencies {
     implementation("org.jsoup:jsoup:1.15.3")
 }
 
-application.mainClass.set("kr.kro.backas.Main")
+application {
+    mainClass.set("kr.kro.backas.Main")
+    applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED", "-Dfile.encoding=UTF-8")
+}
 
 tasks.test {
     useJUnitPlatform()
 }
 
-val targetJavaVersion = 17
-
-tasks {
-    withType<JavaCompile> {
-        options.encoding = Charsets.UTF_8.name()
-        options.release.set(targetJavaVersion)
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(25))
     }
+}
+
+tasks.withType<JavaCompile> {
+    options.encoding = Charsets.UTF_8.name()
 }
