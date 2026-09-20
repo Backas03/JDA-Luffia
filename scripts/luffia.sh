@@ -53,10 +53,12 @@ case "$1" in
   start)
     [ "$TARGET" = "all" ] || [ "$TARGET" = "translator" ] && start_translator
     [ "$TARGET" = "all" ] || [ "$TARGET" = "bot" ] && start_bot
+    true
     ;;
   stop)
     [ "$TARGET" = "all" ] || [ "$TARGET" = "bot" ] && stop_bot
     [ "$TARGET" = "all" ] || [ "$TARGET" = "translator" ] && stop_translator
+    true
     ;;
   restart)
     bash "$0" stop "$TARGET"
