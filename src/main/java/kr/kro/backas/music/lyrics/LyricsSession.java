@@ -121,16 +121,14 @@ public class LyricsSession {
         String previous = lineText(lines, index - 1);
         String current = lineText(lines, index);
         String next = lineText(lines, index + 1);
-        StringBuilder body = new StringBuilder();
-        body.append(previous.isBlank() ? "​" : "*" + previous + "*").append("\n\n");
-        body.append("**").append(current.isBlank() ? "♪" : current).append("**").append("\n\n");
-        body.append(next.isBlank() ? "​" : "*" + next + "*");
+        String song = track.getInfo().author + " - " + track.getInfo().title;
         EmbedBuilder builder = new EmbedBuilder()
                 .setColor(MusicEmbeds.PRIMARY)
-                .setAuthor(track.getInfo().author + " - " + track.getInfo().title, track.getInfo().uri)
+                .setAuthor(previous.isBlank() ? "​" : previous)
+                .setTitle(current.isBlank() ? "♪" : current)
+                .setDescription(next.isBlank() ? "​" : "*" + next + "*")
                 .setThumbnail(MusicEmbeds.thumbnailOf(track))
-                .setDescription(body);
-        if (footer != null) builder.setFooter(footer);
+                .setFooter(footer == null ? song : song + " · " + footer);
         return builder.build();
     }
 
