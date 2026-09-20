@@ -296,6 +296,10 @@ public class MusicPlayerClient {
     }
 
     public void connectToVoiceChannel(@NotNull VoiceChannel channel) {
+        if (channel.getGuild().getIdLong() != SharedConstant.PUBLISHED_GUILD_ID) {
+            throw new IllegalStateException("서비스 서버(" + SharedConstant.PUBLISHED_GUILD_ID + ")가 아닌 서버의 음성채팅방입니다: "
+                    + channel.getGuild().getName() + "(" + channel.getGuild().getId() + ")");
+        }
         musicBot.getGuildById(SharedConstant.PUBLISHED_GUILD_ID)
                 .getAudioManager()
                 .openAudioConnection(channel);
