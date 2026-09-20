@@ -62,8 +62,10 @@ public class LrcLibClient {
                 }
                 if (cached != null) return cached.orElse(null);
                 Lyrics found = lookup(info);
-                synchronized (CACHE) {
-                    CACHE.put(identifier, Optional.ofNullable(found));
+                if (found != null) {
+                    synchronized (CACHE) {
+                        CACHE.put(identifier, Optional.of(found));
+                    }
                 }
                 return found;
             } finally {
