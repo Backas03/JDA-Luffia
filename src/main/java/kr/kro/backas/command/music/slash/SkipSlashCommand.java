@@ -10,13 +10,17 @@ import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.interactions.commands.OptionMapping;
+import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
+import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 
 import java.awt.*;
 
 public class SkipSlashCommand implements SlashCommandSource {
     public static final String COMMAND_NAME = "스킵";
+    public static final String COUNT_ARGUMENT = "곡수";
 
     @Override
     public String getDescription() {
@@ -25,12 +29,15 @@ public class SkipSlashCommand implements SlashCommandSource {
 
     @Override
     public String getUsage() {
-        return "/" + COMMAND_NAME;
+        return "/" + COMMAND_NAME + " (곡수)";
     }
 
     @Override
     public SlashCommandData buildCommand() {
-        return Commands.slash(COMMAND_NAME, getDescription());
+        return Commands.slash(COMMAND_NAME, getDescription())
+                .addOptions(new OptionData(OptionType.INTEGER, COUNT_ARGUMENT,
+                        "건너뛸 곡 수 (기본 1). 현재 곡 포함", false)
+                        .setRequiredRange(1, 1000));
     }
 
     @Override
@@ -59,7 +66,9 @@ public class SkipSlashCommand implements SlashCommandSource {
             event.replyEmbeds(builder.build()).queue();
             return;
         }
-        client.skipNowPlaying();
-        event.reply("현재 재생중인 음악을 건너뛰었습니다.").queue();
+        OptionMapping countOption = event.getOption(COUNT_ARGUMENT);
+        int count = countOption == null ? 1 : Math.max(1, countOption.getAsInt());
+        int skipped = client.skip(count);
+        event.reply(skipped <= 1 ? "현재 재생중인 음악을 건너뛰었습니다." : skipped + "곡을 건너뛰었습니다.").queue();
     }
 }
