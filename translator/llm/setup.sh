@@ -3,8 +3,8 @@ set -e
 cd "$(dirname "$0")"
 LLAMA_BUILD="${LLAMA_BUILD:-b11064}"
 LLAMA_ARCHIVE="llama-${LLAMA_BUILD}-bin-ubuntu-x64.tar.gz"
-MODEL_URL="${MODEL_URL:-https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf}"
-MODEL_FILE="${MODEL_FILE:-Qwen2.5-7B-Instruct-Q4_K_M.gguf}"
+MODEL_URL="${MODEL_URL:-https://huggingface.co/bartowski/EXAONE-3.5-7.8B-Instruct-GGUF/resolve/main/EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf}"
+MODEL_FILE="${MODEL_FILE:-EXAONE-3.5-7.8B-Instruct-Q4_K_M.gguf}"
 
 mkdir -p bin models
 if [ ! -x bin/llama-server ]; then

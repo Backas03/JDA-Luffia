@@ -34,6 +34,7 @@ public class TranslationClient {
             "- Keep interjections and onomatopoeia (ああ -> 아아, Oh -> 오).",
             "- Keep proper nouns and names. Keep tone: casual speech stays casual, no polite -습니다 unless the source is polite.",
             "- If a line is already Korean, empty, or has no words, copy it unchanged.",
+            "- Write the output in Korean Hangul only. Never leave Japanese kana, kanji, or Chinese characters in the output; translate them.",
             "- Never add explanations, notes, or romanization.",
             "Output JSON only: {\"t\": [\"line1\", \"line2\", ...]} with exactly the same number of items as the input.");
 
@@ -132,11 +133,33 @@ public class TranslationClient {
         }
         List<String> result = new ArrayList<>();
         for (JsonNode line : parsed.path("t")) result.add(line.asText(""));
+        List<Integer> leaked = new ArrayList<>();
         for (int i = 0; i < result.size() && i < lines.size(); i++) {
             String source = lines.get(i);
-            if (source == null || source.isBlank() || !LyricsLanguage.needsTranslation(source)) result.set(i, source == null ? "" : source);
+            if (source == null || source.isBlank() || !LyricsLanguage.needsTranslation(source)) {
+                result.set(i, source == null ? "" : source);
+            } else if (containsCjkScript(result.get(i))) {
+                leaked.add(i);
+            }
+        }
+        if (!leaked.isEmpty() && lines.size() > 1) {
+            for (int index : leaked) {
+                List<String> retried = translateWithLlm(List.of(lines.get(index)));
+                result.set(index, containsCjkScript(retried.get(0)) ? lines.get(index) : retried.get(0));
+            }
+        } else if (!leaked.isEmpty()) {
+            result.set(0, lines.get(0));
         }
         return result;
+    }
+
+    private static boolean containsCjkScript(String text) {
+        if (text == null) return false;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if ((c >= 0x3040 && c <= 0x30FF) || (c >= 0x4E00 && c <= 0x9FFF)) return true;
+        }
+        return false;
     }
 
     private JsonNode postJson(String path, ObjectNode body, Duration timeout) throws IOException {
