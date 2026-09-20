@@ -88,6 +88,14 @@ public class TranslationClient {
         return current;
     }
 
+    public boolean isLlm() {
+        try {
+            return detectMode() == Mode.LLM;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
     public String getModelName() {
         String name = modelName;
         if (name == null) {

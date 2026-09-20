@@ -34,9 +34,12 @@ public final class LyricsPresenter {
     private static final String TRUNCATED_NOTE = "… (이하 생략)";
     public static final String MACHINE_TRANSLATION_NOTE = "기계 번역한 가사입니다. 올바르지 않을 수 있습니다.";
 
+    public static final String LLM_TRANSLATION_NOTE = "LLM으로 번역한 가사입니다. 올바르지 않을 수 있습니다.";
+
     public static String machineTranslationNote(@Nullable TranslationClient translator) {
         String model = translator == null ? "" : translator.getModelName();
-        return model.isBlank() ? MACHINE_TRANSLATION_NOTE : MACHINE_TRANSLATION_NOTE + " (" + model + ")";
+        String note = translator != null && translator.isLlm() ? LLM_TRANSLATION_NOTE : MACHINE_TRANSLATION_NOTE;
+        return model.isBlank() ? note : note + "\n(model: " + model + ")";
     }
 
     private LyricsPresenter() {
@@ -117,7 +120,7 @@ public final class LyricsPresenter {
         boolean willTranslate = translator != null && translator.isEnabled()
                 && !LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(asLines));
         String initialFooter = willTranslate
-                ? finalFooter + "\n" + LyricsSession.TRANSLATING_NOTE + " " + machineTranslationNote(translator)
+                ? finalFooter + "\n" + LyricsSession.TRANSLATING_NOTE + "\n(model: " + translator.getModelName() + ")"
                 : finalFooter;
         sendEmbeds.apply(buildFullEmbeds(track, lines, null, initialFooter)).whenComplete((message, sendError) -> {
             if (sendError != null || message == null) {
