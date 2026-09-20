@@ -1,5 +1,6 @@
 package kr.kro.backas.music;
 
+import com.github.topi314.lavasrc.ExtendedAudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
@@ -28,7 +29,7 @@ public class MusicLoader implements AudioLoadResultHandler {
     public static final String PLAYLIST_STRING_SELECT_MENU_ID = "music:playlist_selection";
     public static final int MAX_LOADING_MUSIC_RETRY_ATTEMPT = 3;
     public static final int MAX_SELECT_MENU_OPTIONS = 25;
-    public static final int MAX_PLAYLIST_ENQUEUE = 100;
+    public static final int MAX_PLAYLIST_ENQUEUE = 1000;
     private static final int SELECT_MENU_TEXT_LIMIT = 100;
 
     private final MusicPlayerController controller;
@@ -140,8 +141,12 @@ public class MusicLoader implements AudioLoadResultHandler {
             if (!enqueued) startedPlaying = true;
             added.add(track);
         }
+        int total = tracks.size();
+        if (playlist instanceof ExtendedAudioPlaylist extended && extended.getTotalTracks() != null) {
+            total = Math.max(total, extended.getTotalTracks());
+        }
         EmbedBuilder result = MusicEmbeds.playlistEnqueued(
-                playlist, added, tracks.size(), startedPlaying, musicPlayerClient.getMusicBot(), requester());
+                playlist, added, total, startedPlaying, musicPlayerClient.getMusicBot(), requester());
         hook.editOriginalEmbeds(result.build()).queue();
     }
 

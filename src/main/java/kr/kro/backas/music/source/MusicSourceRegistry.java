@@ -27,8 +27,8 @@ public final class MusicSourceRegistry {
             "ytsearch:%QUERY%"
     };
     public static final String SPOTIFY_COUNTRY_CODE = "KR";
-    public static final int SPOTIFY_PAGE_LIMIT = 2;
-    public static final int YOUTUBE_PLAYLIST_PAGE_COUNT = 2;
+    public static final int SPOTIFY_PAGE_LIMIT = 10;
+    public static final int YOUTUBE_PLAYLIST_PAGE_COUNT = 10;
 
     private final AudioPlayerManager audioPlayerManager;
     private final boolean spotifyEnabled;
