@@ -29,6 +29,7 @@ public class LyricsSession {
     public static final long DEFAULT_OFFSET_MS = 600;
     public static final int FIRST_TRANSLATION_CHUNK = 5;
     public static final int TRANSLATION_CHUNK = 10;
+    public static final String TRANSLATING_NOTE = "번역 중...";
     private static final String BLANK = "​";
     private static final String WIDTH_FILLER = "⠀".repeat(48);
 
@@ -40,9 +41,11 @@ public class LyricsSession {
     private final TranslationClient translator;
     private final Map<Integer, String> translations;
     private volatile long offsetMs;
+    private volatile boolean translating;
     private ScheduledFuture<?> ticker;
     private int shownIndex = -2;
     private String shownTranslation;
+    private boolean shownPending;
     private long lastEditAt;
     private final AtomicBoolean editInFlight = new AtomicBoolean(false);
     private final AtomicBoolean stopped = new AtomicBoolean(false);
@@ -59,8 +62,8 @@ public class LyricsSession {
         this.lyrics = lyrics;
         this.message = message;
         this.scheduler = scheduler;
-        this.translator = translator;
-        this.translations = translator == null ? Map.of() : translator.cacheFor(track.getIdentifier());
+        this.translator = translator == null || !translator.isEnabled() ? null : translator;
+        this.translations = this.translator == null ? Map.of() : this.translator.cacheFor(track.getIdentifier());
         this.offsetMs = offsetMs;
     }
 
@@ -89,7 +92,7 @@ public class LyricsSession {
         if (!stopped.compareAndSet(false, true)) return;
         if (ticker != null) ticker.cancel(false);
         try {
-            message.editMessageComponents(buildView(track, lyrics, shownIndex, translationFor(shownIndex), reason))
+            message.editMessageComponents(buildView(track, lyrics, shownIndex, translationFor(shownIndex), reason, translator, false))
                     .useComponentsV2(true)
                     .queue(null, e -> {});
         } catch (RuntimeException e) {
@@ -98,28 +101,32 @@ public class LyricsSession {
     }
 
     private void startTranslation() {
-        if (translator == null || !translator.isEnabled()) return;
+        if (translator == null) return;
         List<LyricLine> lines = lyrics.synced();
-        String language = LyricsLanguage.detect(lines);
-        if (LyricsLanguage.KOREAN.equals(language)) return;
+        if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lines))) return;
         List<Integer> pending = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
             if (!translations.containsKey(i) && LyricsLanguage.needsTranslation(lines.get(i).text())) pending.add(i);
         }
         if (pending.isEmpty()) return;
+        translating = true;
         CompletableFuture.runAsync(() -> {
-            int from = 0;
-            int chunk = FIRST_TRANSLATION_CHUNK;
-            while (from < pending.size() && !stopped.get()) {
-                int to = Math.min(pending.size(), from + chunk);
-                translateChunk(language, lines, pending.subList(from, to));
-                from = to;
-                chunk = TRANSLATION_CHUNK;
+            try {
+                int from = 0;
+                int chunk = FIRST_TRANSLATION_CHUNK;
+                while (from < pending.size() && !stopped.get()) {
+                    int to = Math.min(pending.size(), from + chunk);
+                    translateChunk(lines, pending.subList(from, to));
+                    from = to;
+                    chunk = TRANSLATION_CHUNK;
+                }
+            } finally {
+                translating = false;
             }
         });
     }
 
-    private void translateChunk(String language, List<LyricLine> lines, List<Integer> indices) {
+    private void translateChunk(List<LyricLine> lines, List<Integer> indices) {
         List<String> sources = new ArrayList<>(indices.size());
         for (int index : indices) sources.add(lines.get(index).text());
         try {
@@ -140,6 +147,12 @@ public class LyricsSession {
         return index < 0 ? null : translations.get(index);
     }
 
+    private boolean isPendingTranslation(int index, @Nullable String translation) {
+        if (translation != null || !translating || index < 0) return false;
+        String text = lineText(lyrics.synced(), index);
+        return LyricsLanguage.needsTranslation(text);
+    }
+
     private void tick() {
         try {
             if (stopped.get()) return;
@@ -151,16 +164,18 @@ public class LyricsSession {
             long position = (long) client.getRealPositionMs() + offsetMs;
             int index = indexAt(position);
             String translation = translationFor(index);
+            boolean pending = isPendingTranslation(index, translation);
             boolean sameLine = index == shownIndex;
             boolean sameTranslation = translation == null ? shownTranslation == null : translation.equals(shownTranslation);
-            if (sameLine && sameTranslation) return;
+            if (sameLine && sameTranslation && pending == shownPending) return;
             long now = System.currentTimeMillis();
             if (now - lastEditAt < MIN_EDIT_INTERVAL_MS) return;
             if (!editInFlight.compareAndSet(false, true)) return;
             shownIndex = index;
             shownTranslation = translation;
+            shownPending = pending;
             lastEditAt = now;
-            message.editMessageComponents(buildView(track, lyrics, index, translation, null))
+            message.editMessageComponents(buildView(track, lyrics, index, translation, null, translator, pending))
                     .useComponentsV2(true)
                     .queue(
                             m -> editInFlight.set(false),
@@ -185,6 +200,11 @@ public class LyricsSession {
     }
 
     public static Container buildView(AudioTrack track, Lyrics lyrics, int index, @Nullable String translation, @Nullable String footer) {
+        return buildView(track, lyrics, index, translation, footer, null, false);
+    }
+
+    public static Container buildView(AudioTrack track, Lyrics lyrics, int index, @Nullable String translation,
+                                      @Nullable String footer, @Nullable TranslationClient translator, boolean pendingTranslation) {
         List<LyricLine> lines = lyrics.synced();
         String previous = lineText(lines, index - 1);
         String current = lineText(lines, index);
@@ -195,12 +215,14 @@ public class LyricsSession {
         text.append("## ").append(current.isBlank() ? "♪" : current).append('\n');
         if (translation != null && !translation.isBlank()) {
             text.append("-# ").append(translation).append('\n');
+        } else if (pendingTranslation) {
+            text.append("-# ").append(TRANSLATING_NOTE).append('\n');
         }
         text.append(next.isBlank() ? BLANK : "*" + next + "*").append('\n');
         text.append("-# ").append(WIDTH_FILLER).append('\n');
         text.append("-# ").append(footer == null ? song : song + " · " + footer);
-        if (translation != null && !translation.isBlank()) {
-            text.append('\n').append("-# ").append(LyricsPresenter.MACHINE_TRANSLATION_NOTE);
+        if ((translation != null && !translation.isBlank()) || pendingTranslation) {
+            text.append('\n').append("-# ").append(LyricsPresenter.machineTranslationNote(translator));
         }
         TextDisplay body = TextDisplay.of(text.toString());
         String artwork = MusicEmbeds.thumbnailOf(track);

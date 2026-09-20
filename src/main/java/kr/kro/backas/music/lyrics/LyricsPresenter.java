@@ -34,6 +34,11 @@ public final class LyricsPresenter {
     private static final String TRUNCATED_NOTE = "… (이하 생략)";
     public static final String MACHINE_TRANSLATION_NOTE = "기계 번역한 가사입니다. 올바르지 않을 수 있습니다.";
 
+    public static String machineTranslationNote(@Nullable TranslationClient translator) {
+        String model = translator == null ? "" : translator.getModelName();
+        return model.isBlank() ? MACHINE_TRANSLATION_NOTE : MACHINE_TRANSLATION_NOTE + " (" + model + ")";
+    }
+
     private LyricsPresenter() {
     }
 
@@ -107,19 +112,25 @@ public final class LyricsPresenter {
         String footer = liveWanted ? "타임스탬프 가사가 없어 전체 가사로 표시합니다" : SharedConstant.RELEASE_VERSION;
         if (requester != null) footer += " · 요청: " + MemberUtil.getName(requester);
         String finalFooter = footer;
-        sendEmbeds.apply(buildFullEmbeds(track, lines, null, finalFooter)).whenComplete((message, sendError) -> {
+        List<LyricLine> asLines = new ArrayList<>();
+        for (String line : lines) asLines.add(new LyricLine(0, line));
+        boolean willTranslate = translator != null && translator.isEnabled()
+                && !LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(asLines));
+        String initialFooter = willTranslate
+                ? finalFooter + "\n" + LyricsSession.TRANSLATING_NOTE + " " + machineTranslationNote(translator)
+                : finalFooter;
+        sendEmbeds.apply(buildFullEmbeds(track, lines, null, initialFooter)).whenComplete((message, sendError) -> {
             if (sendError != null || message == null) {
                 LOGGER.warn("failed to send full lyrics", sendError);
                 return;
             }
-            if (translator == null || !translator.isEnabled()) return;
-            List<LyricLine> asLines = new ArrayList<>();
-            for (String line : lines) asLines.add(new LyricLine(0, line));
-            if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(asLines))) return;
+            if (!willTranslate) return;
             CompletableFuture.runAsync(() -> {
                 Map<Integer, String> translations = translateAll(translator, track.getIdentifier() + ":plain", lines);
-                if (translations.isEmpty()) return;
-                message.editMessageEmbeds(buildFullEmbeds(track, lines, translations, finalFooter))
+                String doneFooter = translations.isEmpty()
+                        ? finalFooter + "\n번역에 실패했습니다"
+                        : finalFooter + "\n" + machineTranslationNote(translator);
+                message.editMessageEmbeds(buildFullEmbeds(track, lines, translations, doneFooter))
                         .queue(null, e -> LOGGER.debug("failed to attach translations", e));
             });
         });
@@ -171,8 +182,7 @@ public final class LyricsPresenter {
                         .setThumbnail(MusicEmbeds.thumbnailOf(track));
             }
             if (i == pages.size() - 1) {
-                boolean translated = translations != null && !translations.isEmpty();
-                builder.setFooter(translated ? footer + "\n" + MACHINE_TRANSLATION_NOTE : footer);
+                builder.setFooter(footer);
             }
             embeds.add(builder.build());
         }

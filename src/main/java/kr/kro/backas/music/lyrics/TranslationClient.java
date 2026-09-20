@@ -43,6 +43,7 @@ public class TranslationClient {
     private final String baseUrl;
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
     private volatile Mode mode = Mode.UNKNOWN;
+    private volatile String modelName;
     private final Map<String, Map<Integer, String>> cache = Collections.synchronizedMap(
             new LinkedHashMap<>(64, 0.75f, true) {
                 @Override
@@ -81,9 +82,51 @@ public class TranslationClient {
         HttpResponse<String> response = send(HttpRequest.newBuilder(URI.create(baseUrl + "/v1/models"))
                 .timeout(Duration.ofSeconds(5)).GET().build());
         current = response.statusCode() == 200 && response.body().contains("\"data\"") ? Mode.LLM : Mode.NLLB;
+        modelName = current == Mode.LLM ? readLlmModelName(response.body()) : readNllbModelName();
         mode = current;
-        LOGGER.info("translator mode detected: {} ({})", current, baseUrl);
+        LOGGER.info("translator mode detected: {} model={} ({})", current, modelName, baseUrl);
         return current;
+    }
+
+    public String getModelName() {
+        String name = modelName;
+        if (name == null) {
+            try {
+                detectMode();
+            } catch (IOException e) {
+                return "";
+            }
+            name = modelName;
+        }
+        return name == null ? "" : name;
+    }
+
+    private static String readLlmModelName(String body) {
+        try {
+            String id = MAPPER.readTree(body).path("data").path(0).path("id").asText("");
+            return cleanModelName(id);
+        } catch (IOException e) {
+            return "";
+        }
+    }
+
+    private String readNllbModelName() {
+        try {
+            HttpResponse<String> response = send(HttpRequest.newBuilder(URI.create(baseUrl + "/health"))
+                    .timeout(Duration.ofSeconds(5)).GET().build());
+            return cleanModelName(MAPPER.readTree(response.body()).path("model").asText(""));
+        } catch (IOException e) {
+            return "";
+        }
+    }
+
+    private static String cleanModelName(String raw) {
+        if (raw == null || raw.isBlank()) return "";
+        String name = raw.replace('\\', '/');
+        int slash = name.lastIndexOf('/');
+        if (slash >= 0) name = name.substring(slash + 1);
+        if (name.endsWith(".gguf")) name = name.substring(0, name.length() - 5);
+        return name;
     }
 
     private List<String> translateWithNllb(String sourceLanguage, List<String> lines) throws IOException {
