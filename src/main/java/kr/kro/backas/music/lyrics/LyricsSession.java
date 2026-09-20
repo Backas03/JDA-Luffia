@@ -24,6 +24,7 @@ public class LyricsSession {
     public static final long MIN_EDIT_INTERVAL_MS = 1200;
     public static final long DEFAULT_OFFSET_MS = 600;
     private static final String BLANK = "​";
+    private static final String WIDTH_FILLER = "⠀".repeat(48);
 
     private final MusicPlayerClient client;
     private final AudioTrack track;
@@ -132,6 +133,7 @@ public class LyricsSession {
         String text = (previous.isBlank() ? BLANK : "*" + previous + "*") + "\n"
                 + "## " + (current.isBlank() ? "♪" : current) + "\n"
                 + (next.isBlank() ? BLANK : "*" + next + "*") + "\n"
+                + "-# " + WIDTH_FILLER + "\n"
                 + "-# " + (footer == null ? song : song + " · " + footer);
         TextDisplay body = TextDisplay.of(text);
         String artwork = MusicEmbeds.thumbnailOf(track);
