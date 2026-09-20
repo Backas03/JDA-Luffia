@@ -10,8 +10,8 @@ repositories {
     mavenCentral()
     maven("https://jitpack.io")
     maven("https://m2.dv8tion.net/releases")
-    maven("https://maven.lavalink.dev/releases") // youtube-source
-    maven("https://maven.topi.wtf/releases")     // LavaSrc (spotify 등 추가 소스)
+    maven("https://maven.lavalink.dev/releases")
+    maven("https://maven.topi.wtf/releases")
 }
 
 dependencies {
@@ -25,13 +25,12 @@ dependencies {
     implementation("ch.qos.logback:logback-classic:1.4.12")
     implementation("com.sun.mail:javax.mail:1.6.2")
 
-    // 오디오 스택: lavaplayer 2.x (Maven Central) + 유튜브는 별도 모듈(youtube-source v2) + LavaSrc(스포티파이 미러링)
     implementation("dev.arbjerg:lavaplayer:2.2.7")
     implementation("dev.lavalink.youtube:v2:1.18.2")
     implementation("com.github.topi314.lavasrc:lavasrc:4.8.3")
 
     implementation("com.google.api-client:google-api-client:2.2.0")
-    implementation("com.github.meraki-analytics:orianna:master-SNAPSHOT") // OSSRH 폐쇄로 jitpack master 빌드 사용 (Riot ID API 필요)
+    implementation("com.github.meraki-analytics.orianna:orianna:master-SNAPSHOT")
     implementation("org.jsoup:jsoup:1.15.3")
 }
 
