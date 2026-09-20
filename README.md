@@ -9,7 +9,8 @@
 /재생 <검색어 또는 링크> (출처)
   ㄴ 유튜브/스포티파이 링크(곡, 앨범, 플레이리스트)는 바로 재생하고, 검색어는 선택한 출처(유튜브, 유튜브 뮤직, 스포티파이)에서 검색합니다.
   ㄴ 스포티파이는 오디오를 제공하지 않으므로 곡 정보(ISRC, 제목)로 유튜브에서 찾아 재생합니다.
-  ㄴ 스포티파이 플레이리스트/아티스트 링크는 2026년 2월 API 개편으로 Development Mode 앱에서 읽을 수 없어 지원하지 않습니다. (곡, 앨범 링크와 검색은 지원)
+  ㄴ 스포티파이 플레이리스트는 봇에 로그인된 Spotify 계정이 만들었거나 저장한 것만 재생됩니다. (아래 "스포티파이 플레이리스트 설정" 참고)
+  ㄴ 스포티파이 아티스트 링크는 2026년 2월 API 개편으로 Development Mode 앱에서 읽을 수 없어 지원하지 않습니다.
 /이퀄라이저 <모드 (자동완성 지원)>
   ㄴ 재생중인 노래에 이퀄라이저를 적용합니다. (초저음 강조, 저음 강조, 일반, 고음 강조, 초고음 강조)
 /노래방모드
@@ -96,6 +97,9 @@ public final class BotSecret {
     // 2026년 2월 이후 Development Mode 앱은 소유자 계정에 Spotify Premium 이 필요합니다.
     public static final String SPOTIFY_CLIENT_ID = "";
     public static final String SPOTIFY_CLIENT_SECRET = "";
+
+    // 스포티파이 플레이리스트 링크 지원용. 아래 "스포티파이 플레이리스트 설정" 절을 참고해 발급받습니다. 비워두면 플레이리스트만 비활성화됩니다.
+    public static final String SPOTIFY_REFRESH_TOKEN = "";
 }
 ```
 ### 2. SharedConstant.java 에서 MAIN_GUILD_ID 를 서비스 할 서버 guild id로 수정합니다 </br>
@@ -153,6 +157,14 @@ public static final List<String> MUSIC_BOT_TOKENS = List.of(
 );
 ```
 
+
+#### 스포티파이 플레이리스트 설정
+2026년 2월 Spotify API 개편 이후 플레이리스트 곡 목록은 사용자 로그인 토큰이 있어야만 읽을 수 있습니다. 한 번만 아래 순서로 설정하면 됩니다.
+1. Spotify 개발자 대시보드의 앱 설정에서 Redirect URI 에 ``http://127.0.0.1:8888/callback`` 을 추가합니다.
+2. ``./gradlew spotifyLogin`` 을 실행하고 출력된 주소를 브라우저에서 열어 Spotify 계정으로 로그인합니다.
+3. 터미널에 출력된 refresh token 을 ``BotSecret.SPOTIFY_REFRESH_TOKEN`` 에 넣고 봇을 다시 시작합니다.
+
+로그인한 계정이 만들었거나 라이브러리에 저장한 플레이리스트만 읽을 수 있습니다. 다른 사람의 플레이리스트를 재생하려면 해당 계정에서 먼저 저장해 두어야 합니다.
 
 ### 3. 게임 전적 검색 기능 </br>
 - !롤정보 [닉네임] 으로 정보를 검색할 수 있습니다 </br>

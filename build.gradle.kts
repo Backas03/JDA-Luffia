@@ -47,6 +47,14 @@ tasks.test {
     useJUnitPlatform()
 }
 
+tasks.register<JavaExec>("spotifyLogin") {
+    group = "application"
+    description = "스포티파이 플레이리스트 읽기용 refresh token 을 발급받습니다"
+    mainClass.set("kr.kro.backas.music.source.SpotifyLoginTool")
+    classpath = sourceSets["main"].runtimeClasspath
+    jvmArgs = listOf("-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8")
+}
+
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(25))
