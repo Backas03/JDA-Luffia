@@ -7,8 +7,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class EditRateLimiter {
 
-    public static final int MAX_EDITS_PER_WINDOW = 4;
-    public static final long WINDOW_MS = 5000;
+    public static final int MAX_EDITS_PER_WINDOW = 5;
+    public static final long WINDOW_MS = 5125;
 
     private static final Map<Long, Deque<Long>> HISTORY = new ConcurrentHashMap<>();
 

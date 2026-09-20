@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -20,7 +21,10 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.function.BiConsumer;
 import java.util.stream.Stream;
 
@@ -73,10 +77,15 @@ public class TranslationClient {
     }
 
     public List<String> translate(String sourceLanguage, List<String> lines, @Nullable BiConsumer<Integer, String> onLine) throws IOException {
+        return translate(sourceLanguage, lines, onLine, null);
+    }
+
+    public List<String> translate(String sourceLanguage, List<String> lines, @Nullable BiConsumer<Integer, String> onLine,
+                                  @Nullable Cancellation cancellation) throws IOException {
         if (baseUrl == null) throw new IOException("translator disabled");
         if (lines.isEmpty()) return List.of();
         Mode current = detectMode();
-        List<String> result = current == Mode.LLM ? translateWithLlm(lines, onLine) : translateWithNllb(sourceLanguage, lines);
+        List<String> result = current == Mode.LLM ? translateWithLlm(lines, onLine, cancellation) : translateWithNllb(sourceLanguage, lines);
         if (result.size() != lines.size()) {
             LOGGER.warn("translator returned {} lines for {} inputs", result.size(), lines.size());
             throw new IOException("translator line count mismatch");
@@ -193,8 +202,9 @@ public class TranslationClient {
         return body;
     }
 
-    private List<String> translateWithLlm(List<String> lines, @Nullable BiConsumer<Integer, String> onLine) throws IOException {
-        String content = onLine == null ? requestLlm(lines) : streamLlm(lines, onLine);
+    private List<String> translateWithLlm(List<String> lines, @Nullable BiConsumer<Integer, String> onLine,
+                                          @Nullable Cancellation cancellation) throws IOException {
+        String content = onLine == null ? requestLlm(lines) : streamLlm(lines, onLine, cancellation);
         JsonNode parsed;
         try {
             parsed = MAPPER.readTree(content);
@@ -223,8 +233,9 @@ public class TranslationClient {
         }
         if (!retry.isEmpty() && lines.size() > 1) {
             for (int index : retry) {
+                if (cancellation != null && cancellation.isRequested()) throw new IOException("translation cancelled");
                 String source = lines.get(index);
-                List<String> retried = translateWithLlm(List.of(source), null);
+                List<String> retried = translateWithLlm(List.of(source), null, null);
                 String fixed = isAcceptable(source, retried.get(0)) ? retried.get(0) : source;
                 result.set(index, fixed);
                 if (onLine != null && !fixed.equals(source)) onLine.accept(index, fixed);
@@ -244,18 +255,45 @@ public class TranslationClient {
         return node.path("choices").path(0).path("message").path("content").asText("");
     }
 
-    private String streamLlm(List<String> lines, BiConsumer<Integer, String> onLine) throws IOException {
+    public static final class Cancellation {
+        private volatile boolean requested;
+        private volatile Runnable abort;
+
+        public void cancel() {
+            requested = true;
+            Runnable current = abort;
+            if (current != null) current.run();
+        }
+
+        public boolean isRequested() {
+            return requested;
+        }
+
+        private void attach(Runnable abort) {
+            this.abort = abort;
+            if (requested) abort.run();
+        }
+    }
+
+    private String streamLlm(List<String> lines, BiConsumer<Integer, String> onLine, @Nullable Cancellation cancellation) throws IOException {
+        if (cancellation != null && cancellation.isRequested()) throw new IOException("translation cancelled");
         HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/v1/chat/completions"))
                 .header("Content-Type", "application/json")
                 .timeout(Duration.ofSeconds(300))
                 .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(buildLlmRequest(lines, true))))
                 .build();
+        CompletableFuture<HttpResponse<Stream<String>>> pending = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofLines());
+        if (cancellation != null) cancellation.attach(() -> pending.cancel(true));
         HttpResponse<Stream<String>> response;
         try {
-            response = httpClient.send(request, HttpResponse.BodyHandlers.ofLines());
+            response = pending.get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("translation interrupted", e);
+        } catch (CancellationException e) {
+            throw new IOException("translation cancelled", e);
+        } catch (ExecutionException e) {
+            throw new IOException("translator request failed", e.getCause() == null ? e : e.getCause());
         }
         if (response.statusCode() / 100 != 2) {
             throw new IOException("translator " + response.statusCode());
@@ -264,8 +302,10 @@ public class TranslationClient {
         JsonArrayObjectScanner scanner = new JsonArrayObjectScanner();
         java.util.Set<Integer> delivered = new java.util.HashSet<>();
         try (Stream<String> body = response.body()) {
+            if (cancellation != null) cancellation.attach(body::close);
             Iterator<String> iterator = body.iterator();
             while (iterator.hasNext()) {
+                if (cancellation != null && cancellation.isRequested()) throw new IOException("translation cancelled");
                 String line = iterator.next();
                 if (!line.startsWith("data:")) continue;
                 String data = line.substring(5).trim();
@@ -289,7 +329,11 @@ public class TranslationClient {
                     }
                 }
             }
+        } catch (UncheckedIOException e) {
+            if (cancellation != null && cancellation.isRequested()) throw new IOException("translation cancelled", e);
+            throw e.getCause();
         }
+        if (cancellation != null && cancellation.isRequested()) throw new IOException("translation cancelled");
         return content.toString();
     }
 
