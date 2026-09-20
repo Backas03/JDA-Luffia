@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
 public class MusicPlayerClient {
     public static final int DEFAULT_VOLUME = 10;
     public static final float KARAOKE_ECHO_SECONDS = 0.30f;
-    public static final float KARAOKE_ECHO_DECAY = 0.45f;
+    public static final float KARAOKE_ECHO_DECAY = 0.15f;
     public static final float KARAOKE_CENTER_GAIN = 1.3f;
 
     private final AudioPlayerManager audioPlayerManager;
