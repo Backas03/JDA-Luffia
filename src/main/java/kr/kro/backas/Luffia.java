@@ -37,6 +37,7 @@ public class Luffia {
         this.commandManager.registerSlashCommand(new SetRepeatModeSlashCommand());
         this.commandManager.registerSlashCommand(new PlaySpeedSlashCommand());
         this.commandManager.registerSlashCommand(new VolumeSlashCommand());
+        this.commandManager.registerSlashCommand(new LyricsSlashCommand());
         this.commandManager.registerSlashCommand(new PauseOrResumeSlashCommand());
         this.commandManager.registerSlashCommand(new SkipSlashCommand());
         this.commandManager.registerSlashCommand(new EqualizerSlashCommand());

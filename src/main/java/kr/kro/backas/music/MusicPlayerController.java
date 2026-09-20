@@ -1,6 +1,7 @@
 package kr.kro.backas.music;
 
 import club.minnced.discord.jdave.interop.JDaveSessionFactory;
+import kr.kro.backas.music.lyrics.LrcLibClient;
 import kr.kro.backas.music.source.MusicSourceRegistry;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
@@ -24,15 +25,25 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 
 public class MusicPlayerController extends ListenerAdapter {
     private final MusicSourceRegistry sourceRegistry;
     private final Set<MusicPlayerClient> clients;
 
     private final Map<Long, MusicLoader> searchData;
+    private final ScheduledExecutorService scheduler;
+    private final LrcLibClient lyricsClient;
 
     public MusicPlayerController(MusicSourceRegistry sourceRegistry) {
         this.sourceRegistry = sourceRegistry;
+        this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread thread = new Thread(r, "music-scheduler");
+            thread.setDaemon(true);
+            return thread;
+        });
+        this.lyricsClient = new LrcLibClient();
         this.clients = new CopyOnWriteArraySet<>();
         this.searchData = new ConcurrentHashMap<>();
     }
@@ -54,6 +65,14 @@ public class MusicPlayerController extends ListenerAdapter {
 
     public MusicSourceRegistry getSourceRegistry() {
         return sourceRegistry;
+    }
+
+    public ScheduledExecutorService getScheduler() {
+        return scheduler;
+    }
+
+    public LrcLibClient getLyricsClient() {
+        return lyricsClient;
     }
 
     public void search(Identifier id, String query, Member member, SlashCommandInteractionEvent slashEvent) {
@@ -181,6 +200,7 @@ public class MusicPlayerController extends ListenerAdapter {
                 Thread.currentThread().interrupt();
             }
         }
+        scheduler.shutdownNow();
         sourceRegistry.shutdown();
     }
 }
