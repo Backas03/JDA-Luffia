@@ -27,8 +27,6 @@ public class LyricsSession {
     public static final long TICK_MS = 200;
     public static final long MIN_EDIT_INTERVAL_MS = 1200;
     public static final long DEFAULT_OFFSET_MS = 600;
-    public static final int FIRST_TRANSLATION_CHUNK = 3;
-    public static final int TRANSLATION_CHUNK = 10;
     public static final String TRANSLATING_NOTE = "번역 중...";
     private static final String BLANK = "​";
     private static final String WIDTH_FILLER = "⠀".repeat(48);
@@ -113,14 +111,7 @@ public class LyricsSession {
         translating = true;
         CompletableFuture.runAsync(() -> {
             try {
-                int from = 0;
-                int chunk = FIRST_TRANSLATION_CHUNK;
-                while (from < pending.size() && !stopped.get()) {
-                    int to = Math.min(pending.size(), from + chunk);
-                    translateChunk(lines, pending.subList(from, to));
-                    from = to;
-                    chunk = TRANSLATION_CHUNK;
-                }
+                translateChunk(lines, pending);
             } finally {
                 translating = false;
                 LyricsPresenter.prefetchNext(client);
@@ -133,7 +124,11 @@ public class LyricsSession {
         List<String> sources = new ArrayList<>(indices.size());
         for (int index : indices) sources.add(lines.get(index).text());
         try {
-            List<String> translated = translator.translate("auto", sources);
+            List<String> translated = translator.translate("auto", sources, (offset, text) -> {
+                if (offset >= 0 && offset < indices.size() && text != null && !text.isBlank() && !text.equals(sources.get(offset))) {
+                    translations.put(indices.get(offset), text);
+                }
+            });
             for (int i = 0; i < indices.size(); i++) {
                 String text = translated.get(i);
                 if (text != null && !text.isBlank() && !text.equals(sources.get(i))) {

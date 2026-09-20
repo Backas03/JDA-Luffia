@@ -12,6 +12,6 @@ exec nice -n "${LLM_NICE:-10}" bin/llama-server \
   --port "${PORT}" \
   -t "${THREADS}" \
   -tb "${THREADS_BATCH}" \
-  -c 4096 \
+  -c 8192 \
   -np 1 \
   --no-webui
