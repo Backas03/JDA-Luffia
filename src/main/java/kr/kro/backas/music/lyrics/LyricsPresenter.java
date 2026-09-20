@@ -225,7 +225,8 @@ public final class LyricsPresenter {
         TranslationClient translator = controller.getTranslationClient();
         if (translator == null || !translator.isEnabled()) return;
         List<AudioTrack> targets = new ArrayList<>(queue.subList(0, Math.min(PREFETCH_COUNT, queue.size())));
-        CompletableFuture.runAsync(() -> {
+        LOGGER.info("lyrics prefetch scheduled for {} queued track(s)", targets.size());
+        TranslationJobs.EXECUTOR.execute(() -> {
             for (AudioTrack next : targets) {
                 if (!client.isAutoLyricsEnabled()) return;
                 prefetchTrack(controller, translator, next);
@@ -239,7 +240,10 @@ public final class LyricsPresenter {
         try {
             LOGGER.info("prefetching lyrics translation for {}", next.getInfo().title);
             Lyrics lyrics = controller.getLyricsClient().find(next.getInfo());
-            if (lyrics == null || lyrics.instrumental()) return;
+            if (lyrics == null || lyrics.instrumental()) {
+                LOGGER.info("no lyrics to prefetch for {}", next.getInfo().title);
+                return;
+            }
             if (lyrics.hasSynced()) {
                 List<String> lines = new ArrayList<>();
                 lyrics.synced().forEach(line -> lines.add(line.text()));
