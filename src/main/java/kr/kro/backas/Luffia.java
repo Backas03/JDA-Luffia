@@ -64,7 +64,8 @@ public class Luffia {
         this.certificationManager = null; // new CertificationManager(discordAPI);
 
         this.musicPlayerController = new MusicPlayerController(
-                new MusicSourceRegistry(BotSecret.SPOTIFY_CLIENT_ID, BotSecret.SPOTIFY_CLIENT_SECRET, BotSecret.SPOTIFY_REFRESH_TOKEN));
+                new MusicSourceRegistry(BotSecret.SPOTIFY_CLIENT_ID, BotSecret.SPOTIFY_CLIENT_SECRET, BotSecret.SPOTIFY_REFRESH_TOKEN),
+                BotSecret.TRANSLATOR_URL);
         this.musicPlayerController.register(discordAPI);
         discordAPI.addEventListener(this.musicPlayerController);
 

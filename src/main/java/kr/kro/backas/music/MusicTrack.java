@@ -7,6 +7,8 @@ import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -85,6 +87,21 @@ public class MusicTrack {
         } else {
             event.replyEmbeds(embed).mentionRepliedUser(false).queue();
         }
+    }
+
+    public synchronized int skip(int count) {
+        List<AudioTrack> dropped = new ArrayList<>();
+        for (int i = 1; i < count; i++) {
+            AudioTrack next = trackQueue.poll();
+            if (next == null) break;
+            dropped.add(next);
+        }
+        if (repeatMode == RepeatMode.REPEAT_ALL) {
+            trackQueue.addAll(dropped);
+        }
+        AudioTrack current = player.getPlayingTrack();
+        playNextTrack(current == null ? null : current.makeClone());
+        return dropped.size() + (current == null ? 0 : 1);
     }
 
     public boolean hasNextTrack() {

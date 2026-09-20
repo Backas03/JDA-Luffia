@@ -288,9 +288,11 @@ public class MusicPlayerClient {
     }
 
     public void skipNowPlaying() {
-        AudioTrack track = this.audioPlayer.getPlayingTrack();
-        if (track != null) track = track.makeClone();
-        musicTrack.playNextTrack(track);
+        musicTrack.skip(1);
+    }
+
+    public int skip(int count) {
+        return musicTrack.skip(Math.max(1, count));
     }
 
     public void connectToVoiceChannel(@NotNull VoiceChannel channel) {
