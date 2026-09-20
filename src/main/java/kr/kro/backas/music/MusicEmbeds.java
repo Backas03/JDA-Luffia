@@ -117,7 +117,9 @@ public final class MusicEmbeds {
                 .addField("노래 봇", botName(musicBot), true)
                 .addField("총 재생 시간", DurationUtil.formatDuration((int) (totalMs / 1000)), true)
                 .addField("출처", sourceLabel(first), true)
-                .addField("첫 곡", "[" + first.getInfo().title + "](" + first.getInfo().uri + ")", false)
+                .addField("첫 곡", "[" + first.getInfo().title + "](" + first.getInfo().uri + ")", true)
+                .addField("아티스트", first.getInfo().author == null || first.getInfo().author.isBlank() ? "-" : first.getInfo().author, true)
+                .addField("재생 시간", durationOf(first.getInfo()), true)
                 .setFooter(MemberUtil.getName(requester));
         if (author != null && !author.isBlank()) {
             builder.setAuthor(author);
