@@ -22,7 +22,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 public final class LyricsPresenter {
@@ -85,6 +87,7 @@ public final class LyricsPresenter {
                             sendEmbeds.apply(List.of(MusicEmbeds.error(requester, "가사를 찾지 못했습니다",
                                     track.getInfo().author + " - " + track.getInfo().title).build()));
                         }
+                        prefetchNext(client);
                         return;
                     }
                     if (!client.isCurrentTrack(track)) return;
@@ -104,11 +107,11 @@ public final class LyricsPresenter {
                         });
                         return;
                     }
-                    showFull(track, lyrics, requester, liveWanted, sendEmbeds, controller.getTranslationClient());
+                    showFull(client, track, lyrics, requester, liveWanted, sendEmbeds, controller.getTranslationClient());
                 });
     }
 
-    private static void showFull(AudioTrack track, Lyrics lyrics, @Nullable Member requester, boolean liveWanted,
+    private static void showFull(MusicPlayerClient client, AudioTrack track, Lyrics lyrics, @Nullable Member requester, boolean liveWanted,
                                  Function<List<MessageEmbed>, CompletableFuture<Message>> sendEmbeds,
                                  TranslationClient translator) {
         List<String> lines = fullLines(lyrics);
@@ -135,7 +138,45 @@ public final class LyricsPresenter {
                         : finalFooter + "\n" + machineTranslationNote(translator);
                 message.editMessageEmbeds(buildFullEmbeds(track, lines, translations, doneFooter))
                         .queue(null, e -> LOGGER.debug("failed to attach translations", e));
+                prefetchNext(client);
             });
+        });
+    }
+
+    private static final Set<String> PREFETCHING = ConcurrentHashMap.newKeySet();
+
+    public static void prefetchNext(MusicPlayerClient client) {
+        if (!client.isAutoLyricsEnabled()) return;
+        List<AudioTrack> queue = client.getTrackQueue();
+        if (queue.isEmpty()) return;
+        AudioTrack next = queue.get(0);
+        MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
+        TranslationClient translator = controller.getTranslationClient();
+        if (translator == null || !translator.isEnabled()) return;
+        String key = next.getIdentifier();
+        if (!PREFETCHING.add(key)) return;
+        CompletableFuture.runAsync(() -> {
+            try {
+                Lyrics lyrics = controller.getLyricsClient().find(next.getInfo());
+                if (lyrics == null || lyrics.instrumental()) return;
+                if (lyrics.hasSynced()) {
+                    List<String> lines = new ArrayList<>();
+                    lyrics.synced().forEach(line -> lines.add(line.text()));
+                    if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lyrics.synced()))) return;
+                    translateAll(translator, key, lines);
+                } else if (lyrics.hasPlain()) {
+                    List<String> lines = fullLines(lyrics);
+                    List<LyricLine> asLines = new ArrayList<>();
+                    for (String line : lines) asLines.add(new LyricLine(0, line));
+                    if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(asLines))) return;
+                    translateAll(translator, key + ":plain", lines);
+                }
+                LOGGER.info("prefetched lyrics translation for {}", next.getInfo().title);
+            } catch (Exception e) {
+                LOGGER.debug("lyrics prefetch failed for {}", next.getInfo().title, e);
+            } finally {
+                PREFETCHING.remove(key);
+            }
         });
     }
 
