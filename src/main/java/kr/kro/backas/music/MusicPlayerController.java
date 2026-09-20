@@ -1,6 +1,6 @@
 package kr.kro.backas.music;
 
-import kr.kro.backas.SharedConstant;
+import kr.kro.backas.music.source.MusicSourceRegistry;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
@@ -18,163 +18,127 @@ import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.awt.*;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArraySet;
 
 public class MusicPlayerController extends ListenerAdapter {
+    private final MusicSourceRegistry sourceRegistry;
     private final Set<MusicPlayerClient> clients;
-    // key: memberId
+
     private final Map<Long, MusicLoader> searchData;
 
-    public MusicPlayerController() {
-        this.clients = new HashSet<>();
-        this.searchData = new HashMap<>();
+    public MusicPlayerController(MusicSourceRegistry sourceRegistry) {
+        this.sourceRegistry = sourceRegistry;
+        this.clients = new CopyOnWriteArraySet<>();
+        this.searchData = new ConcurrentHashMap<>();
     }
 
     public void register(String botToken) throws InterruptedException {
         JDABuilder builder = JDABuilder
                 .createDefault(botToken)
-                .setChunkingFilter(ChunkingFilter.ALL) // enable member chunking for all guilds
+                .setChunkingFilter(ChunkingFilter.ALL)
                 .setMemberCachePolicy(MemberCachePolicy.ALL)
                 .enableIntents(GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MEMBERS)
                 .enableCache(CacheFlag.ROLE_TAGS);
-        MusicPlayerClient client = new MusicPlayerClient(builder.build().awaitReady());
-        this.clients.add(client);
+        register(builder.build().awaitReady());
     }
 
     public void register(JDA discordAPI) {
-        this.clients.add(new MusicPlayerClient(discordAPI));
+        this.clients.add(new MusicPlayerClient(discordAPI, sourceRegistry.getAudioPlayerManager()));
+    }
+
+    public MusicSourceRegistry getSourceRegistry() {
+        return sourceRegistry;
     }
 
     public void search(Identifier id, String query, Member member, SlashCommandInteractionEvent slashEvent) {
         VoiceChannel joinedVoiceChannel = MemberUtil.getJoinedVoiceChannel(member);
         if (joinedVoiceChannel == null) {
-            EmbedBuilder builder = new EmbedBuilder()
-                    .setColor(Color.decode("#f1554a"))
-                    .setAuthor(MemberUtil.getName(member))
-                    .setTitle("음악을 검색할 수 없습니다.")
-                    .setDescription("음악을 재생하려면 음성채팅방에 먼저 참여해주세요.")
-                    .setFooter(SharedConstant.RELEASE_VERSION);
-            slashEvent.replyEmbeds(builder.build())
-                    .queue();
+            slashEvent.replyEmbeds(MusicEmbeds.error(member,
+                    "음악을 검색할 수 없습니다.",
+                    "음악을 재생하려면 음성채팅방에 먼저 참여해주세요.").build()).queue();
             return;
         }
-        MusicPlayerClient client = findFromVoiceChannel(joinedVoiceChannel);
+        MusicPlayerClient client = findAvailableClient(joinedVoiceChannel);
         if (client == null) {
-            for (MusicPlayerClient registered : clients) {
-                if (registered.getJoinedVoiceChannel() == null) {
-                    client = registered;
-                    break;
-                }
-            }
-        }
-        if (client == null) {
-            EmbedBuilder builder = new EmbedBuilder()
-                    .setColor(Color.decode("#f1554a"))
-                    .setAuthor(MemberUtil.getName(member))
-                    .setTitle("음악을 재생할 수 없습니다.")
-                    .setDescription("현재 모든 노래봇이 음악을 재생중 입니다. 나중에 다시 시도해주세요.")
-                    .setFooter(SharedConstant.RELEASE_VERSION);
-            slashEvent.replyEmbeds(builder.build())
-                    .queue();
+            slashEvent.replyEmbeds(MusicEmbeds.error(member,
+                    "음악을 재생할 수 없습니다.",
+                    "현재 모든 노래봇이 음악을 재생중 입니다. 나중에 다시 시도해주세요.").build()).queue();
             return;
         }
-        MusicLoader loader = new MusicLoader(client, new MusicSearchQueryInfo(
+        MusicLoader loader = new MusicLoader(this, client, new MusicSearchQueryInfo(
                 id,
                 query,
                 member,
                 slashEvent
         ));
-        loader.loadMusic();
+
         searchData.put(member.getIdLong(), loader);
+        loader.loadMusic();
     }
 
     public Set<MusicPlayerClient> getRegisteredClients() {
         return clients;
     }
 
-    // the user select a track from search list. enqueue it.
     @Override
     public void onStringSelectInteraction(@NotNull StringSelectInteractionEvent event) {
-        if (event.getComponentId().equals(MusicLoader.PLAYLIST_STRING_SELECT_MENU_ID)) {
-            // member cannot be null if bot services only guild channels.
-            Member member = event.getMember();
+        if (!event.getComponentId().equals(MusicLoader.PLAYLIST_STRING_SELECT_MENU_ID)) return;
 
-            MusicLoader loader = searchData.get(member.getIdLong());
-            if (loader == null) return;
-            if (!loader.isTrackLoaded()) { // code may not reach here
-                event.getMessage()
-                        .getChannel()
-                        .sendMessage("서버에서 요청하신 음악을 가져오고 있습니다. 잠시만 기다려주세요")
-                        .queue();
-                return;
-            }
-            try {
-                // enqueue or play
-                EmbedBuilder result = findClientAndEnqueue(new MusicSelection(
-                        loader.getQueryInfo(),
-                        loader.getLoadedTracks().get(event.getValues().get(0))
-                ));
-                event.editSelectMenu(event.getComponent().asDisabled()).queue();
-                event.getMessage()
-                        .replyEmbeds(result.build())
-                        .mentionRepliedUser(false)
-                        .queue();
-            } catch (MusicPlayerException e) {
-                switch (e.getErrorType()) {
-                    case NOT_IN_VOICE_CHANNEL -> {
-                        EmbedBuilder builder = new EmbedBuilder()
-                                .setColor(Color.decode("#f1554a"))
-                                .setAuthor(MemberUtil.getName(member))
-                                .setTitle("음악을 검색할 수 없습니다.")
-                                .setDescription("음악을 재생하려면 음성채팅방에 먼저 참여해주세요.")
-                                .setFooter(SharedConstant.RELEASE_VERSION);
-                        event.getMessage()
-                                .getChannel()
-                                .sendMessageEmbeds(builder.build())
-                                .queue();
-                    }
-                    case NO_AVAILABLE_CLIENTS_FOUND -> {
-                        EmbedBuilder builder = new EmbedBuilder()
-                                .setColor(Color.decode("#f1554a"))
-                                .setAuthor(MemberUtil.getName(member))
-                                .setTitle("음악을 재생할 수 없습니다.")
-                                .setDescription("현재 모든 노래봇이 음악을 재생중 입니다. 나중에 다시 시도해주세요.")
-                                .setFooter(SharedConstant.RELEASE_VERSION);
-                        event.getMessage()
-                                .getChannel()
-                                .sendMessageEmbeds(builder.build())
-                                .queue();
-                    }
-                }
-            }
+        Member member = event.getMember();
+        if (member == null) return;
+
+        MusicLoader loader = searchData.get(member.getIdLong());
+        if (loader == null) {
+            event.reply("본인이 검색한 결과만 선택할 수 있습니다. 검색 결과가 만료되었다면 다시 검색해주세요.")
+                    .setEphemeral(true)
+                    .queue();
+            return;
+        }
+        if (!loader.isTrackLoaded()) {
+            event.reply("서버에서 요청하신 음악을 가져오고 있습니다. 잠시만 기다려주세요")
+                    .setEphemeral(true)
+                    .queue();
+            return;
+        }
+        try {
+            EmbedBuilder result = findClientAndEnqueue(new MusicSelection(
+                    loader.getQueryInfo(),
+                    loader.getLoadedTracks().get(event.getValues().get(0))
+            ));
+            event.editSelectMenu(event.getComponent().asDisabled()).queue();
+            event.getMessage()
+                    .replyEmbeds(result.build())
+                    .mentionRepliedUser(false)
+                    .queue();
+        } catch (MusicPlayerException e) {
+            EmbedBuilder builder = switch (e.getErrorType()) {
+                case NOT_IN_VOICE_CHANNEL -> MusicEmbeds.error(member,
+                        "음악을 검색할 수 없습니다.",
+                        "음악을 재생하려면 음성채팅방에 먼저 참여해주세요.");
+                case NO_AVAILABLE_CLIENTS_FOUND -> MusicEmbeds.error(member,
+                        "음악을 재생할 수 없습니다.",
+                        "현재 모든 노래봇이 음악을 재생중 입니다. 나중에 다시 시도해주세요.");
+            };
+            event.replyEmbeds(builder.build()).queue();
         }
     }
 
-    // result message 를 build
     public EmbedBuilder findClientAndEnqueue(MusicSelection selection) throws MusicPlayerException {
         Member requestedMember = selection.getRequestedMember();
         AudioChannelUnion joinedAudioChannel = MemberUtil.getJoinedAudioChannel(requestedMember);
         if (joinedAudioChannel == null) {
             throw new MusicPlayerException(MusicPlayerException.Type.NOT_IN_VOICE_CHANNEL);
         }
-        MusicPlayerClient client = findFromVoiceChannel(joinedAudioChannel.asVoiceChannel());
-        if (client == null) {
-            for (MusicPlayerClient registered : clients) {
-                if (registered.getJoinedVoiceChannel() == null) {
-                    client = registered;
-                    break;
-                }
-            }
-        }
+        VoiceChannel voiceChannel = joinedAudioChannel.asVoiceChannel();
+        MusicPlayerClient client = findAvailableClient(voiceChannel);
         if (client == null) {
             throw new MusicPlayerException(MusicPlayerException.Type.NO_AVAILABLE_CLIENTS_FOUND);
         }
         searchData.remove(requestedMember.getIdLong());
-        return client.enqueue(selection, joinedAudioChannel.asVoiceChannel());
+        return client.enqueue(selection, voiceChannel);
     }
 
     public void expireSearchData(long memberId) {
@@ -187,8 +151,19 @@ public class MusicPlayerController extends ListenerAdapter {
 
     public @Nullable MusicPlayerClient findFromVoiceChannel(VoiceChannel channel) {
         for (MusicPlayerClient client : clients) {
-            if (client.getJoinedVoiceChannel() == null) return client;
-            if (client.getJoinedVoiceChannel().getId().equals(channel.getId())) {
+            VoiceChannel joined = client.getJoinedVoiceChannel();
+            if (joined != null && joined.getIdLong() == channel.getIdLong()) {
+                return client;
+            }
+        }
+        return null;
+    }
+
+    public @Nullable MusicPlayerClient findAvailableClient(VoiceChannel channel) {
+        MusicPlayerClient inChannel = findFromVoiceChannel(channel);
+        if (inChannel != null) return inChannel;
+        for (MusicPlayerClient client : clients) {
+            if (client.getJoinedVoiceChannel() == null) {
                 return client;
             }
         }
@@ -200,8 +175,9 @@ public class MusicPlayerController extends ListenerAdapter {
             try {
                 client.shutdownGracefully();
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                Thread.currentThread().interrupt();
             }
         }
+        sourceRegistry.shutdown();
     }
 }
