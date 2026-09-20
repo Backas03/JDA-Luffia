@@ -175,9 +175,9 @@ public static final List<String> MUSIC_BOT_TOKENS = List.of(
 로그인한 계정이 만들었거나 라이브러리에 저장한 플레이리스트만 읽을 수 있습니다. 다른 사람의 플레이리스트를 재생하려면 해당 계정에서 먼저 저장해 두어야 합니다.
 
 #### 가사 번역 설정
-`/가사` 실시간 표시에서 현재 줄 아래에 한국어 번역을 붙이려면 번역 사이드카(Python, CPU 전용, GPU 불필요)를 같은 서버에 띄웁니다. Meta NLLB-200 모델을 CTranslate2 int8 로 실행하며 RAM 약 2GB 를 사용합니다.
+`/가사` 실시간 표시에서 현재 줄 아래에 한국어 번역을 붙이려면 번역 사이드카(Python, CPU 전용, GPU 불필요)를 같은 서버에 띄웁니다. Meta NLLB-200 3.3B 모델을 CTranslate2 int8 로 실행하며 RAM 약 5GB 를 사용합니다. (더 가볍게 쓰려면 setup.sh 와 server.py 의 모델 이름을 ``facebook/nllb-200-distilled-1.3B`` 또는 ``600M`` 으로 바꾸면 됩니다)
 1. 서버에 Python 3.10 이상을 준비합니다.
-2. ``translator/setup.sh`` 를 실행합니다. 의존성 설치와 모델 변환(약 2.5GB 다운로드)을 한 번만 합니다.
+2. ``translator/setup.sh`` 를 실행합니다. 의존성 설치와 모델 변환(약 7GB 다운로드, 10분 내외)을 한 번만 합니다.
 3. ``translator/run.sh`` 로 사이드카를 실행합니다. (기본 127.0.0.1:8765, ``TRANSLATOR_PORT`` 로 변경)
 4. ``BotSecret.TRANSLATOR_URL`` 에 ``http://127.0.0.1:8765`` 를 넣고 봇을 다시 시작합니다.
 

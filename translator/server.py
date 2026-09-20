@@ -7,8 +7,8 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from transformers import AutoTokenizer
 
-MODEL_DIR = os.environ.get("NLLB_MODEL_DIR", os.path.join(os.path.dirname(__file__), "models", "nllb-200-distilled-600M-int8"))
-TOKENIZER_NAME = os.environ.get("NLLB_TOKENIZER", "facebook/nllb-200-distilled-600M")
+MODEL_DIR = os.environ.get("NLLB_MODEL_DIR", os.path.join(os.path.dirname(__file__), "models", "nllb-200-3.3B-int8"))
+TOKENIZER_NAME = os.environ.get("NLLB_TOKENIZER", "facebook/nllb-200-3.3B")
 TARGET_DEFAULT = "kor_Hang"
 BEAM_SIZE = int(os.environ.get("NLLB_BEAM_SIZE", "2"))
 MAX_BATCH = int(os.environ.get("NLLB_MAX_BATCH", "16"))
