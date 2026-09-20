@@ -9,7 +9,6 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Member;
-import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
@@ -79,7 +78,7 @@ public class MusicLoader implements AudioLoadResultHandler {
             return;
         }
         EmbedBuilder result = musicPlayerClient.enqueue(new MusicSelection(queryInfo, track), channel);
-        replyWithPreview(result, MusicEmbeds.previewLinkOf(track));
+        hook.editOriginalEmbeds(result.build()).queue();
     }
 
     @Override
@@ -125,7 +124,7 @@ public class MusicLoader implements AudioLoadResultHandler {
         AudioTrack selected = playlist.getSelectedTrack();
         if (selected != null) {
             EmbedBuilder result = musicPlayerClient.enqueue(new MusicSelection(queryInfo, selected), channel);
-            replyWithPreview(result, MusicEmbeds.previewLinkOf(selected));
+            hook.editOriginalEmbeds(result.build()).queue();
             return;
         }
         List<AudioTrack> tracks = playlist.getTracks();
@@ -148,7 +147,7 @@ public class MusicLoader implements AudioLoadResultHandler {
         }
         EmbedBuilder result = MusicEmbeds.playlistEnqueued(
                 playlist, added, total, startedPlaying, musicPlayerClient.getMusicBot(), requester());
-        replyWithPreview(result, MusicEmbeds.previewLinkOf(playlist, added.get(0)));
+        hook.editOriginalEmbeds(result.build()).queue();
     }
 
     @Override
@@ -179,18 +178,6 @@ public class MusicLoader implements AudioLoadResultHandler {
                 "재통신을 시도합니다. (" + retryAttempt + "/" + MAX_LOADING_MUSIC_RETRY_ATTEMPT + ")"
                         + (reason.isBlank() ? "" : "\n" + reason)).build()).queue();
         CompletableFuture.runAsync(this::loadMusic, CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS));
-    }
-
-    private void replyWithPreview(EmbedBuilder result, String previewLink) {
-        MessageEmbed embed = result.build();
-        if (previewLink.isEmpty()) {
-            hook.editOriginalEmbeds(embed).queue();
-            return;
-        }
-        queryInfo.getSlashCommandInteractionEvent()
-                .getMessageChannel()
-                .sendMessage(MusicEmbeds.toPlainText(embed, previewLink))
-                .queue(message -> hook.deleteOriginal().queue());
     }
 
     private void replyNotInVoiceChannel() {
