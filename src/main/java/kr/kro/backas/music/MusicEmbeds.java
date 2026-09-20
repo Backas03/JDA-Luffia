@@ -40,7 +40,7 @@ public final class MusicEmbeds {
         if (name == null) return "알 수 없음";
         return switch (name) {
             case "youtube" -> "YouTube";
-            case "spotify" -> "Spotify (YouTube 미러 재생)";
+            case "spotify" -> "Spotify";
             default -> name;
         };
     }
