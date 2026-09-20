@@ -36,7 +36,6 @@ public final class LyricsPresenter {
     private static final Logger LOGGER = LoggerFactory.getLogger(LyricsPresenter.class);
     private static final int EMBED_TEXT_LIMIT = 4000;
     private static final int MESSAGE_TEXT_BUDGET = 5800;
-    private static final int TRANSLATION_BATCH = 400;
     private static final String TRUNCATED_NOTE = "… (이하 생략)";
     public static final String MACHINE_TRANSLATION_NOTE = "기계 번역한 가사입니다. 올바르지 않을 수 있습니다.";
 
@@ -136,6 +135,7 @@ public final class LyricsPresenter {
             }
             if (!willTranslate) return;
             CompletableFuture.runAsync(() -> {
+                retainTranslations(client, track);
                 Map<Integer, String> cache = translator.cacheFor(track.getIdentifier() + ":plain");
                 ProgressiveEditor editor = new ProgressiveEditor(message.getChannel().getIdLong(), () ->
                         message.editMessageEmbeds(buildFullEmbeds(track, lines, cache, initialFooter))
@@ -246,32 +246,17 @@ public final class LyricsPresenter {
 
     private static Map<Integer, String> translateAll(TranslationClient translator, String cacheKey, List<String> lines,
                                                      @Nullable BiConsumer<Integer, String> onLine) {
-        Map<Integer, String> cache = translator.cacheFor(cacheKey);
-        List<Integer> pending = new ArrayList<>();
-        for (int i = 0; i < lines.size(); i++) {
-            if (!cache.containsKey(i) && LyricsLanguage.needsTranslation(lines.get(i))) pending.add(i);
-        }
-        for (int from = 0; from < pending.size(); from += TRANSLATION_BATCH) {
-            List<Integer> indices = pending.subList(from, Math.min(pending.size(), from + TRANSLATION_BATCH));
-            List<String> sources = new ArrayList<>(indices.size());
-            for (int index : indices) sources.add(lines.get(index));
-            try {
-                List<String> translated = translator.translate("auto", sources, onLine == null ? null : (offset, text) -> {
-                    if (offset >= 0 && offset < indices.size() && text != null && !text.isBlank() && !text.equals(sources.get(offset))) {
-                        cache.put(indices.get(offset), text);
-                        onLine.accept(indices.get(offset), text);
-                    }
-                });
-                for (int i = 0; i < indices.size(); i++) {
-                    String text = translated.get(i);
-                    if (text != null && !text.isBlank() && !text.equals(sources.get(i))) cache.put(indices.get(i), text);
-                }
-            } catch (Exception e) {
-                LOGGER.warn("full lyrics translation failed ({} lines)", indices.size(), e);
-                break;
-            }
-        }
-        return cache;
+        return translator.translateTrack(cacheKey, lines, onLine).join();
+    }
+
+    public static void retainTranslations(MusicPlayerClient client, AudioTrack current) {
+        TranslationClient translator = Main.getLuffia().getMusicPlayerController().getTranslationClient();
+        if (translator == null || !translator.isEnabled()) return;
+        List<String> keep = new ArrayList<>();
+        keep.add(current.getIdentifier());
+        List<AudioTrack> queue = client.getTrackQueue();
+        for (AudioTrack next : queue.subList(0, Math.min(PREFETCH_COUNT, queue.size()))) keep.add(next.getIdentifier());
+        translator.cancelJobsExcept(keep);
     }
 
     private static List<String> fullLines(Lyrics lyrics) {

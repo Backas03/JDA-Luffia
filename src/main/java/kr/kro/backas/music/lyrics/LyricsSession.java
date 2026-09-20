@@ -15,7 +15,6 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -67,6 +66,7 @@ public class LyricsSession {
 
     public void start() {
         ticker = scheduler.scheduleAtFixedRate(this::tick, 0, TICK_MS, TimeUnit.MILLISECONDS);
+        LyricsPresenter.retainTranslations(client, track);
         startTranslation();
         LyricsPresenter.prefetchNext(client);
     }
@@ -103,41 +103,14 @@ public class LyricsSession {
         if (translator == null) return false;
         List<LyricLine> lines = lyrics.synced();
         if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lines))) return false;
-        List<Integer> pending = new ArrayList<>();
-        for (int i = 0; i < lines.size(); i++) {
-            if (!translations.containsKey(i) && LyricsLanguage.needsTranslation(lines.get(i).text())) pending.add(i);
-        }
-        if (pending.isEmpty()) return false;
+        List<String> sources = new ArrayList<>(lines.size());
+        for (LyricLine line : lines) sources.add(line.text());
         translating = true;
-        CompletableFuture.runAsync(() -> {
-            try {
-                translateChunk(lines, pending);
-            } finally {
-                translating = false;
-                LyricsPresenter.prefetchNext(client);
-            }
+        translator.translateTrack(track.getIdentifier(), sources, null).whenComplete((result, error) -> {
+            translating = false;
+            LyricsPresenter.prefetchNext(client);
         });
         return true;
-    }
-
-    private void translateChunk(List<LyricLine> lines, List<Integer> indices) {
-        List<String> sources = new ArrayList<>(indices.size());
-        for (int index : indices) sources.add(lines.get(index).text());
-        try {
-            List<String> translated = translator.translate("auto", sources, (offset, text) -> {
-                if (offset >= 0 && offset < indices.size() && text != null && !text.isBlank() && !text.equals(sources.get(offset))) {
-                    translations.put(indices.get(offset), text);
-                }
-            });
-            for (int i = 0; i < indices.size(); i++) {
-                String text = translated.get(i);
-                if (text != null && !text.isBlank() && !text.equals(sources.get(i))) {
-                    translations.put(indices.get(i), text);
-                }
-            }
-        } catch (Exception e) {
-            LOGGER.warn("lyrics translation failed for {} ({} lines)", track.getInfo().title, indices.size(), e);
-        }
     }
 
     @Nullable

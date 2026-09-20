@@ -192,6 +192,7 @@ public class MusicPlayerClient {
     }
 
     private void onTrackStarted(AudioTrack track) {
+        LyricsPresenter.retainTranslations(this, track);
         MessageChannel channel = lyricsChannel;
         if (channel == null) return;
         LyricsSession current = lyricsSession;

@@ -15,19 +15,28 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.BiConsumer;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Stream;
 
 public class TranslationClient {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TranslationClient.class);
     private static final int CACHE_SIZE = 200;
+    private static final int JOB_BATCH = 400;
+    private final Map<String, TranslationJob> jobs = new ConcurrentHashMap<>();
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final String LLM_SYSTEM_PROMPT = String.join("\n",
             "You translate song lyrics into natural Korean.",
@@ -73,10 +82,93 @@ public class TranslationClient {
     }
 
     public List<String> translate(String sourceLanguage, List<String> lines, @Nullable BiConsumer<Integer, String> onLine) throws IOException {
+        return translate(sourceLanguage, lines, onLine, () -> false);
+    }
+
+    public CompletableFuture<Map<Integer, String>> translateTrack(String cacheKey, List<String> lines,
+                                                                  @Nullable BiConsumer<Integer, String> onLine) {
+        Map<Integer, String> cache = cacheFor(cacheKey);
+        TranslationJob existing = jobs.get(cacheKey);
+        if (existing != null) return existing.join(onLine);
+        List<Integer> pending = new ArrayList<>();
+        for (int i = 0; i < lines.size(); i++) {
+            if (!cache.containsKey(i) && LyricsLanguage.needsTranslation(lines.get(i))) pending.add(i);
+        }
+        if (pending.isEmpty()) return CompletableFuture.completedFuture(cache);
+        TranslationJob job = new TranslationJob(cacheKey);
+        TranslationJob raced = jobs.putIfAbsent(cacheKey, job);
+        if (raced != null) return raced.join(onLine);
+        job.join(onLine);
+        CompletableFuture.runAsync(() -> runJob(job, lines, pending, cache));
+        return job.done;
+    }
+
+    public boolean isTranslating(String cacheKey) {
+        return jobs.containsKey(cacheKey);
+    }
+
+    public void cancelJobsExcept(Collection<String> keepPrefixes) {
+        for (TranslationJob job : jobs.values()) {
+            boolean keep = false;
+            for (String prefix : keepPrefixes) {
+                if (job.key.startsWith(prefix)) {
+                    keep = true;
+                    break;
+                }
+            }
+            if (!keep && !job.cancelled) {
+                job.cancelled = true;
+                LOGGER.info("cancelling lyrics translation for {}", job.key);
+            }
+        }
+    }
+
+    private void runJob(TranslationJob job, List<String> lines, List<Integer> pending, Map<Integer, String> cache) {
+        try {
+            for (int from = 0; from < pending.size() && !job.cancelled; from += JOB_BATCH) {
+                List<Integer> indices = pending.subList(from, Math.min(pending.size(), from + JOB_BATCH));
+                List<String> sources = new ArrayList<>(indices.size());
+                for (int index : indices) sources.add(lines.get(index));
+                BiConsumer<Integer, String> deliver = (offset, text) -> {
+                    if (offset < 0 || offset >= indices.size() || text == null || text.isBlank() || text.equals(sources.get(offset))) return;
+                    int index = indices.get(offset);
+                    if (cache.put(index, text) != null) return;
+                    for (BiConsumer<Integer, String> listener : job.listeners) listener.accept(index, text);
+                };
+                List<String> translated = translate("auto", sources, deliver, () -> job.cancelled);
+                for (int i = 0; i < indices.size(); i++) deliver.accept(i, translated.get(i));
+            }
+        } catch (Exception e) {
+            if (job.cancelled) LOGGER.debug("lyrics translation cancelled for {}", job.key);
+            else LOGGER.warn("lyrics translation failed for {} ({} lines)", job.key, pending.size(), e);
+        } finally {
+            jobs.remove(job.key, job);
+            job.done.complete(cache);
+        }
+    }
+
+    private static final class TranslationJob {
+        private final String key;
+        private final List<BiConsumer<Integer, String>> listeners = new CopyOnWriteArrayList<>();
+        private final CompletableFuture<Map<Integer, String>> done = new CompletableFuture<>();
+        private volatile boolean cancelled;
+
+        private TranslationJob(String key) {
+            this.key = key;
+        }
+
+        private CompletableFuture<Map<Integer, String>> join(@Nullable BiConsumer<Integer, String> onLine) {
+            if (onLine != null) listeners.add(onLine);
+            return done;
+        }
+    }
+
+    private List<String> translate(String sourceLanguage, List<String> lines, @Nullable BiConsumer<Integer, String> onLine,
+                                   BooleanSupplier cancelled) throws IOException {
         if (baseUrl == null) throw new IOException("translator disabled");
         if (lines.isEmpty()) return List.of();
         Mode current = detectMode();
-        List<String> result = current == Mode.LLM ? translateWithLlm(lines, onLine) : translateWithNllb(sourceLanguage, lines);
+        List<String> result = current == Mode.LLM ? translateWithLlm(lines, onLine, cancelled) : translateWithNllb(sourceLanguage, lines);
         if (result.size() != lines.size()) {
             LOGGER.warn("translator returned {} lines for {} inputs", result.size(), lines.size());
             throw new IOException("translator line count mismatch");
@@ -193,8 +285,9 @@ public class TranslationClient {
         return body;
     }
 
-    private List<String> translateWithLlm(List<String> lines, @Nullable BiConsumer<Integer, String> onLine) throws IOException {
-        String content = onLine == null ? requestLlm(lines) : streamLlm(lines, onLine);
+    private List<String> translateWithLlm(List<String> lines, @Nullable BiConsumer<Integer, String> onLine,
+                                          BooleanSupplier cancelled) throws IOException {
+        String content = onLine == null ? requestLlm(lines) : streamLlm(lines, onLine, cancelled);
         JsonNode parsed;
         try {
             parsed = MAPPER.readTree(content);
@@ -224,7 +317,8 @@ public class TranslationClient {
         if (!retry.isEmpty() && lines.size() > 1) {
             for (int index : retry) {
                 String source = lines.get(index);
-                List<String> retried = translateWithLlm(List.of(source), null);
+                if (cancelled.getAsBoolean()) throw new IOException("translation cancelled");
+                List<String> retried = translateWithLlm(List.of(source), null, cancelled);
                 String fixed = isAcceptable(source, retried.get(0)) ? retried.get(0) : source;
                 result.set(index, fixed);
                 if (onLine != null && !fixed.equals(source)) onLine.accept(index, fixed);
@@ -244,18 +338,30 @@ public class TranslationClient {
         return node.path("choices").path(0).path("message").path("content").asText("");
     }
 
-    private String streamLlm(List<String> lines, BiConsumer<Integer, String> onLine) throws IOException {
+    private String streamLlm(List<String> lines, BiConsumer<Integer, String> onLine, BooleanSupplier cancelled) throws IOException {
         HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/v1/chat/completions"))
                 .header("Content-Type", "application/json")
                 .timeout(Duration.ofSeconds(300))
                 .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(buildLlmRequest(lines, true))))
                 .build();
+        CompletableFuture<HttpResponse<Stream<String>>> pending = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofLines());
         HttpResponse<Stream<String>> response;
-        try {
-            response = httpClient.send(request, HttpResponse.BodyHandlers.ofLines());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("translation interrupted", e);
+        while (true) {
+            try {
+                response = pending.get(250, TimeUnit.MILLISECONDS);
+                break;
+            } catch (TimeoutException e) {
+                if (cancelled.getAsBoolean()) {
+                    pending.cancel(true);
+                    throw new IOException("translation cancelled");
+                }
+            } catch (InterruptedException e) {
+                pending.cancel(true);
+                Thread.currentThread().interrupt();
+                throw new IOException("translation interrupted", e);
+            } catch (ExecutionException e) {
+                throw new IOException("translator request failed", e.getCause());
+            }
         }
         if (response.statusCode() / 100 != 2) {
             throw new IOException("translator " + response.statusCode());
@@ -266,6 +372,7 @@ public class TranslationClient {
         try (Stream<String> body = response.body()) {
             Iterator<String> iterator = body.iterator();
             while (iterator.hasNext()) {
+                if (cancelled.getAsBoolean()) throw new IOException("translation cancelled");
                 String line = iterator.next();
                 if (!line.startsWith("data:")) continue;
                 String data = line.substring(5).trim();
