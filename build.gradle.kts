@@ -11,6 +11,7 @@ repositories {
     maven("https://jitpack.io")
     maven("https://m2.dv8tion.net/releases")
     maven("https://maven.lavalink.dev/releases")
+    maven("https://maven.lavalink.dev/snapshots")
     maven("https://maven.topi.wtf/releases")
 }
 
@@ -26,7 +27,7 @@ dependencies {
     implementation("com.sun.mail:javax.mail:1.6.2")
 
     implementation("dev.arbjerg:lavaplayer:2.2.7")
-    implementation("dev.lavalink.youtube:v2:1.18.2")
+    implementation("dev.lavalink.youtube:v2:2be8e542d3f6f178e048dca565892684c2e40177-SNAPSHOT")
     implementation("com.github.topi314.lavasrc:lavasrc:4.8.3")
 
     implementation("com.google.api-client:google-api-client:2.2.0")

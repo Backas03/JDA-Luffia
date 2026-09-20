@@ -8,7 +8,10 @@ import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager;
 import dev.lavalink.youtube.YoutubeAudioSourceManager;
 import dev.lavalink.youtube.clients.AndroidVrWithThumbnail;
+import dev.lavalink.youtube.clients.Ios;
+import dev.lavalink.youtube.clients.MWebWithThumbnail;
 import dev.lavalink.youtube.clients.MusicWithThumbnail;
+import dev.lavalink.youtube.clients.TvHtml5Simply;
 import dev.lavalink.youtube.clients.WebEmbeddedWithThumbnail;
 import dev.lavalink.youtube.clients.WebWithThumbnail;
 import org.jetbrains.annotations.Nullable;
@@ -40,9 +43,12 @@ public final class MusicSourceRegistry {
         YoutubeAudioSourceManager youtube = new YoutubeAudioSourceManager(
                 true,
                 new MusicWithThumbnail(),
-                new WebWithThumbnail(),
+                new TvHtml5Simply(),
                 new AndroidVrWithThumbnail(),
-                new WebEmbeddedWithThumbnail()
+                new WebWithThumbnail(),
+                new MWebWithThumbnail(),
+                new WebEmbeddedWithThumbnail(),
+                new Ios()
         );
         youtube.setPlaylistPageCount(YOUTUBE_PLAYLIST_PAGE_COUNT);
         manager.registerSourceManager(youtube);
@@ -59,13 +65,14 @@ public final class MusicSourceRegistry {
             return false;
         }
         try {
-            SpotifySourceManager spotify = new SpotifySourceManager(
+            SpotifySourceManager spotify = new PatchedSpotifySourceManager(
                     clientId,
                     clientSecret,
                     SPOTIFY_COUNTRY_CODE,
                     unused -> manager,
                     new DefaultMirroringAudioTrackResolver(SPOTIFY_MIRROR_PROVIDERS)
             );
+            spotify.setResolveArtistsInSearch(false);
             spotify.setPlaylistPageLimit(SPOTIFY_PAGE_LIMIT);
             spotify.setAlbumPageLimit(SPOTIFY_PAGE_LIMIT);
             manager.registerSourceManager(spotify);
