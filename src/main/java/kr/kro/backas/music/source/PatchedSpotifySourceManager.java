@@ -31,9 +31,9 @@ public class PatchedSpotifySourceManager extends SpotifySourceManager {
             "이 플레이리스트는 읽을 수 없습니다. 봇에 로그인된 Spotify 계정이 만들었거나 라이브러리에 저장한 플레이리스트만 지원됩니다.";
     public static final String ARTIST_UNSUPPORTED_MESSAGE =
             "스포티파이 아티스트 링크는 현재 API 권한으로 읽을 수 없습니다. 곡 또는 앨범 링크를 이용해주세요.";
-    private static final int ALBUM_MAX_PAGES = 4;
+    private static final int ALBUM_MAX_PAGES = 10;
     private static final int PLAYLIST_PAGE_SIZE = 100;
-    private static final int PLAYLIST_MAX_PAGES = 2;
+    private static final int PLAYLIST_MAX_PAGES = 10;
 
     private final SpotifyUserTokenTracker userToken;
     private final HttpClient httpClient = HttpClient.newHttpClient();
