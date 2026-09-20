@@ -222,7 +222,9 @@ public class LyricsSession {
         text.append("-# ").append(WIDTH_FILLER).append('\n');
         text.append("-# ").append(footer == null ? song : song + " · " + footer);
         if ((translation != null && !translation.isBlank()) || pendingTranslation) {
-            text.append('\n').append("-# ").append(LyricsPresenter.machineTranslationNote(translator));
+            for (String noteLine : LyricsPresenter.machineTranslationNote(translator).split("\n")) {
+                text.append('\n').append("-# ").append(noteLine);
+            }
         }
         TextDisplay body = TextDisplay.of(text.toString());
         String artwork = MusicEmbeds.thumbnailOf(track);
