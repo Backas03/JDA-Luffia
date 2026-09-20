@@ -12,9 +12,11 @@ import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.entities.MessageEmbed;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.List;
 
 public final class MusicEmbeds {
@@ -153,6 +155,33 @@ public final class MusicEmbeds {
             return extended.getUrl();
         }
         return "";
+    }
+
+    public static String toPlainText(MessageEmbed embed, String link) {
+        StringBuilder text = new StringBuilder();
+        if (embed.getAuthor() != null && embed.getAuthor().getName() != null) {
+            text.append(embed.getAuthor().getName()).append('\n');
+        }
+        if (embed.getTitle() != null) {
+            text.append("**").append(embed.getTitle()).append("**").append('\n');
+        }
+        if (embed.getDescription() != null) {
+            text.append(embed.getDescription()).append('\n');
+        }
+        List<String> fields = new ArrayList<>();
+        for (MessageEmbed.Field field : embed.getFields()) {
+            if (field.getName() == null || field.getName().isBlank()) continue;
+            String value = field.getValue() == null ? "" : field.getValue().replaceAll("\\[([^\\]]+)\\]\\([^)]+\\)", "$1");
+            fields.add(field.getName() + ": " + value);
+        }
+        if (!fields.isEmpty()) {
+            text.append(String.join(" | ", fields)).append('\n');
+        }
+        if (embed.getFooter() != null && embed.getFooter().getText() != null) {
+            text.append("요청: ").append(embed.getFooter().getText()).append('\n');
+        }
+        text.append(link);
+        return text.toString();
     }
 
     public static EmbedBuilder error(@Nullable Member member, String title, @Nullable String description) {

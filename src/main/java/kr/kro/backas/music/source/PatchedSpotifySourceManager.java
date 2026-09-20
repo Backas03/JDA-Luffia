@@ -28,7 +28,7 @@ public class PatchedSpotifySourceManager extends SpotifySourceManager {
     public static final String PLAYLIST_NOT_CONFIGURED_MESSAGE =
             "스포티파이 플레이리스트를 읽으려면 봇에 계정 로그인이 필요합니다. 관리자가 spotifyLogin 을 실행해 토큰을 등록해야 합니다.";
     public static final String PLAYLIST_FORBIDDEN_MESSAGE =
-            "이 플레이리스트는 읽을 수 없습니다. 봇에 로그인된 Spotify 계정이 만들었거나 라이브러리에 저장한 플레이리스트만 지원됩니다.";
+            "이 플레이리스트는 Spotify API 정책 상 읽을 수 없습니다. 봇에 로그인된 Spotify 계정이 만들었거나 라이브러리에 저장한 플레이리스트만 지원됩니다.";
     public static final String ARTIST_UNSUPPORTED_MESSAGE =
             "스포티파이 아티스트 링크는 현재 API 권한으로 읽을 수 없습니다. 곡 또는 앨범 링크를 이용해주세요.";
     private static final int ALBUM_MAX_PAGES = 10;
