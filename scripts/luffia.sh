@@ -1,53 +1,87 @@
 #!/bin/bash
-BOT_DIR="/home/vitamin/luffia/JDA-Luffia"
-SCREEN_NAME="luffia"
+BASE_DIR="/home/vitamin/kimnore"
+BOT_JAR="$BASE_DIR/JDA-Luffia-1.0.0-SNAPSHOT-all.jar"
+BOT_SCREEN="kimnore"
+TRANSLATOR_DIR="$BASE_DIR/translator"
+TRANSLATOR_SCREEN="translator"
 JAVA="java"
-JAVA_OPTS="-Xms512M -Xmx1G -Dfile.encoding=UTF-8 --enable-native-access=ALL-UNNAMED"
-MAIN_CLASS="kr.kro.backas.Main"
+JAVA_OPTS="-Xms512M -Xmx2G -Dfile.encoding=UTF-8"
 
 is_running() {
-  ps -ef | grep -v "grep" | grep SCREEN | grep -q "$SCREEN_NAME"
+  screen -ls | grep -qE "\.$1[[:space:]]"
 }
+
+start_translator() {
+  if is_running "$TRANSLATOR_SCREEN"; then
+    echo "${TRANSLATOR_SCREEN} is already running."
+  else
+    screen -dmS "$TRANSLATOR_SCREEN" bash -c "cd '$TRANSLATOR_DIR' && ./run.sh"
+    echo "${TRANSLATOR_SCREEN} started."
+  fi
+}
+
+stop_translator() {
+  if is_running "$TRANSLATOR_SCREEN"; then
+    screen -S "$TRANSLATOR_SCREEN" -X quit
+    echo "${TRANSLATOR_SCREEN} stopped."
+  else
+    echo "${TRANSLATOR_SCREEN} is not running."
+  fi
+}
+
+start_bot() {
+  if is_running "$BOT_SCREEN"; then
+    echo "${BOT_SCREEN} is already running."
+  else
+    screen -dmS "$BOT_SCREEN" bash -c "cd '$BASE_DIR' && $JAVA $JAVA_OPTS -jar '$BOT_JAR'"
+    echo "${BOT_SCREEN} started."
+  fi
+}
+
+stop_bot() {
+  if is_running "$BOT_SCREEN"; then
+    screen -S "$BOT_SCREEN" -X quit
+    echo "${BOT_SCREEN} stopped."
+  else
+    echo "${BOT_SCREEN} is not running."
+  fi
+}
+
+TARGET="${2:-all}"
 
 case "$1" in
   start)
-    if is_running; then
-      echo "${SCREEN_NAME} is already running."
-    else
-      screen -dmS "$SCREEN_NAME" bash -c "cd '$BOT_DIR' && $JAVA $JAVA_OPTS -cp 'lib/*' $MAIN_CLASS"
-    fi
+    [ "$TARGET" = "all" ] || [ "$TARGET" = "translator" ] && start_translator
+    [ "$TARGET" = "all" ] || [ "$TARGET" = "bot" ] && start_bot
     ;;
   stop)
-    if is_running; then
-      screen -S "$SCREEN_NAME" -X quit
-      echo "${SCREEN_NAME} stopped."
-    else
-      echo "${SCREEN_NAME} is not running."
-    fi
+    [ "$TARGET" = "all" ] || [ "$TARGET" = "bot" ] && stop_bot
+    [ "$TARGET" = "all" ] || [ "$TARGET" = "translator" ] && stop_translator
     ;;
   restart)
-    "$0" stop
+    "$0" stop "$TARGET"
     sleep 2
-    "$0" start
+    "$0" start "$TARGET"
     ;;
   view)
-    screen -x "$SCREEN_NAME"
+    if [ "$TARGET" = "translator" ]; then
+      screen -x "$TRANSLATOR_SCREEN"
+    else
+      screen -x "$BOT_SCREEN"
+    fi
     ;;
   sv)
-    if is_running; then
-      screen -x "$SCREEN_NAME"
+    start_translator
+    if is_running "$BOT_SCREEN"; then
+      screen -x "$BOT_SCREEN"
     else
-      screen -S "$SCREEN_NAME" bash -c "cd '$BOT_DIR' && $JAVA $JAVA_OPTS -cp 'lib/*' $MAIN_CLASS"
+      screen -S "$BOT_SCREEN" bash -c "cd '$BASE_DIR' && $JAVA $JAVA_OPTS -jar '$BOT_JAR'"
     fi
     ;;
   status)
-    if is_running; then
-      echo "${SCREEN_NAME} is running."
-    else
-      echo "${SCREEN_NAME} is not running."
-    fi
+    screen -ls
     ;;
   *)
-    echo "$0 (start|stop|restart|view|sv|status)"
+    echo "$0 (start|stop|restart|view|sv|status) [all|bot|translator]"
     ;;
 esac
