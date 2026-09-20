@@ -1,10 +1,12 @@
 package kr.kro.backas;
 
+import club.minnced.discord.jdave.interop.JDaveSessionFactory;
 import com.merakianalytics.orianna.Orianna;
 import com.merakianalytics.orianna.types.common.Platform;
 import kr.kro.backas.secret.BotSecret;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
+import net.dv8tion.jda.api.audio.AudioModuleConfig;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.ChunkingFilter;
 import net.dv8tion.jda.api.utils.MemberCachePolicy;
@@ -43,7 +45,8 @@ public class Main {
                 .setChunkingFilter(ChunkingFilter.ALL) // enable member chunking for all guilds
                 .setMemberCachePolicy(MemberCachePolicy.ALL)
                 .enableIntents(GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MEMBERS)
-                .enableCache(CacheFlag.ROLE_TAGS);
+                .enableCache(CacheFlag.ROLE_TAGS)
+                .setAudioModuleConfig(new AudioModuleConfig().withDaveSessionFactory(new JDaveSessionFactory()));
 
         try {
             Orianna.setRiotAPIKey(BotSecret.RIOT_API_KEY);

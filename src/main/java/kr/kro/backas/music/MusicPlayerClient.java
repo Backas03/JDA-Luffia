@@ -13,6 +13,7 @@ import kr.kro.backas.music.filter.EchoFilter;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Activity;
+import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.entities.channel.unions.AudioChannelUnion;
 import net.dv8tion.jda.api.managers.AudioManager;
@@ -21,6 +22,7 @@ import org.jetbrains.annotations.NotNull;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class MusicPlayerClient {
     private final AudioPlayerManager audioPlayerManager;
@@ -48,9 +50,15 @@ public class MusicPlayerClient {
         MusicTrackHandler trackHandler = new MusicTrackHandler(this.musicTrack, this.musicBot);
         this.audioPlayer.addListener(trackHandler);
 
-        musicBot.getGuildById(SharedConstant.PUBLISHED_GUILD_ID)
-                .getAudioManager()
-                .setSendingHandler(new AudioForwarder(this));
+        Guild guild = musicBot.getGuildById(SharedConstant.PUBLISHED_GUILD_ID);
+        if (guild == null) {
+            String joined = musicBot.getGuilds().stream()
+                    .map(g -> g.getName() + "(" + g.getId() + ")")
+                    .collect(Collectors.joining(", "));
+            throw new IllegalStateException("봇이 SharedConstant.PUBLISHED_GUILD_ID=" + SharedConstant.PUBLISHED_GUILD_ID
+                    + " 서버에 없습니다. 현재 참여 중인 서버: " + joined);
+        }
+        guild.getAudioManager().setSendingHandler(new AudioForwarder(this));
         updateFilter();
     }
 
