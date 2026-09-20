@@ -9,6 +9,7 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
@@ -181,10 +182,15 @@ public class MusicLoader implements AudioLoadResultHandler {
     }
 
     private void replyWithPreview(EmbedBuilder result, String previewLink) {
-        hook.editOriginalEmbeds(result.build()).queue(message -> {
-            if (previewLink.isEmpty()) return;
-            message.getChannel().sendMessage(previewLink).queue();
-        });
+        MessageEmbed embed = result.build();
+        if (previewLink.isEmpty()) {
+            hook.editOriginalEmbeds(embed).queue();
+            return;
+        }
+        queryInfo.getSlashCommandInteractionEvent()
+                .getMessageChannel()
+                .sendMessage(MusicEmbeds.toPlainText(embed, previewLink))
+                .queue(message -> hook.deleteOriginal().queue());
     }
 
     private void replyNotInVoiceChannel() {
