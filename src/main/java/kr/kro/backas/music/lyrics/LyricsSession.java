@@ -27,7 +27,7 @@ public class LyricsSession {
     public static final long TICK_MS = 200;
     public static final long MIN_EDIT_INTERVAL_MS = 1200;
     public static final long DEFAULT_OFFSET_MS = 600;
-    public static final int FIRST_TRANSLATION_CHUNK = 5;
+    public static final int FIRST_TRANSLATION_CHUNK = 3;
     public static final int TRANSLATION_CHUNK = 10;
     public static final String TRANSLATING_NOTE = "번역 중...";
     private static final String BLANK = "​";
@@ -69,7 +69,9 @@ public class LyricsSession {
 
     public void start() {
         ticker = scheduler.scheduleAtFixedRate(this::tick, 0, TICK_MS, TimeUnit.MILLISECONDS);
-        startTranslation();
+        if (!startTranslation()) {
+            LyricsPresenter.prefetchNext(client);
+        }
     }
 
     public void setOffsetMs(long offsetMs) {
@@ -100,15 +102,15 @@ public class LyricsSession {
         }
     }
 
-    private void startTranslation() {
-        if (translator == null) return;
+    private boolean startTranslation() {
+        if (translator == null) return false;
         List<LyricLine> lines = lyrics.synced();
-        if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lines))) return;
+        if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lines))) return false;
         List<Integer> pending = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
             if (!translations.containsKey(i) && LyricsLanguage.needsTranslation(lines.get(i).text())) pending.add(i);
         }
-        if (pending.isEmpty()) return;
+        if (pending.isEmpty()) return false;
         translating = true;
         CompletableFuture.runAsync(() -> {
             try {
@@ -122,8 +124,10 @@ public class LyricsSession {
                 }
             } finally {
                 translating = false;
+                LyricsPresenter.prefetchNext(client);
             }
         });
+        return true;
     }
 
     private void translateChunk(List<LyricLine> lines, List<Integer> indices) {
