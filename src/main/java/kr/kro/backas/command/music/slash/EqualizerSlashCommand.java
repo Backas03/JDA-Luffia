@@ -68,7 +68,6 @@ public class EqualizerSlashCommand implements SlashCommandSource {
                 .setColor(Color.GREEN)
                 .setAuthor(MemberUtil.getName(event.getMember()))
                 .setTitle("이퀄라이저 설정이 변경됩니다")
-                .setDescription("이퀄라이저가 즉시 적용되지 않을 경우 다음 곡부터 적용됩니다")
                 .addField("이퀄라이저 설정",
                         before.getName() + " -> " + eq.getName()
                         , false)

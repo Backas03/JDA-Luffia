@@ -70,8 +70,7 @@ public class PlaySpeedSlashCommand implements SlashCommandSource {
         event.replyEmbeds(new EmbedBuilder()
                 .setColor(Color.GREEN)
                 .setAuthor(MemberUtil.getName(event.getMember()))
-                .setTitle("노래 재생속도가 변경됩니다")
-                .setDescription("재생속도가 변경되지 않을 경우 다음 곡부터 적용됩니다")
+                .setTitle("노래 재생속도를 변경했습니다")
                 .addField("재생속도",
                          originSpeed + "배속 -> " + speed + "배속"
                         , false)
