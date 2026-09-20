@@ -199,6 +199,9 @@ public class LyricsSession {
         text.append(next.isBlank() ? BLANK : "*" + next + "*").append('\n');
         text.append("-# ").append(WIDTH_FILLER).append('\n');
         text.append("-# ").append(footer == null ? song : song + " · " + footer);
+        if (translation != null && !translation.isBlank()) {
+            text.append('\n').append("-# ").append(LyricsPresenter.MACHINE_TRANSLATION_NOTE);
+        }
         TextDisplay body = TextDisplay.of(text.toString());
         String artwork = MusicEmbeds.thumbnailOf(track);
         Container container = artwork == null
