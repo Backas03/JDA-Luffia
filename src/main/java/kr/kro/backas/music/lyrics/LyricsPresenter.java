@@ -32,7 +32,7 @@ public final class LyricsPresenter {
     private static final Logger LOGGER = LoggerFactory.getLogger(LyricsPresenter.class);
     private static final int EMBED_TEXT_LIMIT = 4000;
     private static final int MESSAGE_TEXT_BUDGET = 5800;
-    private static final int TRANSLATION_BATCH = 10;
+    private static final int TRANSLATION_BATCH = 400;
     private static final String TRUNCATED_NOTE = "… (이하 생략)";
     public static final String MACHINE_TRANSLATION_NOTE = "기계 번역한 가사입니다. 올바르지 않을 수 있습니다.";
 

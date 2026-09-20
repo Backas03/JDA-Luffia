@@ -16,10 +16,13 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
+import java.util.stream.Stream;
 
 public class TranslationClient {
 
@@ -65,10 +68,14 @@ public class TranslationClient {
     }
 
     public List<String> translate(String sourceLanguage, List<String> lines) throws IOException {
+        return translate(sourceLanguage, lines, null);
+    }
+
+    public List<String> translate(String sourceLanguage, List<String> lines, @Nullable BiConsumer<Integer, String> onLine) throws IOException {
         if (baseUrl == null) throw new IOException("translator disabled");
         if (lines.isEmpty()) return List.of();
         Mode current = detectMode();
-        List<String> result = current == Mode.LLM ? translateWithLlm(lines) : translateWithNllb(sourceLanguage, lines);
+        List<String> result = current == Mode.LLM ? translateWithLlm(lines, onLine) : translateWithNllb(sourceLanguage, lines);
         if (result.size() != lines.size()) {
             LOGGER.warn("translator returned {} lines for {} inputs", result.size(), lines.size());
             throw new IOException("translator line count mismatch");
@@ -149,7 +156,7 @@ public class TranslationClient {
         return result;
     }
 
-    private List<String> translateWithLlm(List<String> lines) throws IOException {
+    private ObjectNode buildLlmRequest(List<String> lines, boolean stream) {
         StringBuilder user = new StringBuilder();
         user.append("Translate these ").append(lines.size()).append(" lyric lines to Korean.\n");
         for (int i = 0; i < lines.size(); i++) {
@@ -158,7 +165,8 @@ public class TranslationClient {
         ObjectNode body = MAPPER.createObjectNode();
         body.put("model", "translator");
         body.put("temperature", 0.2);
-        body.put("max_tokens", 80 * lines.size() + 64);
+        body.put("max_tokens", 48 * lines.size() + 64);
+        body.put("stream", stream);
         ArrayNode messages = body.putArray("messages");
         messages.addObject().put("role", "system").put("content", LLM_SYSTEM_PROMPT);
         messages.addObject().put("role", "user").put("content", user.toString());
@@ -173,8 +181,11 @@ public class TranslationClient {
         items.put("maxItems", lines.size());
         items.putObject("items").put("type", "string");
         schema.putArray("required").add("t");
-        JsonNode node = postJson("/v1/chat/completions", body, Duration.ofSeconds(240));
-        String content = node.path("choices").path(0).path("message").path("content").asText("");
+        return body;
+    }
+
+    private List<String> translateWithLlm(List<String> lines, @Nullable BiConsumer<Integer, String> onLine) throws IOException {
+        String content = onLine == null ? requestLlm(lines) : streamLlm(lines, onLine);
         JsonNode parsed;
         try {
             parsed = MAPPER.readTree(content);
@@ -195,13 +206,111 @@ public class TranslationClient {
         }
         if (!leaked.isEmpty() && lines.size() > 1) {
             for (int index : leaked) {
-                List<String> retried = translateWithLlm(List.of(lines.get(index)));
-                result.set(index, containsCjkScript(retried.get(0)) ? lines.get(index) : retried.get(0));
+                List<String> retried = translateWithLlm(List.of(lines.get(index)), null);
+                String fixed = containsCjkScript(retried.get(0)) ? lines.get(index) : retried.get(0);
+                result.set(index, fixed);
+                if (onLine != null) onLine.accept(index, fixed);
             }
         } else if (!leaked.isEmpty()) {
             result.set(0, lines.get(0));
         }
         return result;
+    }
+
+    private String requestLlm(List<String> lines) throws IOException {
+        JsonNode node = postJson("/v1/chat/completions", buildLlmRequest(lines, false), Duration.ofSeconds(240));
+        return node.path("choices").path(0).path("message").path("content").asText("");
+    }
+
+    private String streamLlm(List<String> lines, BiConsumer<Integer, String> onLine) throws IOException {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/v1/chat/completions"))
+                .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(240))
+                .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(buildLlmRequest(lines, true))))
+                .build();
+        HttpResponse<Stream<String>> response;
+        try {
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofLines());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("translation interrupted", e);
+        }
+        if (response.statusCode() / 100 != 2) {
+            throw new IOException("translator " + response.statusCode());
+        }
+        StringBuilder content = new StringBuilder();
+        JsonArrayStringScanner scanner = new JsonArrayStringScanner();
+        try (Stream<String> body = response.body()) {
+            Iterator<String> iterator = body.iterator();
+            while (iterator.hasNext()) {
+                String line = iterator.next();
+                if (!line.startsWith("data:")) continue;
+                String data = line.substring(5).trim();
+                if (data.equals("[DONE]")) break;
+                String delta = MAPPER.readTree(data).path("choices").path(0).path("delta").path("content").asText("");
+                if (delta.isEmpty()) continue;
+                content.append(delta);
+                for (String element : scanner.feed(delta)) {
+                    int index = scanner.completedCount() - 1;
+                    if (index < lines.size() && LyricsLanguage.needsTranslation(lines.get(index)) && !containsCjkScript(element)) {
+                        onLine.accept(index, element);
+                    }
+                }
+            }
+        }
+        return content.toString();
+    }
+
+    private static final class JsonArrayStringScanner {
+        private boolean inArray;
+        private boolean inString;
+        private boolean escaped;
+        private int completed;
+        private final StringBuilder raw = new StringBuilder();
+
+        List<String> feed(String chunk) {
+            List<String> done = new ArrayList<>();
+            for (int i = 0; i < chunk.length(); i++) {
+                char c = chunk.charAt(i);
+                if (!inArray) {
+                    if (c == '[') inArray = true;
+                    continue;
+                }
+                if (inString) {
+                    raw.append(c);
+                    if (escaped) {
+                        escaped = false;
+                    } else if (c == '\\') {
+                        escaped = true;
+                    } else if (c == '"') {
+                        inString = false;
+                        completed++;
+                        done.add(decode(raw.toString()));
+                        raw.setLength(0);
+                    }
+                    continue;
+                }
+                if (c == '"') {
+                    inString = true;
+                    raw.append(c);
+                } else if (c == ']') {
+                    inArray = false;
+                }
+            }
+            return done;
+        }
+
+        int completedCount() {
+            return completed;
+        }
+
+        private static String decode(String literal) {
+            try {
+                return MAPPER.readTree(literal).asText("");
+            } catch (IOException e) {
+                return literal.substring(1, Math.max(1, literal.length() - 1));
+            }
+        }
     }
 
     private static boolean containsCjkScript(String text) {
