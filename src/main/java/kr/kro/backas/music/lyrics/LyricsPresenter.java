@@ -77,7 +77,7 @@ public final class LyricsPresenter {
                     if (!client.isCurrentTrack(track)) return;
                     if (liveWanted && lyrics.hasSynced()) {
                         client.stopLyrics("새 가사 표시로 대체되었습니다");
-                        Container initial = LyricsSession.buildView(track, lyrics, -1, "가사 동기화 준비 중");
+                        Container initial = LyricsSession.buildView(track, lyrics, -1, null, "가사 동기화 준비 중");
                         sendOne.apply(initial).whenComplete((message, sendError) -> {
                             if (sendError != null || message == null) {
                                 LOGGER.warn("failed to send lyrics message", sendError);
@@ -85,7 +85,7 @@ public final class LyricsPresenter {
                             }
                             if (!client.isCurrentTrack(track)) return;
                             LyricsSession session = new LyricsSession(client, track, lyrics, message,
-                                    controller.getScheduler(), offsetMs);
+                                    controller.getScheduler(), controller.getTranslationClient(), offsetMs);
                             client.setLyricsSession(session);
                             session.start();
                         });
