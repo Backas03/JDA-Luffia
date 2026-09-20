@@ -22,7 +22,7 @@ import java.util.List;
 
 public class QueueSlashCommand implements SlashCommandSource {
     public static final String COMMAND_NAME = "대기열";
-    private static final int MAX_QUEUE_ROWS = 15;
+    private static final int MAX_QUEUE_ROWS = 5;
 
     @Override
     public SlashCommandData buildCommand() {
