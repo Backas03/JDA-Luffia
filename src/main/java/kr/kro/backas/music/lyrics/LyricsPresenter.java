@@ -145,39 +145,48 @@ public final class LyricsPresenter {
 
     private static final Set<String> PREFETCHING = ConcurrentHashMap.newKeySet();
 
+    public static final int PREFETCH_COUNT = 3;
+
     public static void prefetchNext(MusicPlayerClient client) {
         if (!client.isAutoLyricsEnabled()) return;
         List<AudioTrack> queue = client.getTrackQueue();
         if (queue.isEmpty()) return;
-        AudioTrack next = queue.get(0);
         MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
         TranslationClient translator = controller.getTranslationClient();
         if (translator == null || !translator.isEnabled()) return;
-        String key = next.getIdentifier();
-        if (!PREFETCHING.add(key)) return;
+        List<AudioTrack> targets = new ArrayList<>(queue.subList(0, Math.min(PREFETCH_COUNT, queue.size())));
         CompletableFuture.runAsync(() -> {
-            try {
-                Lyrics lyrics = controller.getLyricsClient().find(next.getInfo());
-                if (lyrics == null || lyrics.instrumental()) return;
-                if (lyrics.hasSynced()) {
-                    List<String> lines = new ArrayList<>();
-                    lyrics.synced().forEach(line -> lines.add(line.text()));
-                    if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lyrics.synced()))) return;
-                    translateAll(translator, key, lines);
-                } else if (lyrics.hasPlain()) {
-                    List<String> lines = fullLines(lyrics);
-                    List<LyricLine> asLines = new ArrayList<>();
-                    for (String line : lines) asLines.add(new LyricLine(0, line));
-                    if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(asLines))) return;
-                    translateAll(translator, key + ":plain", lines);
-                }
-                LOGGER.info("prefetched lyrics translation for {}", next.getInfo().title);
-            } catch (Exception e) {
-                LOGGER.debug("lyrics prefetch failed for {}", next.getInfo().title, e);
-            } finally {
-                PREFETCHING.remove(key);
+            for (AudioTrack next : targets) {
+                if (!client.isAutoLyricsEnabled()) return;
+                prefetchTrack(controller, translator, next);
             }
         });
+    }
+
+    private static void prefetchTrack(MusicPlayerController controller, TranslationClient translator, AudioTrack next) {
+        String key = next.getIdentifier();
+        if (!PREFETCHING.add(key)) return;
+        try {
+            Lyrics lyrics = controller.getLyricsClient().find(next.getInfo());
+            if (lyrics == null || lyrics.instrumental()) return;
+            if (lyrics.hasSynced()) {
+                List<String> lines = new ArrayList<>();
+                lyrics.synced().forEach(line -> lines.add(line.text()));
+                if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lyrics.synced()))) return;
+                translateAll(translator, key, lines);
+            } else if (lyrics.hasPlain()) {
+                List<String> lines = fullLines(lyrics);
+                List<LyricLine> asLines = new ArrayList<>();
+                for (String line : lines) asLines.add(new LyricLine(0, line));
+                if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(asLines))) return;
+                translateAll(translator, key + ":plain", lines);
+            }
+            LOGGER.info("prefetched lyrics translation for {}", next.getInfo().title);
+        } catch (Exception e) {
+            LOGGER.debug("lyrics prefetch failed for {}", next.getInfo().title, e);
+        } finally {
+            PREFETCHING.remove(key);
+        }
     }
 
     private static Map<Integer, String> translateAll(TranslationClient translator, String cacheKey, List<String> lines) {
