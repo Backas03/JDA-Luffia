@@ -69,9 +69,8 @@ public class LyricsSession {
 
     public void start() {
         ticker = scheduler.scheduleAtFixedRate(this::tick, 0, TICK_MS, TimeUnit.MILLISECONDS);
-        if (!startTranslation()) {
-            LyricsPresenter.prefetchNext(client);
-        }
+        startTranslation();
+        LyricsPresenter.prefetchNext(client);
     }
 
     public void setOffsetMs(long offsetMs) {
