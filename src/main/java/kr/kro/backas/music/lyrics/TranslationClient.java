@@ -39,7 +39,8 @@ public class TranslationClient {
             "- If a line is already Korean, empty, or has no words, copy it unchanged.",
             "- Write the output in Korean Hangul only. Never leave Japanese kana, kanji, or Chinese characters in the output; translate them.",
             "- Never add explanations, notes, or romanization.",
-            "Output JSON only: {\"t\": [\"line1\", \"line2\", ...]} with exactly the same number of items as the input.");
+            "Output JSON only: {\"t\": [{\"n\": 1, \"k\": \"translation of line 1\"}, {\"n\": 2, \"k\": \"translation of line 2\"}, ...]}",
+            "with exactly one object per input line, n = the input line number, k = the Korean translation of that line only. Never merge or split lines.");
 
     private enum Mode { UNKNOWN, NLLB, LLM }
 
@@ -165,7 +166,7 @@ public class TranslationClient {
         ObjectNode body = MAPPER.createObjectNode();
         body.put("model", "translator");
         body.put("temperature", 0.2);
-        body.put("max_tokens", 48 * lines.size() + 64);
+        body.put("max_tokens", 56 * lines.size() + 64);
         body.put("stream", stream);
         ArrayNode messages = body.putArray("messages");
         messages.addObject().put("role", "system").put("content", LLM_SYSTEM_PROMPT);
@@ -179,7 +180,15 @@ public class TranslationClient {
         items.put("type", "array");
         items.put("minItems", lines.size());
         items.put("maxItems", lines.size());
-        items.putObject("items").put("type", "string");
+        ObjectNode item = items.putObject("items");
+        item.put("type", "object");
+        ObjectNode itemProperties = item.putObject("properties");
+        ObjectNode number = itemProperties.putObject("n");
+        number.put("type", "integer");
+        number.put("minimum", 1);
+        number.put("maximum", lines.size());
+        itemProperties.putObject("k").put("type", "string");
+        item.putArray("required").add("n").add("k");
         schema.putArray("required").add("t");
         return body;
     }
@@ -193,39 +202,52 @@ public class TranslationClient {
             LOGGER.warn("llm translator returned non-json content: {}", content.length() > 200 ? content.substring(0, 200) : content);
             throw e;
         }
+        Map<Integer, String> byNumber = new java.util.HashMap<>();
+        for (JsonNode entry : parsed.path("t")) {
+            int n = entry.path("n").asInt(-1);
+            if (n >= 1 && n <= lines.size() && !byNumber.containsKey(n)) byNumber.put(n, entry.path("k").asText(""));
+        }
         List<String> result = new ArrayList<>();
-        for (JsonNode line : parsed.path("t")) result.add(line.asText(""));
-        List<Integer> leaked = new ArrayList<>();
-        for (int i = 0; i < result.size() && i < lines.size(); i++) {
-            String source = lines.get(i);
-            if (source == null || source.isBlank() || !LyricsLanguage.needsTranslation(source)) {
-                result.set(i, source == null ? "" : source);
-            } else if (containsCjkScript(result.get(i))) {
-                leaked.add(i);
+        List<Integer> retry = new ArrayList<>();
+        for (int i = 0; i < lines.size(); i++) {
+            String source = lines.get(i) == null ? "" : lines.get(i);
+            String translated = byNumber.get(i + 1);
+            if (source.isBlank() || !LyricsLanguage.needsTranslation(source)) {
+                result.add(source);
+            } else if (!isAcceptable(source, translated)) {
+                result.add(source);
+                retry.add(i);
+            } else {
+                result.add(translated);
             }
         }
-        if (!leaked.isEmpty() && lines.size() > 1) {
-            for (int index : leaked) {
-                List<String> retried = translateWithLlm(List.of(lines.get(index)), null);
-                String fixed = containsCjkScript(retried.get(0)) ? lines.get(index) : retried.get(0);
+        if (!retry.isEmpty() && lines.size() > 1) {
+            for (int index : retry) {
+                String source = lines.get(index);
+                List<String> retried = translateWithLlm(List.of(source), null);
+                String fixed = isAcceptable(source, retried.get(0)) ? retried.get(0) : source;
                 result.set(index, fixed);
-                if (onLine != null) onLine.accept(index, fixed);
+                if (onLine != null && !fixed.equals(source)) onLine.accept(index, fixed);
             }
-        } else if (!leaked.isEmpty()) {
-            result.set(0, lines.get(0));
         }
         return result;
     }
 
+    private static boolean isAcceptable(String source, @Nullable String translated) {
+        if (translated == null || translated.isBlank()) return false;
+        if (containsCjkScript(translated)) return false;
+        return translated.trim().length() >= 2 || source.trim().length() <= 2;
+    }
+
     private String requestLlm(List<String> lines) throws IOException {
-        JsonNode node = postJson("/v1/chat/completions", buildLlmRequest(lines, false), Duration.ofSeconds(240));
+        JsonNode node = postJson("/v1/chat/completions", buildLlmRequest(lines, false), Duration.ofSeconds(300));
         return node.path("choices").path(0).path("message").path("content").asText("");
     }
 
     private String streamLlm(List<String> lines, BiConsumer<Integer, String> onLine) throws IOException {
         HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/v1/chat/completions"))
                 .header("Content-Type", "application/json")
-                .timeout(Duration.ofSeconds(240))
+                .timeout(Duration.ofSeconds(300))
                 .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(buildLlmRequest(lines, true))))
                 .build();
         HttpResponse<Stream<String>> response;
@@ -239,7 +261,8 @@ public class TranslationClient {
             throw new IOException("translator " + response.statusCode());
         }
         StringBuilder content = new StringBuilder();
-        JsonArrayStringScanner scanner = new JsonArrayStringScanner();
+        JsonArrayObjectScanner scanner = new JsonArrayObjectScanner();
+        java.util.Set<Integer> delivered = new java.util.HashSet<>();
         try (Stream<String> body = response.body()) {
             Iterator<String> iterator = body.iterator();
             while (iterator.hasNext()) {
@@ -250,10 +273,19 @@ public class TranslationClient {
                 String delta = MAPPER.readTree(data).path("choices").path(0).path("delta").path("content").asText("");
                 if (delta.isEmpty()) continue;
                 content.append(delta);
-                for (String element : scanner.feed(delta)) {
-                    int index = scanner.completedCount() - 1;
-                    if (index < lines.size() && LyricsLanguage.needsTranslation(lines.get(index)) && !containsCjkScript(element)) {
-                        onLine.accept(index, element);
+                for (String objectLiteral : scanner.feed(delta)) {
+                    JsonNode entry;
+                    try {
+                        entry = MAPPER.readTree(objectLiteral);
+                    } catch (IOException e) {
+                        continue;
+                    }
+                    int n = entry.path("n").asInt(-1);
+                    if (n < 1 || n > lines.size() || !delivered.add(n)) continue;
+                    String source = lines.get(n - 1);
+                    String translated = entry.path("k").asText("");
+                    if (LyricsLanguage.needsTranslation(source) && isAcceptable(source, translated)) {
+                        onLine.accept(n - 1, translated);
                     }
                 }
             }
@@ -261,12 +293,12 @@ public class TranslationClient {
         return content.toString();
     }
 
-    private static final class JsonArrayStringScanner {
+    private static final class JsonArrayObjectScanner {
         private boolean inArray;
         private boolean inString;
         private boolean escaped;
-        private int completed;
-        private final StringBuilder raw = new StringBuilder();
+        private int depth;
+        private final StringBuilder current = new StringBuilder();
 
         List<String> feed(String chunk) {
             List<String> done = new ArrayList<>();
@@ -276,40 +308,32 @@ public class TranslationClient {
                     if (c == '[') inArray = true;
                     continue;
                 }
+                if (depth > 0) current.append(c);
                 if (inString) {
-                    raw.append(c);
-                    if (escaped) {
-                        escaped = false;
-                    } else if (c == '\\') {
-                        escaped = true;
-                    } else if (c == '"') {
-                        inString = false;
-                        completed++;
-                        done.add(decode(raw.toString()));
-                        raw.setLength(0);
-                    }
+                    if (escaped) escaped = false;
+                    else if (c == '\\') escaped = true;
+                    else if (c == '"') inString = false;
                     continue;
                 }
                 if (c == '"') {
                     inString = true;
-                    raw.append(c);
-                } else if (c == ']') {
+                } else if (c == '{') {
+                    if (depth == 0) {
+                        current.setLength(0);
+                        current.append(c);
+                    }
+                    depth++;
+                } else if (c == '}') {
+                    depth--;
+                    if (depth == 0) {
+                        done.add(current.toString());
+                        current.setLength(0);
+                    }
+                } else if (c == ']' && depth == 0) {
                     inArray = false;
                 }
             }
             return done;
-        }
-
-        int completedCount() {
-            return completed;
-        }
-
-        private static String decode(String literal) {
-            try {
-                return MAPPER.readTree(literal).asText("");
-            } catch (IOException e) {
-                return literal.substring(1, Math.max(1, literal.length() - 1));
-            }
         }
     }
 
