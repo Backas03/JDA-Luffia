@@ -179,7 +179,7 @@ public static final List<String> MUSIC_BOT_TOKENS = List.of(
 
 **A. LLM (권장, 품질 좋음)**: llama.cpp + Tri-7B(트릴리온랩스, 한·영·일 특화) 4비트. RAM 약 6GB, 6코어 CPU 기준 5줄에 10초 안팎. 일본어·영어 가사를 자연스러운 한국어로 옮깁니다. 다른 GGUF 를 쓰려면 ``MODEL_URL``/``MODEL_FILE`` 환경변수로 바꿀 수 있습니다.
 1. ``translator/llm/setup.sh`` 실행 (llama.cpp 바이너리 17MB + 모델 4.7GB 다운로드, 한 번만)
-2. ``translator/llm/run.sh`` 로 실행 (기본 127.0.0.1:8765, ``TRANSLATOR_PORT`` 로 변경, ``LLM_THREADS`` 로 스레드 수 조정)
+2. ``translator/llm/run.sh`` 로 실행 (기본 127.0.0.1:8765, ``TRANSLATOR_PORT`` 로 변경, ``LLM_THREADS`` 로 생성 스레드(기본 6, 물리 코어 수), ``LLM_THREADS_BATCH`` 로 프롬프트 처리 스레드(기본 12) 조정)
 3. ``BotSecret.TRANSLATOR_URL`` 에 ``http://127.0.0.1:8765`` 를 넣고 봇 재시작
 
 **B. NLLB (가볍지만 가사 품질 낮음)**: Meta NLLB-200 을 CTranslate2 로 실행. Python 3.10 이상 필요.
