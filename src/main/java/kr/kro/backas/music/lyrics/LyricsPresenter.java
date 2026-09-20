@@ -25,6 +25,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 public final class LyricsPresenter {
@@ -132,7 +136,13 @@ public final class LyricsPresenter {
             }
             if (!willTranslate) return;
             CompletableFuture.runAsync(() -> {
-                Map<Integer, String> translations = translateAll(translator, track.getIdentifier() + ":plain", lines);
+                Map<Integer, String> cache = translator.cacheFor(track.getIdentifier() + ":plain");
+                ProgressiveEditor editor = new ProgressiveEditor(message.getChannel().getIdLong(), () ->
+                        message.editMessageEmbeds(buildFullEmbeds(track, lines, cache, initialFooter))
+                                .queue(null, e -> LOGGER.debug("progressive lyrics edit failed", e)));
+                Map<Integer, String> translations = translateAll(translator, track.getIdentifier() + ":plain", lines,
+                        (index, text) -> editor.requestEdit());
+                editor.cancel();
                 String doneFooter = translations.isEmpty()
                         ? finalFooter + "\n번역에 실패했습니다"
                         : finalFooter + "\n" + machineTranslationNote(translator);
@@ -141,6 +151,46 @@ public final class LyricsPresenter {
                 prefetchNext(client);
             });
         });
+    }
+
+    private static final class ProgressiveEditor {
+        private static final long MIN_INTERVAL_MS = 2000;
+        private final long channelId;
+        private final Runnable edit;
+        private final ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getScheduler();
+        private long lastEditAt;
+        private ScheduledFuture<?> pending;
+        private boolean cancelled;
+
+        ProgressiveEditor(long channelId, Runnable edit) {
+            this.channelId = channelId;
+            this.edit = edit;
+        }
+
+        synchronized void requestEdit() {
+            if (cancelled || pending != null) return;
+            long wait = Math.max(0, lastEditAt + MIN_INTERVAL_MS - System.currentTimeMillis());
+            pending = scheduler.schedule(this::run, wait, TimeUnit.MILLISECONDS);
+        }
+
+        private void run() {
+            synchronized (this) {
+                pending = null;
+                if (cancelled) return;
+                if (!EditRateLimiter.tryAcquire(channelId)) {
+                    long retry = Math.max(500, EditRateLimiter.millisUntilNext(channelId));
+                    pending = scheduler.schedule(this::run, retry, TimeUnit.MILLISECONDS);
+                    return;
+                }
+                lastEditAt = System.currentTimeMillis();
+            }
+            edit.run();
+        }
+
+        synchronized void cancel() {
+            cancelled = true;
+            if (pending != null) pending.cancel(false);
+        }
     }
 
     private static final Set<String> PREFETCHING = ConcurrentHashMap.newKeySet();
@@ -191,6 +241,11 @@ public final class LyricsPresenter {
     }
 
     private static Map<Integer, String> translateAll(TranslationClient translator, String cacheKey, List<String> lines) {
+        return translateAll(translator, cacheKey, lines, null);
+    }
+
+    private static Map<Integer, String> translateAll(TranslationClient translator, String cacheKey, List<String> lines,
+                                                     @Nullable BiConsumer<Integer, String> onLine) {
         Map<Integer, String> cache = translator.cacheFor(cacheKey);
         List<Integer> pending = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
@@ -201,7 +256,12 @@ public final class LyricsPresenter {
             List<String> sources = new ArrayList<>(indices.size());
             for (int index : indices) sources.add(lines.get(index));
             try {
-                List<String> translated = translator.translate("auto", sources);
+                List<String> translated = translator.translate("auto", sources, onLine == null ? null : (offset, text) -> {
+                    if (offset >= 0 && offset < indices.size() && text != null && !text.isBlank() && !text.equals(sources.get(offset))) {
+                        cache.put(indices.get(offset), text);
+                        onLine.accept(indices.get(offset), text);
+                    }
+                });
                 for (int i = 0; i < indices.size(); i++) {
                     String text = translated.get(i);
                     if (text != null && !text.isBlank() && !text.equals(sources.get(i))) cache.put(indices.get(i), text);
