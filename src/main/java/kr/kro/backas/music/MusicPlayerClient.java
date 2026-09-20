@@ -14,6 +14,8 @@ import kr.kro.backas.SharedConstant;
 import kr.kro.backas.music.filter.ConfiguredEqualizer;
 import kr.kro.backas.music.filter.KaraokeMode;
 import kr.kro.backas.music.filter.VocalEchoFilter;
+import kr.kro.backas.music.lyrics.LyricsSession;
+import org.jetbrains.annotations.Nullable;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Activity;
@@ -31,8 +33,8 @@ import java.util.stream.Collectors;
 public class MusicPlayerClient {
     public static final int DEFAULT_VOLUME = 10;
     public static final float KARAOKE_ECHO_SECONDS = 0.30f;
-    public static final float KARAOKE_ECHO_DECAY = 0.50f;
-    public static final float KARAOKE_CENTER_GAIN = 0.85f;
+    public static final float KARAOKE_ECHO_DECAY = 0.45f;
+    public static final float KARAOKE_CENTER_GAIN = 1.3f;
 
     private final AudioPlayerManager audioPlayerManager;
     private final JDA musicBot;
@@ -42,6 +44,7 @@ public class MusicPlayerClient {
     private volatile KaraokeMode karaokeMode = KaraokeMode.OFF;
     private volatile double realPositionMs;
     private volatile ConfiguredEqualizer currentEqualizer = ConfiguredEqualizer.NORMAL;
+    private volatile LyricsSession lyricsSession;
 
     public MusicPlayerClient(JDA musicBot, AudioPlayerManager sharedAudioPlayerManager) {
         this.musicBot = musicBot;
@@ -136,6 +139,22 @@ public class MusicPlayerClient {
             }
             return chain;
         });
+    }
+
+    public @Nullable LyricsSession getLyricsSession() {
+        return lyricsSession;
+    }
+
+    public void setLyricsSession(@Nullable LyricsSession session) {
+        this.lyricsSession = session;
+    }
+
+    public boolean stopLyrics(String reason) {
+        LyricsSession session = lyricsSession;
+        if (session == null) return false;
+        lyricsSession = null;
+        session.stop(reason);
+        return true;
     }
 
     public int getVolume() {
