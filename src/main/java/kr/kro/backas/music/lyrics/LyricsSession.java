@@ -8,10 +8,13 @@ import net.dv8tion.jda.api.components.section.Section;
 import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.components.thumbnail.Thumbnail;
 import net.dv8tion.jda.api.entities.Message;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -23,6 +26,7 @@ public class LyricsSession {
     public static final long TICK_MS = 200;
     public static final long MIN_EDIT_INTERVAL_MS = 1200;
     public static final long DEFAULT_OFFSET_MS = 600;
+    public static final String TRANSLATING_NOTE = "번역 중...";
     private static final String BLANK = "​";
     private static final String WIDTH_FILLER = "⠀".repeat(48);
 
@@ -31,9 +35,15 @@ public class LyricsSession {
     private final Lyrics lyrics;
     private final Message message;
     private final ScheduledExecutorService scheduler;
+    private final TranslationClient translator;
+    private final Map<Integer, String> translations;
     private volatile long offsetMs;
+    private volatile boolean translating;
+    private volatile TranslationJobs.Job job;
     private ScheduledFuture<?> ticker;
     private int shownIndex = -2;
+    private String shownTranslation;
+    private boolean shownPending;
     private long lastEditAt;
     private final AtomicBoolean editInFlight = new AtomicBoolean(false);
     private final AtomicBoolean stopped = new AtomicBoolean(false);
@@ -43,17 +53,22 @@ public class LyricsSession {
                          Lyrics lyrics,
                          Message message,
                          ScheduledExecutorService scheduler,
+                         @Nullable TranslationClient translator,
                          long offsetMs) {
         this.client = client;
         this.track = track;
         this.lyrics = lyrics;
         this.message = message;
         this.scheduler = scheduler;
+        this.translator = translator == null || !translator.isEnabled() ? null : translator;
+        this.translations = this.translator == null ? Map.of() : this.translator.cacheFor(track.getIdentifier());
         this.offsetMs = offsetMs;
     }
 
     public void start() {
         ticker = scheduler.scheduleAtFixedRate(this::tick, 0, TICK_MS, TimeUnit.MILLISECONDS);
+        startTranslation();
+        LyricsPresenter.prefetchNext(client);
     }
 
     public void setOffsetMs(long offsetMs) {
@@ -75,13 +90,47 @@ public class LyricsSession {
     public void stop(String reason) {
         if (!stopped.compareAndSet(false, true)) return;
         if (ticker != null) ticker.cancel(false);
+        TranslationJobs.Job current = job;
+        if (current != null) current.cancel();
         try {
-            message.editMessageComponents(buildView(track, lyrics, shownIndex, reason))
+            message.editMessageComponents(buildView(track, lyrics, shownIndex, translationFor(shownIndex), reason, translator, false))
                     .useComponentsV2(true)
                     .queue(null, e -> {});
         } catch (RuntimeException e) {
             LOGGER.debug("failed to finalize lyrics message", e);
         }
+    }
+
+    private boolean startTranslation() {
+        if (translator == null) return false;
+        List<LyricLine> lines = lyrics.synced();
+        if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lines))) return false;
+        boolean pending = false;
+        List<String> sources = new ArrayList<>(lines.size());
+        for (int i = 0; i < lines.size(); i++) {
+            String text = lines.get(i).text();
+            sources.add(text);
+            if (!translations.containsKey(i) && LyricsLanguage.needsTranslation(text)) pending = true;
+        }
+        if (!pending) return false;
+        translating = true;
+        job = TranslationJobs.submit(translator, track.getIdentifier(), sources, true, null);
+        job.done().whenComplete((result, error) -> {
+            translating = false;
+            LyricsPresenter.prefetchNext(client);
+        });
+        return true;
+    }
+
+    @Nullable
+    private String translationFor(int index) {
+        return index < 0 ? null : translations.get(index);
+    }
+
+    private boolean isPendingTranslation(int index, @Nullable String translation) {
+        if (translation != null || !translating || index < 0) return false;
+        String text = lineText(lyrics.synced(), index);
+        return LyricsLanguage.needsTranslation(text);
     }
 
     private void tick() {
@@ -94,13 +143,20 @@ public class LyricsSession {
             if (client.isPaused()) return;
             long position = (long) client.getRealPositionMs() + offsetMs;
             int index = indexAt(position);
-            if (index == shownIndex) return;
+            String translation = translationFor(index);
+            boolean pending = isPendingTranslation(index, translation);
+            boolean sameLine = index == shownIndex;
+            boolean sameTranslation = translation == null ? shownTranslation == null : translation.equals(shownTranslation);
+            if (sameLine && sameTranslation && pending == shownPending) return;
             long now = System.currentTimeMillis();
             if (now - lastEditAt < MIN_EDIT_INTERVAL_MS) return;
+            if (!EditRateLimiter.tryAcquire(message.getChannel().getIdLong())) return;
             if (!editInFlight.compareAndSet(false, true)) return;
             shownIndex = index;
+            shownTranslation = translation;
+            shownPending = pending;
             lastEditAt = now;
-            message.editMessageComponents(buildView(track, lyrics, index, null))
+            message.editMessageComponents(buildView(track, lyrics, index, translation, null, translator, pending))
                     .useComponentsV2(true)
                     .queue(
                             m -> editInFlight.set(false),
@@ -124,18 +180,34 @@ public class LyricsSession {
         return index;
     }
 
-    public static Container buildView(AudioTrack track, Lyrics lyrics, int index, String footer) {
+    public static Container buildView(AudioTrack track, Lyrics lyrics, int index, @Nullable String translation, @Nullable String footer) {
+        return buildView(track, lyrics, index, translation, footer, null, false);
+    }
+
+    public static Container buildView(AudioTrack track, Lyrics lyrics, int index, @Nullable String translation,
+                                      @Nullable String footer, @Nullable TranslationClient translator, boolean pendingTranslation) {
         List<LyricLine> lines = lyrics.synced();
         String previous = lineText(lines, index - 1);
         String current = lineText(lines, index);
         String next = lineText(lines, index + 1);
         String song = track.getInfo().author + " - " + track.getInfo().title;
-        String text = (previous.isBlank() ? BLANK : "*" + previous + "*") + "\n"
-                + "## " + (current.isBlank() ? "♪" : current) + "\n"
-                + (next.isBlank() ? BLANK : "*" + next + "*") + "\n"
-                + "-# " + WIDTH_FILLER + "\n"
-                + "-# " + (footer == null ? song : song + " · " + footer);
-        TextDisplay body = TextDisplay.of(text);
+        StringBuilder text = new StringBuilder();
+        text.append(previous.isBlank() ? BLANK : "*" + previous + "*").append('\n');
+        text.append("## ").append(current.isBlank() ? "♪" : current).append('\n');
+        if (translation != null && !translation.isBlank()) {
+            text.append("-# ").append(translation).append('\n').append(BLANK).append('\n');
+        } else if (pendingTranslation) {
+            text.append("-# ").append(TRANSLATING_NOTE).append('\n').append(BLANK).append('\n');
+        }
+        text.append(next.isBlank() ? BLANK : "*" + next + "*").append('\n');
+        text.append("-# ").append(WIDTH_FILLER).append('\n');
+        text.append("-# ").append(footer == null ? song : song + " · " + footer);
+        if ((translation != null && !translation.isBlank()) || pendingTranslation) {
+            for (String noteLine : LyricsPresenter.machineTranslationNote(translator).split("\n")) {
+                text.append('\n').append("-# ").append(noteLine);
+            }
+        }
+        TextDisplay body = TextDisplay.of(text.toString());
         String artwork = MusicEmbeds.thumbnailOf(track);
         Container container = artwork == null
                 ? Container.of(body)

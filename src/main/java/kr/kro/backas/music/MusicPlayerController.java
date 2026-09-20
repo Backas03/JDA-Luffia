@@ -2,6 +2,7 @@ package kr.kro.backas.music;
 
 import club.minnced.discord.jdave.interop.JDaveSessionFactory;
 import kr.kro.backas.music.lyrics.LrcLibClient;
+import kr.kro.backas.music.lyrics.TranslationClient;
 import kr.kro.backas.music.source.MusicSourceRegistry;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
@@ -35,9 +36,11 @@ public class MusicPlayerController extends ListenerAdapter {
     private final Map<Long, MusicLoader> searchData;
     private final ScheduledExecutorService scheduler;
     private final LrcLibClient lyricsClient;
+    private final TranslationClient translationClient;
 
-    public MusicPlayerController(MusicSourceRegistry sourceRegistry) {
+    public MusicPlayerController(MusicSourceRegistry sourceRegistry, String translatorUrl) {
         this.sourceRegistry = sourceRegistry;
+        this.translationClient = new TranslationClient(translatorUrl);
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread thread = new Thread(r, "music-scheduler");
             thread.setDaemon(true);
@@ -73,6 +76,10 @@ public class MusicPlayerController extends ListenerAdapter {
 
     public LrcLibClient getLyricsClient() {
         return lyricsClient;
+    }
+
+    public TranslationClient getTranslationClient() {
+        return translationClient;
     }
 
     public void search(Identifier id, String query, Member member, SlashCommandInteractionEvent slashEvent) {
