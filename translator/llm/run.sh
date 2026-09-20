@@ -7,6 +7,7 @@ PORT="${TRANSLATOR_PORT:-8765}"
 export LD_LIBRARY_PATH="$(pwd)/bin:${LD_LIBRARY_PATH}"
 exec bin/llama-server \
   -m "models/${MODEL_FILE}" \
+  -a "${MODEL_ALIAS:-Tri-7B}" \
   --host 127.0.0.1 \
   --port "${PORT}" \
   -t "${THREADS}" \
