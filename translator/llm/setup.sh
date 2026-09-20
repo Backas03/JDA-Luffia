@@ -11,7 +11,7 @@ if [ ! -x bin/llama-server ]; then
   curl -L --retry 5 --retry-delay 3 -o "/tmp/${LLAMA_ARCHIVE}" "https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_BUILD}/${LLAMA_ARCHIVE}"
   rm -rf /tmp/llama-extract && mkdir -p /tmp/llama-extract
   tar -xzf "/tmp/${LLAMA_ARCHIVE}" -C /tmp/llama-extract
-  find /tmp/llama-extract -type f \( -name "llama-server" -o -name "*.so*" \) -exec cp -a {} bin/ \;
+  cp -a /tmp/llama-extract/llama-${LLAMA_BUILD}/. bin/
   rm -rf "/tmp/${LLAMA_ARCHIVE}" /tmp/llama-extract
   chmod +x bin/llama-server
 fi
