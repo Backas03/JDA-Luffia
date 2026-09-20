@@ -44,6 +44,7 @@ public class Luffia {
         this.commandManager.registerSlashCommand(new KaraokeModeSlashCommand());
         this.commandManager.registerSlashCommand(new LOLUserInfoSlashCommand());
         this.commandManager.registerSlashCommand(new HelpSlashCommand());
+        this.commandManager.commitSlashCommands();
 
         //this.commandManager.registerCommand("인증정보", new CertificationInfoCommand());
         //this.commandManager.registerCommand("인증해제", new CertificationRemoveCommand());
