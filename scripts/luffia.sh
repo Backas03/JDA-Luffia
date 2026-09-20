@@ -2,7 +2,7 @@
 BASE_DIR="/home/vitamin/kimnore"
 BOT_JAR="$BASE_DIR/JDA-Luffia-1.0.0-SNAPSHOT-all.jar"
 BOT_SCREEN="kimnore"
-TRANSLATOR_DIR="$BASE_DIR/translator"
+TRANSLATOR_DIR="$BASE_DIR/translator/llm"
 TRANSLATOR_SCREEN="translator"
 JAVA="java"
 JAVA_OPTS="-Xms512M -Xmx2G -Dfile.encoding=UTF-8"
