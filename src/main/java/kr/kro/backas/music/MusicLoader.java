@@ -78,7 +78,7 @@ public class MusicLoader implements AudioLoadResultHandler {
             return;
         }
         EmbedBuilder result = musicPlayerClient.enqueue(new MusicSelection(queryInfo, track), channel);
-        hook.editOriginal(MusicEmbeds.previewLinkOf(track)).setEmbeds(result.build()).queue();
+        replyWithPreview(result, MusicEmbeds.previewLinkOf(track));
     }
 
     @Override
@@ -124,7 +124,7 @@ public class MusicLoader implements AudioLoadResultHandler {
         AudioTrack selected = playlist.getSelectedTrack();
         if (selected != null) {
             EmbedBuilder result = musicPlayerClient.enqueue(new MusicSelection(queryInfo, selected), channel);
-            hook.editOriginal(MusicEmbeds.previewLinkOf(selected)).setEmbeds(result.build()).queue();
+            replyWithPreview(result, MusicEmbeds.previewLinkOf(selected));
             return;
         }
         List<AudioTrack> tracks = playlist.getTracks();
@@ -147,7 +147,7 @@ public class MusicLoader implements AudioLoadResultHandler {
         }
         EmbedBuilder result = MusicEmbeds.playlistEnqueued(
                 playlist, added, total, startedPlaying, musicPlayerClient.getMusicBot(), requester());
-        hook.editOriginal(MusicEmbeds.previewLinkOf(playlist, added.get(0))).setEmbeds(result.build()).queue();
+        replyWithPreview(result, MusicEmbeds.previewLinkOf(playlist, added.get(0)));
     }
 
     @Override
@@ -178,6 +178,13 @@ public class MusicLoader implements AudioLoadResultHandler {
                 "재통신을 시도합니다. (" + retryAttempt + "/" + MAX_LOADING_MUSIC_RETRY_ATTEMPT + ")"
                         + (reason.isBlank() ? "" : "\n" + reason)).build()).queue();
         CompletableFuture.runAsync(this::loadMusic, CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS));
+    }
+
+    private void replyWithPreview(EmbedBuilder result, String previewLink) {
+        hook.editOriginalEmbeds(result.build()).queue(message -> {
+            if (previewLink.isEmpty()) return;
+            message.getChannel().sendMessage(previewLink).queue();
+        });
     }
 
     private void replyNotInVoiceChannel() {
