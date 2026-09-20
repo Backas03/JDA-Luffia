@@ -16,7 +16,11 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -33,12 +37,43 @@ public class LrcLibClient {
             "(?i)\\s*[\\[(【].*?(official|mv|m/v|music video|lyric|audio|visualizer|ver\\.?|version|remaster).*?[\\])】]\\s*|\\s*[|_]\\s*(mv|m/v|official.*)$");
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    private static final int CACHE_SIZE = 300;
+    private static final Map<String, Optional<Lyrics>> CACHE = new LinkedHashMap<>(64, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Optional<Lyrics>> eldest) {
+            return size() > CACHE_SIZE;
+        }
+    };
+    private static final Map<String, Object> LOCKS = new ConcurrentHashMap<>();
+
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
             .build();
 
     @Nullable
     public Lyrics find(AudioTrackInfo info) throws IOException {
+        String identifier = info.identifier == null || info.identifier.isBlank() ? info.title + "|" + info.author : info.identifier;
+        Object lock = LOCKS.computeIfAbsent(identifier, k -> new Object());
+        synchronized (lock) {
+            try {
+                Optional<Lyrics> cached;
+                synchronized (CACHE) {
+                    cached = CACHE.get(identifier);
+                }
+                if (cached != null) return cached.orElse(null);
+                Lyrics found = lookup(info);
+                synchronized (CACHE) {
+                    CACHE.put(identifier, Optional.ofNullable(found));
+                }
+                return found;
+            } finally {
+                LOCKS.remove(identifier, lock);
+            }
+        }
+    }
+
+    @Nullable
+    private Lyrics lookup(AudioTrackInfo info) throws IOException {
         String title = cleanTitle(info.title);
         String artist = firstArtist(info.author);
         long durationSec = info.length / 1000;
@@ -98,7 +133,8 @@ public class LrcLibClient {
             long diff = Math.abs(candidate.path("duration").asLong(0) - durationSec);
             boolean synced = !candidate.path("syncedLyrics").asText("").isBlank();
             long score = diff - (synced ? 1 : 0);
-            if (score < bestDiff) {
+            if (score < bestDiff || (score == bestDiff && best != null
+                    && candidate.path("id").asLong(Long.MAX_VALUE) < best.path("id").asLong(Long.MAX_VALUE))) {
                 bestDiff = score;
                 best = candidate;
             }

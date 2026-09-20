@@ -24,6 +24,12 @@ public final class TranslationJobs {
     private TranslationJobs() {
     }
 
+    public static String cacheKey(String prefix, List<String> lines) {
+        StringBuilder joined = new StringBuilder();
+        for (String line : lines) joined.append(line == null ? "" : line).append('\n');
+        return prefix + ":" + lines.size() + ":" + Integer.toHexString(joined.toString().hashCode());
+    }
+
     public static Job submit(TranslationClient translator, String key, List<String> lines, boolean priority,
                              @Nullable BiConsumer<Integer, String> onLine) {
         Job job = JOBS.compute(key, (k, existing) ->
