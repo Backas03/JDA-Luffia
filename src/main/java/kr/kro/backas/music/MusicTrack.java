@@ -3,30 +3,27 @@ package kr.kro.backas.music;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import org.jetbrains.annotations.Nullable;
 
-import java.util.LinkedList;
 import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class MusicTrack {
-
-    public static final long WAITING_TIME_TO_QUIT_AFTER_TRACK_END = 1000 * 60L; // 60 seconds
-
     private final MusicPlayerClient client;
     private final AudioPlayer player;
     private final Queue<AudioTrack> trackQueue;
     private final JDA musicBot;
 
-    private RepeatMode repeatMode;
-    private Thread waitQuitingThread;
+    private volatile RepeatMode repeatMode;
 
     public MusicTrack(MusicPlayerClient client, AudioPlayer player, JDA musicBot) {
         this.client = client;
         this.player = player;
         this.musicBot = musicBot;
-        this.trackQueue = new LinkedList<>();
+        this.trackQueue = new ConcurrentLinkedQueue<>();
         this.repeatMode = RepeatMode.NO_REPEAT;
-        this.waitQuitingThread = null;
     }
 
     public String getRepeatModeName() {
@@ -41,18 +38,9 @@ public class MusicTrack {
         this.player.stopTrack();
         this.trackQueue.clear();
         this.repeatMode = RepeatMode.NO_REPEAT;
-        if (this.waitQuitingThread != null) {
-            this.waitQuitingThread.interrupt();
-        }
-        this.waitQuitingThread = null;
     }
 
-    // true: enqueue, false: play
-    public boolean enqueueOrPlay(AudioTrack track) {
-        if (waitQuitingThread != null) {
-            waitQuitingThread.interrupt();
-            waitQuitingThread = null;
-        }
+    public synchronized boolean enqueueOrPlay(AudioTrack track) {
         if (hasPlayingTrack()) {
             trackQueue.add(track);
             return true;
@@ -61,66 +49,39 @@ public class MusicTrack {
         return false;
     }
 
-    public void playNextTrack(AudioTrack endedTrack) {
+    public void playNextTrack(@Nullable AudioTrack endedTrack) {
+        playNextTrack(endedTrack, true);
+    }
+
+    public synchronized void playNextTrack(@Nullable AudioTrack endedTrack, boolean requeueEnded) {
         player.stopTrack();
-        if (repeatMode == RepeatMode.REPEAT_CURRENT) {
-            if (endedTrack == null) return;
-            MusicSelection selection = endedTrack.getUserData(MusicSelection.class);
-            SlashCommandInteractionEvent event = selection.getSlashCommandInteractionEvent();
-            if (event.isAcknowledged()) {
-                event.getMessageChannel()
-                        .sendMessageEmbeds(MusicTrackHandler.getPlayMessage(endedTrack, musicBot).build())
-                        .queue();
+        if (requeueEnded && endedTrack != null) {
+            if (repeatMode == RepeatMode.REPEAT_CURRENT) {
+                announce(endedTrack, MusicEmbeds.play(endedTrack, musicBot).build());
+                player.playTrack(endedTrack);
+                return;
             }
-            else {
-                event.replyEmbeds(MusicTrackHandler.getPlayMessage(endedTrack, musicBot).build())
-                        .mentionRepliedUser(false)
-                        .queue();
+            if (repeatMode == RepeatMode.REPEAT_ALL) {
+                trackQueue.add(endedTrack);
             }
-            player.playTrack(endedTrack);
-            return;
         }
-        if (repeatMode == RepeatMode.REPEAT_ALL && endedTrack != null) {
-            trackQueue.add(endedTrack); // 위에 적으면 queue 에 item 이 1개일때도 반복 재생 가능함
-        }
-        /* no repeat mode or repeat all mode */
-        if (trackQueue.isEmpty()) {
+        AudioTrack nextTrack = trackQueue.poll();
+        if (nextTrack == null) {
             client.disconnectFromVoiceChannelAndResetTrack();
             return;
         }
-        AudioTrack nextTrack = trackQueue.poll();
-        MusicSelection selection = nextTrack.getUserData(MusicSelection.class);
-        SlashCommandInteractionEvent slashCommandInteractionEvent = selection.getSlashCommandInteractionEvent();
-
-        // 슬래쉬 커멘드가 reply 되어있지 않았다면 reply (반복 모드 설정시 이벤트를 중복으로 reply하는데 이벤트는 1번만 reply 되어야함)
-        if (!slashCommandInteractionEvent.isAcknowledged()) {
-            slashCommandInteractionEvent
-                    .replyEmbeds(MusicTrackHandler.getPlayMessage(nextTrack, musicBot).build())
-                    .mentionRepliedUser(false)
-                    .queue();
-        } else {
-            slashCommandInteractionEvent.getMessageChannel()
-                    .sendMessageEmbeds(MusicTrackHandler.getPlayMessage(nextTrack, musicBot).build())
-                    .queue();
-        }
-        player.playTrack(nextTrack); // nextTrack cannot be null
+        announce(nextTrack, MusicEmbeds.play(nextTrack, musicBot).build());
+        player.playTrack(nextTrack);
     }
 
-    private void startWaitQuitingThread() {
-        if (waitQuitingThread != null) { // 중복 thread start 방지
-            this.waitQuitingThread = new Thread(() -> {
-                try {
-                    Thread.sleep(WAITING_TIME_TO_QUIT_AFTER_TRACK_END);
-                } catch (InterruptedException ignore) {
-                    // do nothing
-                    return;
-                }
-                if (hasPlayingTrack()) { // playing 중이라면 무시
-                    return;
-                }
-                client.disconnectFromVoiceChannelAndResetTrack();
-            });
-            this.waitQuitingThread.start();
+    private void announce(AudioTrack track, MessageEmbed embed) {
+        MusicSelection selection = track.getUserData(MusicSelection.class);
+        if (selection == null) return;
+        SlashCommandInteractionEvent event = selection.getSlashCommandInteractionEvent();
+        if (event.isAcknowledged()) {
+            event.getMessageChannel().sendMessageEmbeds(embed).queue();
+        } else {
+            event.replyEmbeds(embed).mentionRepliedUser(false).queue();
         }
     }
 
@@ -138,9 +99,5 @@ public class MusicTrack {
 
     public boolean hasPlayingTrack() {
         return player.getPlayingTrack() != null;
-    }
-
-    public Thread getWaitQuitingThread() {
-        return waitQuitingThread;
     }
 }

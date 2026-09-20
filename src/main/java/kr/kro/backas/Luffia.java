@@ -10,6 +10,8 @@ import kr.kro.backas.command.music.HelpSlashCommand;
 import kr.kro.backas.command.music.slash.*;
 import kr.kro.backas.music.MusicListener;
 import kr.kro.backas.music.MusicPlayerController;
+import kr.kro.backas.music.source.MusicSourceRegistry;
+import kr.kro.backas.secret.BotSecret;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.Guild;
@@ -58,7 +60,8 @@ public class Luffia {
 
         this.certificationManager = null; // new CertificationManager(discordAPI);
 
-        this.musicPlayerController = new MusicPlayerController();
+        this.musicPlayerController = new MusicPlayerController(
+                new MusicSourceRegistry(BotSecret.SPOTIFY_CLIENT_ID, BotSecret.SPOTIFY_CLIENT_SECRET));
         this.musicPlayerController.register(discordAPI);
         discordAPI.addEventListener(this.musicPlayerController);
 

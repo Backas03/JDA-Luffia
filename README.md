@@ -6,8 +6,9 @@
 
 * 지원 명령어
 ```
-/재생 <링크 혹은 유튜브에서 검색할 단어>
-  ㄴ <링크> 또는 <검색할 단어>를 찾아 노래를 재생합니다.
+/재생 <검색어 또는 링크> (출처)
+  ㄴ 유튜브/스포티파이 링크(곡, 앨범, 플레이리스트)는 바로 재생하고, 검색어는 선택한 출처(유튜브, 유튜브 뮤직, 스포티파이)에서 검색합니다.
+  ㄴ 스포티파이는 오디오를 제공하지 않으므로 곡 정보(ISRC, 제목)로 유튜브에서 찾아 재생합니다.
 /이퀄라이저 <모드 (자동완성 지원)>
   ㄴ 재생중인 노래에 이퀄라이저를 적용합니다. (초저음 강조, 저음 강조, 일반, 고음 강조, 초고음 강조)
 /노래방모드
@@ -88,6 +89,12 @@ public final class BotSecret {
             "ggg1MzI1MzkasdExODMwNA.Gm3wvS.sfasfas4pPi9d_a4zrqHClEp3IxPpqkGWrYQ3h1t-Tk", // bot 1
             "eeeasdNzQ2NTEyNzAzNDg4MA.G6etwH.CSwxF9TkKeosfasfasfasasrqwrw" // bot 2
     );
+
+    // 스포티파이 링크/검색 지원용. https://developer.spotify.com/dashboard 에서 앱을 만들고 발급받습니다.
+    // 비워두면 스포티파이 기능만 꺼지고 유튜브는 정상 동작합니다.
+    // 2026년 2월 이후 Development Mode 앱은 소유자 계정에 Spotify Premium 이 필요합니다.
+    public static final String SPOTIFY_CLIENT_ID = "";
+    public static final String SPOTIFY_CLIENT_SECRET = "";
 }
 ```
 ### 2. SharedConstant.java 에서 MAIN_GUILD_ID 를 서비스 할 서버 guild id로 수정합니다 </br>
@@ -125,7 +132,8 @@ public final class SharedConstant {
 !강제인증 [userId] [이메일] - 해당 유저를 관리자의 권한으로 강제 인증시킵니다.
 ```
 ### 2. 뮤직 플레이어 기능
- - LavaPlayer 라이브러리를 사용하여 유튜브에서 노래를 검색 후 디스코드에서 음악을 재생할 수 있습니다 </br>
+ - LavaPlayer(youtube-source, LavaSrc) 라이브러리를 사용하여 유튜브/스포티파이 링크 또는 검색어로 디스코드에서 음악을 재생할 수 있습니다 </br>
+ - 스포티파이 곡/앨범/플레이리스트 링크는 곡 정보를 읽어 유튜브에서 같은 곡을 찾아 재생합니다 (미러링) </br>
  - 추가적으로 봇을 추가하여 하나의 디코방에서 여려 음성채팅방에서 음악을 재생할 수 있습니다 </br>
    (봇 상태메시지에 현재 재생중인 음성채팅방의 이름을 표기합니다) </br>
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/8850d664-b12c-4569-b403-59e358bb796c)
