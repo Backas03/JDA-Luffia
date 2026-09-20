@@ -12,11 +12,9 @@ import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Member;
-import net.dv8tion.jda.api.entities.MessageEmbed;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
-import java.util.ArrayList;
 import java.util.List;
 
 public final class MusicEmbeds {
@@ -107,8 +105,8 @@ public final class MusicEmbeds {
         StringBuilder description = new StringBuilder();
         description.append(added.size()).append(startedPlaying ? "곡을 대기열에 추가 & 재생합니다" : "곡을 대기열에 추가했습니다");
         if (total > added.size()) {
-            description.append("\n(전체 ").append(total).append("곡 중 최대 ")
-                    .append(added.size()).append("곡까지만 추가됩니다)");
+            description.append("\n(전체 ").append(total).append("곡 중 ")
+                    .append(added.size()).append("곡이 추가되었습니다)");
         }
 
         EmbedBuilder builder = new EmbedBuilder()
@@ -139,49 +137,6 @@ public final class MusicEmbeds {
             builder.addField("사유", reason.length() > 1000 ? reason.substring(0, 1000) : reason, false);
         }
         return builder;
-    }
-
-    public static String previewLinkOf(AudioTrack track) {
-        AudioSourceManager source = track.getSourceManager();
-        if (source != null && "spotify".equals(source.getSourceName()) && track.getInfo().uri != null) {
-            return track.getInfo().uri;
-        }
-        return "";
-    }
-
-    public static String previewLinkOf(AudioPlaylist playlist, AudioTrack firstTrack) {
-        if (playlist instanceof ExtendedAudioPlaylist extended && extended.getUrl() != null
-                && !previewLinkOf(firstTrack).isEmpty()) {
-            return extended.getUrl();
-        }
-        return "";
-    }
-
-    public static String toPlainText(MessageEmbed embed, String link) {
-        StringBuilder text = new StringBuilder();
-        if (embed.getAuthor() != null && embed.getAuthor().getName() != null) {
-            text.append(embed.getAuthor().getName()).append('\n');
-        }
-        if (embed.getTitle() != null) {
-            text.append("**").append(embed.getTitle()).append("**").append('\n');
-        }
-        if (embed.getDescription() != null) {
-            text.append(embed.getDescription()).append('\n');
-        }
-        List<String> fields = new ArrayList<>();
-        for (MessageEmbed.Field field : embed.getFields()) {
-            if (field.getName() == null || field.getName().isBlank()) continue;
-            String value = field.getValue() == null ? "" : field.getValue().replaceAll("\\[([^\\]]+)\\]\\([^)]+\\)", "$1");
-            fields.add(field.getName() + ": " + value);
-        }
-        if (!fields.isEmpty()) {
-            text.append(String.join(" | ", fields)).append('\n');
-        }
-        if (embed.getFooter() != null && embed.getFooter().getText() != null) {
-            text.append("요청: ").append(embed.getFooter().getText()).append('\n');
-        }
-        text.append(link);
-        return text.toString();
     }
 
     public static EmbedBuilder error(@Nullable Member member, String title, @Nullable String description) {
