@@ -32,6 +32,7 @@ public final class LyricsPresenter {
     private static final int MESSAGE_TEXT_BUDGET = 5800;
     private static final int TRANSLATION_BATCH = 50;
     private static final String TRUNCATED_NOTE = "… (이하 생략)";
+    public static final String MACHINE_TRANSLATION_NOTE = "기계 번역한 가사입니다. 올바르지 않을 수 있습니다.";
 
     private LyricsPresenter() {
     }
@@ -170,7 +171,8 @@ public final class LyricsPresenter {
                         .setThumbnail(MusicEmbeds.thumbnailOf(track));
             }
             if (i == pages.size() - 1) {
-                builder.setFooter(footer);
+                boolean translated = translations != null && !translations.isEmpty();
+                builder.setFooter(translated ? footer + "\n" + MACHINE_TRANSLATION_NOTE : footer);
             }
             embeds.add(builder.build());
         }
@@ -185,7 +187,7 @@ public final class LyricsPresenter {
             String entry = lines.get(i);
             String translation = translations == null ? null : translations.get(i);
             if (translation != null && !translation.isBlank()) {
-                entry += "\n*" + translation + "*";
+                entry += "\n-# " + translation;
             }
             int needed = entry.length() + 1;
             if (used + needed + TRUNCATED_NOTE.length() > MESSAGE_TEXT_BUDGET) {
