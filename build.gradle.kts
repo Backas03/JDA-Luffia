@@ -47,6 +47,21 @@ tasks.test {
     useJUnitPlatform()
 }
 
+tasks.register<Jar>("fatJar") {
+    group = "build"
+    description = "의존성을 모두 포함한 단일 실행 jar (java -jar)"
+    archiveClassifier.set("all")
+    manifest {
+        attributes["Main-Class"] = "kr.kro.backas.Main"
+        attributes["Enable-Native-Access"] = "ALL-UNNAMED"
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(sourceSets.main.get().output)
+    dependsOn(configurations.runtimeClasspath)
+    from({ configurations.runtimeClasspath.get().filter { it.name.endsWith(".jar") }.map { zipTree(it) } })
+    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/*.EC", "module-info.class")
+}
+
 tasks.register<JavaExec>("spotifyLogin") {
     group = "application"
     description = "스포티파이 플레이리스트 읽기용 refresh token 을 발급받습니다"
