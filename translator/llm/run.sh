@@ -14,4 +14,5 @@ exec nice -n "${LLM_NICE:-10}" bin/llama-server \
   -tb "${THREADS_BATCH}" \
   -c 8192 \
   -np 1 \
+  --cache-ram "${LLM_CACHE_RAM:-0}" \
   --no-webui
