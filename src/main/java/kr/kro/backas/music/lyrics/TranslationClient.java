@@ -10,8 +10,12 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.ConnectException;
+import java.net.NoRouteToHostException;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpConnectTimeoutException;
+import java.nio.channels.UnresolvedAddressException;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
@@ -48,10 +52,22 @@ public class TranslationClient {
 
     private enum Mode { UNKNOWN, NLLB, LLM }
 
-    private final String baseUrl;
+    private static final long RETRY_FAILED_MS = 30_000;
+
+    private static final class Endpoint {
+        private final String baseUrl;
+        private volatile Mode mode = Mode.UNKNOWN;
+        private volatile String modelName = "";
+        private volatile long failedAt;
+
+        private Endpoint(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+    }
+
+    private final List<Endpoint> endpoints;
+    private volatile Endpoint active;
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
-    private volatile Mode mode = Mode.UNKNOWN;
-    private volatile String modelName;
     private final Map<String, Map<Integer, String>> cache = Collections.synchronizedMap(
             new LinkedHashMap<>(64, 0.75f, true) {
                 @Override
@@ -60,12 +76,89 @@ public class TranslationClient {
                 }
             });
 
-    public TranslationClient(@Nullable String baseUrl) {
-        this.baseUrl = baseUrl == null || baseUrl.isBlank() ? null : baseUrl.replaceAll("/+$", "");
+    public TranslationClient(@Nullable String urls) {
+        List<Endpoint> parsed = new ArrayList<>();
+        if (urls != null) {
+            for (String url : urls.split("[,\\s]+")) {
+                String trimmed = url.trim().replaceAll("/+$", "");
+                if (!trimmed.isBlank()) parsed.add(new Endpoint(trimmed));
+            }
+        }
+        this.endpoints = List.copyOf(parsed);
+        if (!endpoints.isEmpty()) {
+            TranslationJobs.EXECUTOR.execute(() -> {
+                try {
+                    pick();
+                } catch (IOException e) {
+                    LOGGER.warn("no translator endpoint reachable at startup: {}", e.getMessage());
+                }
+            });
+        }
     }
 
     public boolean isEnabled() {
-        return baseUrl != null;
+        return !endpoints.isEmpty();
+    }
+
+    @Nullable
+    public String getActiveUrl() {
+        Endpoint endpoint = active;
+        return endpoint == null ? null : endpoint.baseUrl;
+    }
+
+    private Endpoint pick() throws IOException {
+        long now = System.currentTimeMillis();
+        IOException last = null;
+        for (Endpoint endpoint : endpoints) {
+            if (endpoint.failedAt != 0 && now - endpoint.failedAt < RETRY_FAILED_MS) continue;
+            try {
+                detect(endpoint);
+                if (active != endpoint) {
+                    active = endpoint;
+                    LOGGER.info("translator endpoint in use: {} ({}, model={})", endpoint.baseUrl, endpoint.mode, endpoint.modelName);
+                }
+                return endpoint;
+            } catch (IOException e) {
+                markFailed(endpoint, e);
+                last = e;
+            }
+        }
+        throw new IOException("no translator endpoint available", last);
+    }
+
+    private void markFailed(Endpoint endpoint, IOException e) {
+        endpoint.failedAt = System.currentTimeMillis();
+        endpoint.mode = Mode.UNKNOWN;
+        if (active == endpoint) active = null;
+        LOGGER.warn("translator endpoint {} unavailable: {}", endpoint.baseUrl, e.toString());
+    }
+
+    private void detect(Endpoint endpoint) throws IOException {
+        if (endpoint.mode != Mode.UNKNOWN) return;
+        HttpResponse<String> response = send(HttpRequest.newBuilder(URI.create(endpoint.baseUrl + "/v1/models"))
+                .timeout(Duration.ofSeconds(5)).GET().build());
+        Mode detected = response.statusCode() == 200 && response.body().contains("\"data\"") ? Mode.LLM : Mode.NLLB;
+        endpoint.modelName = detected == Mode.LLM ? readLlmModelName(response.body()) : readNllbModelName(endpoint);
+        endpoint.mode = detected;
+        endpoint.failedAt = 0;
+        LOGGER.info("translator mode detected: {} model={} ({})", detected, endpoint.modelName, endpoint.baseUrl);
+    }
+
+    private static boolean isConnectivityFailure(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof ConnectException || current instanceof HttpConnectTimeoutException
+                    || current instanceof NoRouteToHostException || current instanceof UnresolvedAddressException) {
+                return true;
+            }
+            String message = current.getMessage();
+            if (message != null && (message.contains("Connection refused") || message.contains("translator 502")
+                    || message.contains("translator 503") || message.contains("translator request failed"))) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     public Map<Integer, String> cacheFor(String trackKey) {
@@ -82,48 +175,38 @@ public class TranslationClient {
 
     public List<String> translate(String sourceLanguage, List<String> lines, @Nullable BiConsumer<Integer, String> onLine,
                                   @Nullable Cancellation cancellation) throws IOException {
-        if (baseUrl == null) throw new IOException("translator disabled");
+        if (endpoints.isEmpty()) throw new IOException("translator disabled");
         if (lines.isEmpty()) return List.of();
-        Mode current = detectMode();
-        List<String> result = current == Mode.LLM ? translateWithLlm(lines, onLine, cancellation) : translateWithNllb(sourceLanguage, lines);
-        if (result.size() != lines.size()) {
-            LOGGER.warn("translator returned {} lines for {} inputs", result.size(), lines.size());
-            throw new IOException("translator line count mismatch");
+        IOException last = null;
+        for (int attempt = 0; attempt < endpoints.size(); attempt++) {
+            Endpoint endpoint = pick();
+            try {
+                List<String> result = endpoint.mode == Mode.LLM
+                        ? translateWithLlm(endpoint, lines, onLine, cancellation)
+                        : translateWithNllb(endpoint, sourceLanguage, lines);
+                if (result.size() != lines.size()) {
+                    LOGGER.warn("translator returned {} lines for {} inputs", result.size(), lines.size());
+                    throw new IOException("translator line count mismatch");
+                }
+                return result;
+            } catch (IOException e) {
+                if (cancellation != null && cancellation.isRequested()) throw e;
+                if (!isConnectivityFailure(e)) throw e;
+                markFailed(endpoint, e);
+                last = e;
+            }
         }
-        return result;
-    }
-
-    private Mode detectMode() throws IOException {
-        Mode current = mode;
-        if (current != Mode.UNKNOWN) return current;
-        HttpResponse<String> response = send(HttpRequest.newBuilder(URI.create(baseUrl + "/v1/models"))
-                .timeout(Duration.ofSeconds(5)).GET().build());
-        current = response.statusCode() == 200 && response.body().contains("\"data\"") ? Mode.LLM : Mode.NLLB;
-        modelName = current == Mode.LLM ? readLlmModelName(response.body()) : readNllbModelName();
-        mode = current;
-        LOGGER.info("translator mode detected: {} model={} ({})", current, modelName, baseUrl);
-        return current;
+        throw last == null ? new IOException("no translator endpoint available") : last;
     }
 
     public boolean isLlm() {
-        try {
-            return detectMode() == Mode.LLM;
-        } catch (IOException e) {
-            return false;
-        }
+        Endpoint endpoint = active;
+        return endpoint != null && endpoint.mode == Mode.LLM;
     }
 
     public String getModelName() {
-        String name = modelName;
-        if (name == null) {
-            try {
-                detectMode();
-            } catch (IOException e) {
-                return "";
-            }
-            name = modelName;
-        }
-        return name == null ? "" : name;
+        Endpoint endpoint = active;
+        return endpoint == null ? "" : endpoint.modelName;
     }
 
     private static String readLlmModelName(String body) {
@@ -135,9 +218,9 @@ public class TranslationClient {
         }
     }
 
-    private String readNllbModelName() {
+    private String readNllbModelName(Endpoint endpoint) {
         try {
-            HttpResponse<String> response = send(HttpRequest.newBuilder(URI.create(baseUrl + "/health"))
+            HttpResponse<String> response = send(HttpRequest.newBuilder(URI.create(endpoint.baseUrl + "/health"))
                     .timeout(Duration.ofSeconds(5)).GET().build());
             return cleanModelName(MAPPER.readTree(response.body()).path("model").asText(""));
         } catch (IOException e) {
@@ -154,13 +237,13 @@ public class TranslationClient {
         return name;
     }
 
-    private List<String> translateWithNllb(String sourceLanguage, List<String> lines) throws IOException {
+    private List<String> translateWithNllb(Endpoint endpoint, String sourceLanguage, List<String> lines) throws IOException {
         ObjectNode body = MAPPER.createObjectNode();
         body.put("src", sourceLanguage);
         body.put("tgt", LyricsLanguage.KOREAN);
         ArrayNode array = body.putArray("lines");
         lines.forEach(array::add);
-        JsonNode node = postJson("/translate", body, Duration.ofSeconds(60));
+        JsonNode node = postJson(endpoint, "/translate", body, Duration.ofSeconds(60));
         List<String> result = new ArrayList<>();
         for (JsonNode line : node.path("lines")) result.add(line.asText(""));
         return result;
@@ -202,9 +285,9 @@ public class TranslationClient {
         return body;
     }
 
-    private List<String> translateWithLlm(List<String> lines, @Nullable BiConsumer<Integer, String> onLine,
+    private List<String> translateWithLlm(Endpoint endpoint, List<String> lines, @Nullable BiConsumer<Integer, String> onLine,
                                           @Nullable Cancellation cancellation) throws IOException {
-        String content = onLine == null ? requestLlm(lines) : streamLlm(lines, onLine, cancellation);
+        String content = onLine == null ? requestLlm(endpoint, lines) : streamLlm(endpoint, lines, onLine, cancellation);
         JsonNode parsed;
         try {
             parsed = MAPPER.readTree(content);
@@ -237,7 +320,7 @@ public class TranslationClient {
                 String source = lines.get(index);
                 String fixed = source;
                 try {
-                    List<String> retried = translateWithLlm(List.of(source), null, null);
+                    List<String> retried = translateWithLlm(endpoint, List.of(source), null, null);
                     if (isAcceptable(source, retried.get(0))) fixed = retried.get(0);
                 } catch (IOException e) {
                     LOGGER.debug("single line retry failed for line {}", index + 1, e);
@@ -255,8 +338,8 @@ public class TranslationClient {
         return translated.trim().length() >= 2 || source.trim().length() <= 2;
     }
 
-    private String requestLlm(List<String> lines) throws IOException {
-        JsonNode node = postJson("/v1/chat/completions", buildLlmRequest(lines, false), Duration.ofSeconds(300));
+    private String requestLlm(Endpoint endpoint, List<String> lines) throws IOException {
+        JsonNode node = postJson(endpoint, "/v1/chat/completions", buildLlmRequest(lines, false), Duration.ofSeconds(300));
         return node.path("choices").path(0).path("message").path("content").asText("");
     }
 
@@ -280,9 +363,10 @@ public class TranslationClient {
         }
     }
 
-    private String streamLlm(List<String> lines, BiConsumer<Integer, String> onLine, @Nullable Cancellation cancellation) throws IOException {
+    private String streamLlm(Endpoint endpoint, List<String> lines, BiConsumer<Integer, String> onLine,
+                             @Nullable Cancellation cancellation) throws IOException {
         if (cancellation != null && cancellation.isRequested()) throw new IOException("translation cancelled");
-        HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/v1/chat/completions"))
+        HttpRequest request = HttpRequest.newBuilder(URI.create(endpoint.baseUrl + "/v1/chat/completions"))
                 .header("Content-Type", "application/json")
                 .timeout(Duration.ofSeconds(300))
                 .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(buildLlmRequest(lines, true))))
@@ -395,8 +479,8 @@ public class TranslationClient {
         return false;
     }
 
-    private JsonNode postJson(String path, ObjectNode body, Duration timeout) throws IOException {
-        HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + path))
+    private JsonNode postJson(Endpoint endpoint, String path, ObjectNode body, Duration timeout) throws IOException {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(endpoint.baseUrl + path))
                 .header("Content-Type", "application/json")
                 .timeout(timeout)
                 .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(body)))
@@ -418,15 +502,16 @@ public class TranslationClient {
     }
 
     public boolean isHealthy() {
-        if (baseUrl == null) return false;
-        try {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/health"))
-                    .timeout(Duration.ofSeconds(3))
-                    .GET()
-                    .build();
-            return send(request).statusCode() == 200;
-        } catch (IOException e) {
-            return false;
+        for (Endpoint endpoint : endpoints) {
+            try {
+                HttpRequest request = HttpRequest.newBuilder(URI.create(endpoint.baseUrl + "/health"))
+                        .timeout(Duration.ofSeconds(3))
+                        .GET()
+                        .build();
+                if (send(request).statusCode() == 200) return true;
+            } catch (IOException ignored) {
+            }
         }
+        return false;
     }
 }
