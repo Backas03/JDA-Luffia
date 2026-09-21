@@ -17,8 +17,18 @@ public class CommandListener extends ListenerAdapter {
 
     public static final Logger LOGGER = LoggerFactory.getLogger(CommandListener.class);
 
+    private static long publishedGuildId() {
+        return SharedConstant.ON_DEV ? SharedConstant.DEV_GUILD_ID : SharedConstant.PUBLISHED_GUILD_ID;
+    }
+
     @Override
     public void onSlashCommandInteraction(@NotNull SlashCommandInteractionEvent event) {
+        if (event.getGuild() == null || event.getGuild().getIdLong() != publishedGuildId()) {
+            event.reply("이 서버에서는 명령어를 사용할 수 없습니다. 서비스 서버에서만 지원합니다.")
+                    .setEphemeral(true)
+                    .queue();
+            return;
+        }
         String command = event.getName();
         SlashCommandSource source = Main.getLuffia()
                 .getCommandManager()
@@ -28,6 +38,10 @@ public class CommandListener extends ListenerAdapter {
 
     @Override
     public void onCommandAutoCompleteInteraction(@NotNull CommandAutoCompleteInteractionEvent event) {
+        if (event.getGuild() == null || event.getGuild().getIdLong() != publishedGuildId()) {
+            event.replyChoices().queue();
+            return;
+        }
         String command = event.getName();
         SlashCommandSource source = Main.getLuffia()
                 .getCommandManager()
@@ -40,11 +54,7 @@ public class CommandListener extends ListenerAdapter {
         if (event.getAuthor().isBot()) {
             return;
         }
-        long guildId = event.getGuild().getIdLong();
-        long publishedGuildId = SharedConstant.ON_DEV ?
-                SharedConstant.DEV_GUILD_ID :
-                SharedConstant.PUBLISHED_GUILD_ID;
-        if (guildId != publishedGuildId) {
+        if (!event.isFromGuild() || event.getGuild().getIdLong() != publishedGuildId()) {
             return;
         }
         String content = event.getMessage().getContentRaw();

@@ -11,7 +11,10 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 
 public final class TranslationJobs {
@@ -20,8 +23,20 @@ public final class TranslationJobs {
     private static final int CHUNK = 400;
     private static final long PRIORITY_POLL_MS = 250;
     private static final Map<String, Job> JOBS = new ConcurrentHashMap<>();
+    private static final AtomicInteger THREAD_COUNTER = new AtomicInteger();
+    public static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(runnable -> {
+        Thread thread = new Thread(runnable, "lyrics-translation-" + THREAD_COUNTER.incrementAndGet());
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private TranslationJobs() {
+    }
+
+    public static String cacheKey(String prefix, List<String> lines) {
+        StringBuilder joined = new StringBuilder();
+        for (String line : lines) joined.append(line == null ? "" : line).append('\n');
+        return prefix + ":" + lines.size() + ":" + Integer.toHexString(joined.toString().hashCode());
     }
 
     public static Job submit(TranslationClient translator, String key, List<String> lines, boolean priority,
@@ -31,7 +46,7 @@ public final class TranslationJobs {
         if (onLine != null) job.listeners.add(onLine);
         boolean fresh = job.started.compareAndSet(false, true);
         if (priority) job.promote();
-        if (fresh) CompletableFuture.runAsync(job::run);
+        if (fresh) EXECUTOR.execute(job::run);
         return job;
     }
 
@@ -123,15 +138,25 @@ public final class TranslationJobs {
         }
 
         private void run() {
+            boolean waiting = false;
             try {
                 while (!cancelled) {
                     if (!priority && priorityActive(this)) {
+                        if (!waiting) {
+                            waiting = true;
+                            LOGGER.info("translation job {} waiting for the current song", key);
+                        }
                         sleep(PRIORITY_POLL_MS);
                         continue;
                     }
+                    waiting = false;
                     preempted = false;
                     List<Integer> pending = pending();
-                    if (pending.isEmpty()) return;
+                    if (pending.isEmpty()) {
+                        LOGGER.info("translation job {} has nothing left to translate", key);
+                        return;
+                    }
+                    LOGGER.info("translation job {} started: {} lines, priority={}", key, pending.size(), priority);
                     List<Integer> indices = new ArrayList<>(pending.subList(0, Math.min(CHUNK, pending.size())));
                     List<String> sources = new ArrayList<>(indices.size());
                     for (int index : indices) sources.add(lines.get(index));
@@ -142,8 +167,12 @@ public final class TranslationJobs {
                         List<String> translated = translator.translate("auto", sources,
                                 (offset, text) -> deliver(indices.get(offset), sources.get(offset), text), cancellation);
                         for (int i = 0; i < indices.size(); i++) deliver(indices.get(i), sources.get(i), translated.get(i));
+                        LOGGER.info("translation job {} finished: {} lines cached", key, cache.size());
                     } catch (IOException e) {
-                        if (cancelled) return;
+                        if (cancelled) {
+                            LOGGER.info("translation job {} cancelled with {} lines cached", key, cache.size());
+                            return;
+                        }
                         if (preempted) {
                             LOGGER.info("lyrics translation for {} preempted, resuming later", key);
                             continue;

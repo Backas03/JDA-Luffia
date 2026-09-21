@@ -47,6 +47,7 @@ public class MusicPlayerClient {
     private volatile double realPositionMs;
     private volatile ConfiguredEqualizer currentEqualizer = ConfiguredEqualizer.NORMAL;
     private volatile LyricsSession lyricsSession;
+    private volatile boolean autoLyricsEnabled = true;
     private volatile MessageChannel lyricsChannel;
     private volatile long lyricsOffsetMs = LyricsSession.DEFAULT_OFFSET_MS;
 
@@ -163,19 +164,36 @@ public class MusicPlayerClient {
     }
 
     public void enableAutoLyrics(MessageChannel channel, long offsetMs) {
+        this.autoLyricsEnabled = true;
         this.lyricsChannel = channel;
         this.lyricsOffsetMs = offsetMs;
     }
 
     public boolean disableAutoLyrics(String reason) {
-        boolean wasEnabled = lyricsChannel != null;
+        boolean wasEnabled = autoLyricsEnabled;
+        autoLyricsEnabled = false;
         lyricsChannel = null;
         boolean stopped = stopLyrics(reason);
         return wasEnabled || stopped;
     }
 
     public boolean isAutoLyricsEnabled() {
-        return lyricsChannel != null;
+        return autoLyricsEnabled;
+    }
+
+    private void resetLyricsPreferences() {
+        autoLyricsEnabled = true;
+        lyricsChannel = null;
+        lyricsOffsetMs = LyricsSession.DEFAULT_OFFSET_MS;
+    }
+
+    @Nullable
+    private MessageChannel lyricsChannelFor(AudioTrack track) {
+        MessageChannel channel = lyricsChannel;
+        if (channel != null) return channel;
+        MusicSelection selection = track.getUserData(MusicSelection.class);
+        if (selection == null || selection.getSlashCommandInteractionEvent() == null) return null;
+        return selection.getSlashCommandInteractionEvent().getMessageChannel();
     }
 
     public long getLyricsOffsetMs() {
@@ -192,7 +210,8 @@ public class MusicPlayerClient {
     }
 
     private void onTrackStarted(AudioTrack track) {
-        MessageChannel channel = lyricsChannel;
+        if (!autoLyricsEnabled) return;
+        MessageChannel channel = lyricsChannelFor(track);
         if (channel == null) return;
         LyricsSession current = lyricsSession;
         if (current != null && current.isForTrack(track)) return;
@@ -296,6 +315,10 @@ public class MusicPlayerClient {
     }
 
     public void connectToVoiceChannel(@NotNull VoiceChannel channel) {
+        if (channel.getGuild().getIdLong() != SharedConstant.PUBLISHED_GUILD_ID) {
+            throw new IllegalStateException("서비스 서버(" + SharedConstant.PUBLISHED_GUILD_ID + ")가 아닌 서버의 음성채팅방입니다: "
+                    + channel.getGuild().getName() + "(" + channel.getGuild().getId() + ")");
+        }
         musicBot.getGuildById(SharedConstant.PUBLISHED_GUILD_ID)
                 .getAudioManager()
                 .openAudioConnection(channel);
@@ -312,6 +335,7 @@ public class MusicPlayerClient {
         musicBot.getPresence().setActivity(Activity.playing(SharedConstant.DEFAULT_ACTIVITY));
 
         musicTrack.reset();
+        resetLyricsPreferences();
         audioPlayer.setVolume(DEFAULT_VOLUME);
     }
 

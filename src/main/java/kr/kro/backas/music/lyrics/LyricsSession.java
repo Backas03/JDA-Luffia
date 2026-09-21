@@ -37,6 +37,8 @@ public class LyricsSession {
     private final ScheduledExecutorService scheduler;
     private final TranslationClient translator;
     private final Map<Integer, String> translations;
+    private final List<String> sources;
+    private final String cacheKey;
     private volatile long offsetMs;
     private volatile boolean translating;
     private volatile TranslationJobs.Job job;
@@ -61,7 +63,10 @@ public class LyricsSession {
         this.message = message;
         this.scheduler = scheduler;
         this.translator = translator == null || !translator.isEnabled() ? null : translator;
-        this.translations = this.translator == null ? Map.of() : this.translator.cacheFor(track.getIdentifier());
+        this.sources = new ArrayList<>(lyrics.synced().size());
+        for (LyricLine line : lyrics.synced()) this.sources.add(line.text());
+        this.cacheKey = TranslationJobs.cacheKey("synced", sources);
+        this.translations = this.translator == null ? Map.of() : this.translator.cacheFor(cacheKey);
         this.offsetMs = offsetMs;
     }
 
@@ -106,15 +111,12 @@ public class LyricsSession {
         List<LyricLine> lines = lyrics.synced();
         if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lines))) return false;
         boolean pending = false;
-        List<String> sources = new ArrayList<>(lines.size());
-        for (int i = 0; i < lines.size(); i++) {
-            String text = lines.get(i).text();
-            sources.add(text);
-            if (!translations.containsKey(i) && LyricsLanguage.needsTranslation(text)) pending = true;
+        for (int i = 0; i < sources.size(); i++) {
+            if (!translations.containsKey(i) && LyricsLanguage.needsTranslation(sources.get(i))) pending = true;
         }
         if (!pending) return false;
         translating = true;
-        job = TranslationJobs.submit(translator, track.getIdentifier(), sources, true, null);
+        job = TranslationJobs.submit(translator, cacheKey, sources, true, null);
         job.done().whenComplete((result, error) -> {
             translating = false;
             LyricsPresenter.prefetchNext(client);
