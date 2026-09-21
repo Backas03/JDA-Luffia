@@ -105,7 +105,7 @@ public final class BotSecret {
     // 스포티파이 플레이리스트 링크 지원용. 아래 "스포티파이 플레이리스트 설정" 절을 참고해 발급받습니다. 비워두면 플레이리스트만 비활성화됩니다.
     public static final String SPOTIFY_REFRESH_TOKEN = "";
 
-    // 가사 한국어 번역 사이드카 주소 (예: "http://127.0.0.1:8765"). 아래 "가사 번역 설정" 절 참고. 비워두면 번역만 비활성화됩니다.
+    // 가사 한국어 번역 서버 주소 (예: "http://127.0.0.1:8765"). 쉼표로 여러 개 적으면 앞에서부터 시도하고 안 되면 다음으로 넘어갑니다. 아래 "가사 번역 설정" 절 참고. 비워두면 번역만 비활성화됩니다.
     public static final String TRANSLATOR_URL = "";
 }
 ```
@@ -182,6 +182,10 @@ public static final List<String> MUSIC_BOT_TOKENS = List.of(
 1. ``translator/llm/setup.sh`` 실행 (llama.cpp 바이너리 17MB + 모델 4.7GB 다운로드, 한 번만)
 2. ``translator/llm/run.sh`` 로 실행 (기본 127.0.0.1:8765, ``TRANSLATOR_PORT`` 로 변경, ``LLM_THREADS`` 로 생성 스레드(기본 6, 물리 코어 수), ``LLM_THREADS_BATCH`` 로 프롬프트 처리 스레드(기본 12) 조정. ``nice`` 우선순위 10으로 실행되어 같은 머신의 다른 서버에 CPU 를 양보하며 ``LLM_NICE`` 로 조정. llama-server 의 호스트 메모리 프롬프트 캐시는 곡마다 프롬프트가 달라 쓸모가 없고 기본값 8GB 까지 계속 쌓이므로 ``--cache-ram 0`` 으로 꺼 두었으며 ``LLM_CACHE_RAM`` 으로 MiB 단위 조정 가능)
 3. ``BotSecret.TRANSLATOR_URL`` 에 ``http://127.0.0.1:8765`` 를 넣고 봇 재시작
+
+**GPU PC 를 같이 쓰는 경우 (자동 전환)**: 주소를 쉼표로 여러 개 적으면 앞에서부터 순서대로 시도합니다. 예: ``"http://192.168.0.20:8765,http://127.0.0.1:8765"``. 첫 주소(GPU PC)가 꺼져 있거나 연결이 끊기면 30초 동안 건너뛰고 다음 주소(봇 서버의 CPU llama-server)로 번역하며, 30초마다 다시 확인해 GPU PC 가 켜지면 자동으로 돌아갑니다. 번역 중에 끊겨도 같은 요청을 다음 주소로 다시 보냅니다. 재빌드 없이 바꾸려면 환경변수 ``TRANSLATOR_URL`` 또는 JVM 옵션 ``-Dtranslator.url=...`` 로 덮어쓸 수 있습니다. 가사 하단의 모델명은 실제로 번역한 쪽의 모델을 표시합니다.
+
+GPU PC(Windows) 쪽은 llama.cpp 릴리스에서 ``llama-*-bin-win-cuda-*-x64.zip`` 과 같은 릴리스의 ``cudart-*.zip`` 을 받아 ``translator/llm/bin`` 에 풀고, 모델을 ``translator/llm/models`` 에 둔 뒤 ``translator/llm/run-gpu.bat`` 로 실행합니다. 이 스크립트는 ``--host 0.0.0.0`` 과 ``-ngl 99`` 로 띄우므로 Windows 방화벽에서 8765 포트 인바운드를 허용해야 하고, 공유기 포트포워딩은 하지 않습니다. 공유기에서 GPU PC 의 IP 를 고정해 두고 절전 모드를 끄세요.
 
 **B. NLLB (가볍지만 가사 품질 낮음)**: Meta NLLB-200 을 CTranslate2 로 실행. Python 3.10 이상 필요.
 1. ``translator/setup.sh`` 실행 (모델 다운로드와 int8 변환, 한 번만)

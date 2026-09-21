@@ -63,9 +63,13 @@ public class Luffia {
 
         this.certificationManager = null; // new CertificationManager(discordAPI);
 
+        String translatorUrl = System.getenv("TRANSLATOR_URL");
+        if (translatorUrl == null || translatorUrl.isBlank()) {
+            translatorUrl = System.getProperty("translator.url", BotSecret.TRANSLATOR_URL);
+        }
         this.musicPlayerController = new MusicPlayerController(
                 new MusicSourceRegistry(BotSecret.SPOTIFY_CLIENT_ID, BotSecret.SPOTIFY_CLIENT_SECRET, BotSecret.SPOTIFY_REFRESH_TOKEN),
-                BotSecret.TRANSLATOR_URL);
+                translatorUrl);
         this.musicPlayerController.register(discordAPI);
         discordAPI.addEventListener(this.musicPlayerController);
 
