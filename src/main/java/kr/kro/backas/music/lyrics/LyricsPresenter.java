@@ -136,11 +136,12 @@ public final class LyricsPresenter {
             }
             if (!willTranslate) return;
             CompletableFuture.runAsync(() -> {
-                Map<Integer, String> cache = translator.cacheFor(track.getIdentifier() + ":plain");
+                String cacheKey = TranslationJobs.cacheKey("plain", lines);
+                Map<Integer, String> cache = translator.cacheFor(cacheKey);
                 ProgressiveEditor editor = new ProgressiveEditor(message.getChannel().getIdLong(), () ->
                         message.editMessageEmbeds(buildFullEmbeds(track, lines, cache, initialFooter))
                                 .queue(null, e -> LOGGER.debug("progressive lyrics edit failed", e)));
-                TranslationJobs.Job job = TranslationJobs.submit(translator, track.getIdentifier() + ":plain", lines, true,
+                TranslationJobs.Job job = TranslationJobs.submit(translator, cacheKey, lines, true,
                         (index, text) -> editor.requestEdit());
                 boolean demoted = false;
                 while (!job.done().isDone()) {
@@ -216,18 +217,39 @@ public final class LyricsPresenter {
 
     public static final int PREFETCH_COUNT = 3;
 
+    private static final Map<MusicPlayerClient, Boolean> PREFETCH_RERUN = new ConcurrentHashMap<>();
+    private static final Set<MusicPlayerClient> PREFETCH_RUNNING = ConcurrentHashMap.newKeySet();
+
     public static void prefetchNext(MusicPlayerClient client) {
-        if (!client.isAutoLyricsEnabled()) return;
-        List<AudioTrack> queue = client.getTrackQueue();
-        if (queue.isEmpty()) return;
+        if (!client.isAutoLyricsEnabled()) {
+            LOGGER.info("lyrics prefetch skipped: auto lyrics disabled");
+            return;
+        }
         MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
         TranslationClient translator = controller.getTranslationClient();
-        if (translator == null || !translator.isEnabled()) return;
-        List<AudioTrack> targets = new ArrayList<>(queue.subList(0, Math.min(PREFETCH_COUNT, queue.size())));
-        CompletableFuture.runAsync(() -> {
-            for (AudioTrack next : targets) {
-                if (!client.isAutoLyricsEnabled()) return;
-                prefetchTrack(controller, translator, next);
+        if (translator == null || !translator.isEnabled()) {
+            LOGGER.info("lyrics prefetch skipped: translator disabled");
+            return;
+        }
+        if (!PREFETCH_RUNNING.add(client)) {
+            PREFETCH_RERUN.put(client, Boolean.TRUE);
+            LOGGER.info("lyrics prefetch already running, will rerun when it finishes");
+            return;
+        }
+        TranslationJobs.EXECUTOR.execute(() -> {
+            try {
+                do {
+                    PREFETCH_RERUN.remove(client);
+                    List<AudioTrack> queue = client.getTrackQueue();
+                    List<AudioTrack> targets = new ArrayList<>(queue.subList(0, Math.min(PREFETCH_COUNT, queue.size())));
+                    LOGGER.info("lyrics prefetch pass over {} queued track(s)", targets.size());
+                    for (AudioTrack next : targets) {
+                        if (!client.isAutoLyricsEnabled()) return;
+                        prefetchTrack(controller, translator, next);
+                    }
+                } while (PREFETCH_RERUN.remove(client) != null && client.isAutoLyricsEnabled());
+            } finally {
+                PREFETCH_RUNNING.remove(client);
             }
         });
     }
@@ -238,22 +260,25 @@ public final class LyricsPresenter {
         try {
             LOGGER.info("prefetching lyrics translation for {}", next.getInfo().title);
             Lyrics lyrics = controller.getLyricsClient().find(next.getInfo());
-            if (lyrics == null || lyrics.instrumental()) return;
+            if (lyrics == null || lyrics.instrumental()) {
+                LOGGER.info("no lyrics to prefetch for {}", next.getInfo().title);
+                return;
+            }
             if (lyrics.hasSynced()) {
                 List<String> lines = new ArrayList<>();
                 lyrics.synced().forEach(line -> lines.add(line.text()));
                 if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lyrics.synced()))) return;
-                TranslationJobs.submit(translator, key, lines, false, null).done().join();
+                TranslationJobs.submit(translator, TranslationJobs.cacheKey("synced", lines), lines, false, null).done().join();
             } else if (lyrics.hasPlain()) {
                 List<String> lines = fullLines(lyrics);
                 List<LyricLine> asLines = new ArrayList<>();
                 for (String line : lines) asLines.add(new LyricLine(0, line));
                 if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(asLines))) return;
-                TranslationJobs.submit(translator, key + ":plain", lines, false, null).done().join();
+                TranslationJobs.submit(translator, TranslationJobs.cacheKey("plain", lines), lines, false, null).done().join();
             }
             LOGGER.info("prefetched lyrics translation for {}", next.getInfo().title);
         } catch (Exception e) {
-            LOGGER.debug("lyrics prefetch failed for {}", next.getInfo().title, e);
+            LOGGER.warn("lyrics prefetch failed for {}: {}", next.getInfo().title, e.toString());
         } finally {
             PREFETCHING.remove(key);
         }
