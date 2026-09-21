@@ -30,7 +30,7 @@ public class LyricsSlashCommand implements SlashCommandSource {
     public SlashCommandData buildCommand() {
         return Commands.slash(COMMAND_NAME, getDescription())
                 .addOptions(
-                        new OptionData(OptionType.STRING, MODE_ARGUMENT, "실시간(기본, 다음 곡에도 계속), 전체, 끄기", false)
+                        new OptionData(OptionType.STRING, MODE_ARGUMENT, "실시간(기본, 항상 켜져 있음), 전체, 끄기(다시 켜려면 실시간)", false)
                                 .addChoice("실시간", MODE_LIVE)
                                 .addChoice("전체", MODE_FULL)
                                 .addChoice("끄기", MODE_OFF),
@@ -63,7 +63,7 @@ public class LyricsSlashCommand implements SlashCommandSource {
 
         if (MODE_OFF.equals(mode)) {
             boolean stopped = client.disableAutoLyrics("가사 표시를 껐습니다");
-            event.reply(stopped ? "가사 표시를 껐습니다." : "표시 중인 가사가 없습니다.").queue();
+            event.reply(stopped ? "가사 표시를 껐습니다. 다시 켜려면 `/가사`를 실행하세요." : "가사 표시가 이미 꺼져 있습니다.").queue();
             return;
         }
         LyricsSession existing = client.getLyricsSession();
