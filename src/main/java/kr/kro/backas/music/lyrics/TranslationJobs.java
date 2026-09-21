@@ -166,8 +166,15 @@ public final class TranslationJobs {
                         if (cancelled) return;
                         List<String> translated = translator.translate("auto", sources,
                                 (offset, text) -> deliver(indices.get(offset), sources.get(offset), text), cancellation);
-                        for (int i = 0; i < indices.size(); i++) deliver(indices.get(i), sources.get(i), translated.get(i));
-                        LOGGER.info("translation job {} finished: {} lines cached", key, cache.size());
+                        int untranslated = 0;
+                        for (int i = 0; i < indices.size(); i++) {
+                            deliver(indices.get(i), sources.get(i), translated.get(i));
+                            if (!cache.containsKey(indices.get(i))) {
+                                cache.put(indices.get(i), "");
+                                untranslated++;
+                            }
+                        }
+                        LOGGER.info("translation job {} finished: {} lines cached, {} left untranslated", key, cache.size(), untranslated);
                     } catch (IOException e) {
                         if (cancelled) {
                             LOGGER.info("translation job {} cancelled with {} lines cached", key, cache.size());
