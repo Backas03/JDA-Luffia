@@ -109,17 +109,18 @@ public final class BotSecret {
     public static final String TRANSLATOR_URL = "";
 }
 ```
-### 2. SharedConstant.java 에서 MAIN_GUILD_ID 를 서비스 할 서버 guild id로 수정합니다 </br>
-(해당 서버에서만 명령어를 작동하도록 설정하는 부분으로, 수정하지 않으면 명령어가 작동하지 않습니다.)
+### 2. SharedConstant.java 에서 서비스 서버를 설정합니다 </br>
+음악 명령어는 봇이 초대된 모든 서버에서 동작합니다. 특정 서버에서만 받으려면 ``SERVICE_GUILD_IDS`` 에 서버 id 를 넣습니다 (비어 있으면 전체 허용). ``MAIN_GUILD_ID`` 는 이메일 인증 역할 부여와 롤 모집방처럼 서버 하나에 묶인 기능에만 쓰입니다.
 - kr/kro/backas/SharedConstant.java
 ```java
 package kr.kro.backas;
 
 public final class SharedConstant {
-    public static final long MAIN_GUILD_ID = 791974345965961237L; // 봇을 초대할 서버 id 로 변경
+    public static final long MAIN_GUILD_ID = 791974345965961237L; // 인증/롤 기능을 쓸 서버 id
 
     public static final long DEV_GUILD_ID = 1121632283154202694L;
     public static final long PUBLISHED_GUILD_ID = MAIN_GUILD_ID;
+    public static final Set<Long> SERVICE_GUILD_IDS = Set.of(); // 비어 있으면 모든 서버에서 명령어 허용
 
     public static final boolean ON_DEV = false;
 
@@ -155,8 +156,8 @@ public final class SharedConstant {
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/8850d664-b12c-4569-b403-59e358bb796c)
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/95db993f-c22c-4c16-86cd-f8f3a28da4b5) </br>
 
-해당 기능을 사용하기 위해서는 secret/BotSecret.java 파일의</br>
-``public static final List<String> MUSIC_BOT_TOKENS`` 항목에 값을 추가해주시면 됩니다 </br>
+메인 봇 자체가 노래봇 역할을 하므로 별도 설정 없이 초대된 모든 서버에서 서버당 음성채팅방 하나씩 재생됩니다. 한 서버에서 여러 음성채팅방을 동시에 서비스하려면 봇 계정이 채널 수만큼 필요합니다. secret/BotSecret.java 파일의</br>
+``public static final List<String> MUSIC_BOT_TOKENS`` 항목에 추가 봇 토큰을 넣고 그 봇들도 서버에 초대하면, 서버마다 초대된 봇 수만큼 음성채팅방을 동시에 쓸 수 있습니다. 로그인에 실패한 토큰은 경고만 남기고 건너뜁니다. </br>
 - secret/BotSecret.java
 ``` java
 // (해당 토큰은 실제 존재하지 않는 토큰입니다)

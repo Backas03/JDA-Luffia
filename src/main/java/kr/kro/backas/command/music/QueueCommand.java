@@ -10,6 +10,7 @@ import kr.kro.backas.music.MusicPlayerController;
 import kr.kro.backas.music.MusicSelection;
 import kr.kro.backas.music.service.youtube.YoutubeService;
 import kr.kro.backas.util.DurationUtil;
+import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Member;
@@ -53,11 +54,8 @@ public class QueueCommand implements CommandSource {
                     .setColor(Color.decode("#f1554a"))
                     .setAuthor(MemberUtil.getName(member))
                     .setTitle("현재 재생 대기 목록이 비어있습니다.")
-                    .addField("노래 봇", MemberUtil.getName(
-                            MemberUtil.getMember(
-                                    client.getMusicBot().getSelfUser().getIdLong())
-                            ), false
-                    ).setFooter(SharedConstant.RELEASE_VERSION);
+                    .addField("노래 봇", MusicEmbeds.botName(client.getGuild()), false)
+                    .setFooter(SharedConstant.RELEASE_VERSION);
             message.replyEmbeds(builder.build()).queue();
             return;
         }
@@ -79,7 +77,7 @@ public class QueueCommand implements CommandSource {
                         false
                 ).addField(
                         "노래 봇",
-                        MemberUtil.getName(MemberUtil.getMember(client.getMusicBot().getSelfUser().getIdLong())),
+                        MusicEmbeds.botName(client.getGuild()),
                         false
                 ).addField(
                         "반복 모드",
