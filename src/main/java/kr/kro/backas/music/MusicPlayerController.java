@@ -1,6 +1,7 @@
 package kr.kro.backas.music;
 
 import club.minnced.discord.jdave.interop.JDaveSessionFactory;
+import kr.kro.backas.SharedConstant;
 import kr.kro.backas.music.lyrics.LrcLibClient;
 import kr.kro.backas.music.lyrics.TranslationClient;
 import kr.kro.backas.music.source.MusicSourceRegistry;
@@ -9,6 +10,8 @@ import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.audio.AudioModuleConfig;
+import net.dv8tion.jda.api.entities.Activity;
+import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.entities.channel.unions.AudioChannelUnion;
@@ -21,17 +24,27 @@ import net.dv8tion.jda.api.utils.MemberCachePolicy;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
 public class MusicPlayerController extends ListenerAdapter {
+    private static final Logger LOGGER = LoggerFactory.getLogger(MusicPlayerController.class);
+    private static final int SHUTDOWN_TIMEOUT_SECONDS = 5;
+
     private final MusicSourceRegistry sourceRegistry;
-    private final Set<MusicPlayerClient> clients;
+    private final List<JDA> bots;
+    private final List<JDA> ownedBots;
+    private final Map<String, MusicPlayerClient> clients;
 
     private final Map<Long, MusicLoader> searchData;
     private final ScheduledExecutorService scheduler;
@@ -47,7 +60,9 @@ public class MusicPlayerController extends ListenerAdapter {
             return thread;
         });
         this.lyricsClient = new LrcLibClient();
-        this.clients = new CopyOnWriteArraySet<>();
+        this.bots = new CopyOnWriteArrayList<>();
+        this.ownedBots = new CopyOnWriteArrayList<>();
+        this.clients = new ConcurrentHashMap<>();
         this.searchData = new ConcurrentHashMap<>();
     }
 
@@ -59,11 +74,14 @@ public class MusicPlayerController extends ListenerAdapter {
                 .enableIntents(GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MEMBERS)
                 .enableCache(CacheFlag.ROLE_TAGS)
                 .setAudioModuleConfig(new AudioModuleConfig().withDaveSessionFactory(new JDaveSessionFactory()));
-        register(builder.build().awaitReady());
+        JDA bot = builder.build().awaitReady();
+        ownedBots.add(bot);
+        register(bot);
     }
 
     public void register(JDA discordAPI) {
-        this.clients.add(new MusicPlayerClient(discordAPI, sourceRegistry.getAudioPlayerManager()));
+        bots.add(discordAPI);
+        LOGGER.info("music bot registered: {} ({} guilds)", discordAPI.getSelfUser().getName(), discordAPI.getGuilds().size());
     }
 
     public MusicSourceRegistry getSourceRegistry() {
@@ -94,7 +112,7 @@ public class MusicPlayerController extends ListenerAdapter {
         if (client == null) {
             slashEvent.replyEmbeds(MusicEmbeds.error(member,
                     "음악을 재생할 수 없습니다.",
-                    "현재 모든 노래봇이 음악을 재생중 입니다. 나중에 다시 시도해주세요.").build()).queue();
+                    "이 서버의 모든 노래봇이 다른 음성채팅방에서 재생 중입니다. 나중에 다시 시도해주세요.").build()).queue();
             return;
         }
         MusicLoader loader = new MusicLoader(this, client, new MusicSearchQueryInfo(
@@ -108,8 +126,8 @@ public class MusicPlayerController extends ListenerAdapter {
         loader.loadMusic();
     }
 
-    public Set<MusicPlayerClient> getRegisteredClients() {
-        return clients;
+    public Collection<MusicPlayerClient> getRegisteredClients() {
+        return clients.values();
     }
 
     @Override
@@ -149,7 +167,7 @@ public class MusicPlayerController extends ListenerAdapter {
                         "음악을 재생하려면 음성채팅방에 먼저 참여해주세요.");
                 case NO_AVAILABLE_CLIENTS_FOUND -> MusicEmbeds.error(member,
                         "음악을 재생할 수 없습니다.",
-                        "현재 모든 노래봇이 음악을 재생중 입니다. 나중에 다시 시도해주세요.");
+                        "이 서버의 모든 노래봇이 다른 음성채팅방에서 재생 중입니다. 나중에 다시 시도해주세요.");
             };
             event.replyEmbeds(builder.build()).queue();
         }
@@ -179,7 +197,7 @@ public class MusicPlayerController extends ListenerAdapter {
     }
 
     public @Nullable MusicPlayerClient findFromVoiceChannel(VoiceChannel channel) {
-        for (MusicPlayerClient client : clients) {
+        for (MusicPlayerClient client : clients.values()) {
             VoiceChannel joined = client.getJoinedVoiceChannel();
             if (joined != null && joined.getIdLong() == channel.getIdLong()) {
                 return client;
@@ -191,7 +209,11 @@ public class MusicPlayerController extends ListenerAdapter {
     public @Nullable MusicPlayerClient findAvailableClient(VoiceChannel channel) {
         MusicPlayerClient inChannel = findFromVoiceChannel(channel);
         if (inChannel != null) return inChannel;
-        for (MusicPlayerClient client : clients) {
+        long guildId = channel.getGuild().getIdLong();
+        for (JDA bot : bots) {
+            Guild guild = bot.getGuildById(guildId);
+            if (guild == null) continue;
+            MusicPlayerClient client = clientFor(bot, guild);
             if (client.getJoinedVoiceChannel() == null) {
                 return client;
             }
@@ -199,10 +221,39 @@ public class MusicPlayerController extends ListenerAdapter {
         return null;
     }
 
+    private MusicPlayerClient clientFor(JDA bot, Guild guild) {
+        String key = bot.getSelfUser().getId() + ":" + guild.getId();
+        return clients.computeIfAbsent(key, k -> {
+            LOGGER.info("music client created for {} in {} ({})", bot.getSelfUser().getName(), guild.getName(), guild.getId());
+            return new MusicPlayerClient(bot, guild, sourceRegistry.getAudioPlayerManager());
+        });
+    }
+
+    public void updatePresence(JDA bot) {
+        List<VoiceChannel> playing = new ArrayList<>();
+        for (MusicPlayerClient client : clients.values()) {
+            if (client.getMusicBot() != bot) continue;
+            VoiceChannel joined = client.getJoinedVoiceChannel();
+            if (joined != null) playing.add(joined);
+        }
+        String activity = switch (playing.size()) {
+            case 0 -> SharedConstant.DEFAULT_ACTIVITY;
+            case 1 -> playing.get(0).getName() + "에서 플레이";
+            default -> playing.size() + "개 서버에서 플레이";
+        };
+        bot.getPresence().setActivity(Activity.playing(activity));
+    }
+
     public void shutdownGracefully() {
-        for (MusicPlayerClient client : clients) {
+        for (MusicPlayerClient client : clients.values()) {
+            client.shutdownGracefully();
+        }
+        for (JDA bot : ownedBots) {
             try {
-                client.shutdownGracefully();
+                if (!bot.awaitShutdown(Duration.ofSeconds(SHUTDOWN_TIMEOUT_SECONDS))) {
+                    bot.shutdownNow();
+                    bot.awaitShutdown();
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
