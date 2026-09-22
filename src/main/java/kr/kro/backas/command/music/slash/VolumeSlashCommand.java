@@ -54,7 +54,7 @@ public class VolumeSlashCommand implements SlashCommandSource {
                     .setAuthor(MemberUtil.getName(member))
                     .setTitle("현재 볼륨")
                     .setDescription(client.getVolume() + "%")
-                    .addField("노래 봇", MusicEmbeds.botName(client.getMusicBot()), false)
+                    .addField("노래 봇", MusicEmbeds.botName(client.getGuild()), false)
                     .setFooter(SharedConstant.RELEASE_VERSION)
                     .build()).queue();
             return;
@@ -67,7 +67,7 @@ public class VolumeSlashCommand implements SlashCommandSource {
                 .setAuthor(MemberUtil.getName(member))
                 .setTitle("볼륨을 변경했습니다")
                 .addField("볼륨", before + "% -> " + volume + "%", false)
-                .addField("노래 봇", MusicEmbeds.botName(client.getMusicBot()), false)
+                .addField("노래 봇", MusicEmbeds.botName(client.getGuild()), false)
                 .setFooter(SharedConstant.RELEASE_VERSION)
                 .build()).queue();
     }

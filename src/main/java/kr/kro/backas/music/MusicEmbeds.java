@@ -10,7 +10,7 @@ import kr.kro.backas.music.service.youtube.YoutubeService;
 import kr.kro.backas.util.DurationUtil;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
-import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import org.jetbrains.annotations.Nullable;
 
@@ -50,12 +50,11 @@ public final class MusicEmbeds {
         return DurationUtil.formatDuration((int) (info.length / 1000));
     }
 
-    public static String botName(JDA musicBot) {
-        Member self = MemberUtil.getMember(musicBot.getSelfUser().getIdLong());
-        return self != null ? MemberUtil.getName(self) : musicBot.getSelfUser().getName();
+    public static String botName(@Nullable Guild guild) {
+        return guild == null ? "노래봇" : MemberUtil.getName(guild.getSelfMember());
     }
 
-    private static EmbedBuilder trackBase(AudioTrack track, JDA musicBot) {
+    private static EmbedBuilder trackBase(AudioTrack track, Guild guild) {
         MusicSelection selection = track.getUserData(MusicSelection.class);
         AudioTrackInfo info = track.getInfo();
         EmbedBuilder builder = new EmbedBuilder()
@@ -65,7 +64,7 @@ public final class MusicEmbeds {
         if (info.author != null && !info.author.isBlank()) {
             builder.setAuthor(info.author);
         }
-        builder.addField("노래 봇", botName(musicBot), true)
+        builder.addField("노래 봇", botName(guild), true)
                 .addField("재생 시간", durationOf(info), true)
                 .addField("출처", sourceLabel(track), true);
         if (selection != null) {
@@ -74,12 +73,12 @@ public final class MusicEmbeds {
         return builder;
     }
 
-    public static EmbedBuilder play(AudioTrack track, JDA musicBot) {
-        return trackBase(track, musicBot).setDescription("음악을 재생합니다");
+    public static EmbedBuilder play(AudioTrack track, Guild guild) {
+        return trackBase(track, guild).setDescription("음악을 재생합니다");
     }
 
-    public static EmbedBuilder enqueue(AudioTrack track, JDA musicBot, int position) {
-        return trackBase(track, musicBot)
+    public static EmbedBuilder enqueue(AudioTrack track, Guild guild, int position) {
+        return trackBase(track, guild)
                 .setDescription("해당 음악이 대기열 " + position + "번째에 추가되었습니다");
     }
 
@@ -87,7 +86,7 @@ public final class MusicEmbeds {
                                                 List<AudioTrack> added,
                                                 int total,
                                                 boolean startedPlaying,
-                                                JDA musicBot,
+                                                Guild guild,
                                                 Member requester) {
         AudioTrack first = added.get(0);
         long totalMs = added.stream().mapToLong(t -> t.getInfo().length).sum();
@@ -114,7 +113,7 @@ public final class MusicEmbeds {
                 .setTitle(playlist.getName(), url)
                 .setThumbnail(artwork)
                 .setDescription(description)
-                .addField("노래 봇", botName(musicBot), true)
+                .addField("노래 봇", botName(guild), true)
                 .addField("총 재생 시간", DurationUtil.formatDuration((int) (totalMs / 1000)), true)
                 .addField("출처", sourceLabel(first), true)
                 .addField("첫 곡", "[" + first.getInfo().title + "](" + first.getInfo().uri + ")", true)
@@ -127,13 +126,13 @@ public final class MusicEmbeds {
         return builder;
     }
 
-    public static EmbedBuilder trackFailed(AudioTrack track, JDA musicBot, @Nullable String reason) {
+    public static EmbedBuilder trackFailed(AudioTrack track, Guild guild, @Nullable String reason) {
         AudioTrackInfo info = track.getInfo();
         EmbedBuilder builder = new EmbedBuilder()
                 .setColor(ERROR)
                 .setTitle("재생에 실패했습니다", info.uri)
                 .setDescription(info.title + "\n다음 곡으로 넘어갑니다.")
-                .addField("노래 봇", botName(musicBot), true)
+                .addField("노래 봇", botName(guild), true)
                 .addField("출처", sourceLabel(track), true);
         if (reason != null && !reason.isBlank()) {
             builder.addField("사유", reason.length() > 1000 ? reason.substring(0, 1000) : reason, false);

@@ -79,7 +79,7 @@ public class KaraokeModeSlashCommand implements SlashCommandSource {
                 .setAuthor(MemberUtil.getName(member))
                 .setTitle("노래방 모드를 변경했습니다")
                 .addField("노래방 모드", before.getName() + " -> " + after.getName(), false)
-                .addField("노래 봇", MusicEmbeds.botName(client.getMusicBot()), false)
+                .addField("노래 봇", MusicEmbeds.botName(client.getGuild()), false)
                 .setFooter(SharedConstant.RELEASE_VERSION)
                 .build()
         ).queue();
