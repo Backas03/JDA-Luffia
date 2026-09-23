@@ -463,12 +463,25 @@ public final class LyricsPresenter {
     }
 
     private static List<String> paginate(List<String> lines, @Nullable Map<Integer, String> translations) {
+        boolean anyTranslated = false;
+        if (translations != null) {
+            for (String value : translations.values()) {
+                if (value != null && !value.isBlank()) {
+                    anyTranslated = true;
+                    break;
+                }
+            }
+        }
         List<String> pages = new ArrayList<>();
         StringBuilder page = new StringBuilder();
         int used = 0;
         for (int i = 0; i < lines.size(); i++) {
             String entry = lines.get(i);
             String translation = translations == null ? null : translations.get(i);
+            if ((translation == null || translation.isBlank()) && anyTranslated
+                    && entry != null && !entry.isBlank() && !LyricsLanguage.needsTranslation(entry)) {
+                translation = entry;
+            }
             if (translation != null && !translation.isBlank()) {
                 entry += "\n-# " + translation;
             }
