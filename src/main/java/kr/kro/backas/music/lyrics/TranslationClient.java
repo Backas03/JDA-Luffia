@@ -85,7 +85,7 @@ public class TranslationClient {
     public TranslationClient(@Nullable String urls) {
         List<Endpoint> parsed = new ArrayList<>();
         if (urls != null) {
-            for (String url : urls.split("[,\\s]+")) {
+            for (String url : urls.split(",")) {
                 String[] parts = url.trim().split("\\|", 3);
                 String trimmed = parts[0].trim().replaceAll("/+$", "");
                 if (trimmed.isBlank()) continue;
