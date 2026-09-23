@@ -70,9 +70,12 @@ public class TranslationClient {
         }
     }
 
+    private static final long SPEED_STALE_MS = 10_000;
+
     private final List<Endpoint> endpoints;
     private volatile Endpoint active;
     private volatile int tokensPerSecond;
+    private volatile long speedMeasuredAt;
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
     private final Map<String, Map<Integer, String>> cache = Collections.synchronizedMap(
             new LinkedHashMap<>(64, 0.75f, true) {
@@ -135,12 +138,15 @@ public class TranslationClient {
     }
 
     public int getTokensPerSecond() {
+        long measuredAt = speedMeasuredAt;
+        if (measuredAt == 0 || System.currentTimeMillis() - measuredAt > SPEED_STALE_MS) return 0;
         return tokensPerSecond;
     }
 
     private void recordSpeed(long tokens, long elapsedMs) {
         if (tokens >= 8 && elapsedMs > 500) {
             tokensPerSecond = (int) Math.round(tokens * 1000.0 / elapsedMs);
+            speedMeasuredAt = System.currentTimeMillis();
         }
     }
 
@@ -508,7 +514,10 @@ public class TranslationClient {
                 if (firstTokenAt == 0) firstTokenAt = System.currentTimeMillis();
                 deltaCount++;
                 long streamedMs = System.currentTimeMillis() - firstTokenAt;
-                if (streamedMs > 1000) tokensPerSecond = (int) Math.round(deltaCount * 1000.0 / streamedMs);
+                if (streamedMs > 1000) {
+                    tokensPerSecond = (int) Math.round(deltaCount * 1000.0 / streamedMs);
+                    speedMeasuredAt = System.currentTimeMillis();
+                }
                 for (String objectLiteral : scanner.feed(delta)) {
                     JsonNode entry;
                     try {
