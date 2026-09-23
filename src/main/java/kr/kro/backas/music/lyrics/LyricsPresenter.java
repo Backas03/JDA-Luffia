@@ -241,7 +241,7 @@ public final class LyricsPresenter {
                 jobRef.set(job);
                 reportSongJob(track, job);
                 ScheduledFuture<?> heartbeat = Main.getLuffia().getMusicPlayerController().getScheduler()
-                        .scheduleAtFixedRate(editor::requestEdit, 3, 5, TimeUnit.SECONDS);
+                        .scheduleAtFixedRate(() -> editor.requestIdleRefresh(5000), 2, 1, TimeUnit.SECONDS);
                 boolean demoted = false;
                 while (!job.done().isDone()) {
                     if (!demoted && !client.isCurrentTrack(track)) {
@@ -298,12 +298,19 @@ public final class LyricsPresenter {
         ProgressiveEditor(long channelId, Runnable edit) {
             this.channelId = channelId;
             this.edit = edit;
+            this.lastEditAt = System.currentTimeMillis();
         }
 
         synchronized void requestEdit() {
             if (cancelled || pending != null) return;
             long wait = Math.max(0, lastEditAt + MIN_INTERVAL_MS - System.currentTimeMillis());
             pending = scheduler.schedule(this::run, wait, TimeUnit.MILLISECONDS);
+        }
+
+        synchronized void requestIdleRefresh(long idleMs) {
+            if (cancelled || pending != null) return;
+            if (System.currentTimeMillis() - lastEditAt < idleMs) return;
+            requestEdit();
         }
 
         private void run() {
