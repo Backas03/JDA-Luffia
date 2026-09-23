@@ -135,10 +135,11 @@ public class LyricsSession {
     private String translationFor(int index) {
         if (index < 0) return null;
         String cached = translations.get(index);
-        if (cached != null) return cached;
+        if (cached != null && !cached.isBlank()) return cached;
         if (translator == null || (!translating && translations.isEmpty())) return null;
         String source = index < sources.size() ? sources.get(index) : null;
-        if (source == null || source.isBlank() || LyricsLanguage.needsTranslation(source)) return null;
+        if (source == null || source.isBlank()) return null;
+        if (cached == null && LyricsLanguage.needsTranslation(source)) return null;
         return source;
     }
 

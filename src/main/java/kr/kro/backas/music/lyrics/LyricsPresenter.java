@@ -480,7 +480,8 @@ public final class LyricsPresenter {
             String entry = lines.get(i);
             String translation = translations == null ? null : translations.get(i);
             if ((translation == null || translation.isBlank()) && anyTranslated
-                    && entry != null && !entry.isBlank() && !LyricsLanguage.needsTranslation(entry)) {
+                    && entry != null && !entry.isBlank()
+                    && (!LyricsLanguage.needsTranslation(entry) || (translations != null && translations.containsKey(i)))) {
                 translation = entry;
             }
             if (translation != null && !translation.isBlank()) {
