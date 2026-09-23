@@ -2,7 +2,6 @@ package kr.kro.backas.music;
 
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
-import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import org.jetbrains.annotations.Nullable;
@@ -16,14 +15,12 @@ public class MusicTrack {
     private final MusicPlayerClient client;
     private final AudioPlayer player;
     private final Queue<AudioTrack> trackQueue;
-    private final JDA musicBot;
 
     private volatile RepeatMode repeatMode;
 
-    public MusicTrack(MusicPlayerClient client, AudioPlayer player, JDA musicBot) {
+    public MusicTrack(MusicPlayerClient client, AudioPlayer player) {
         this.client = client;
         this.player = player;
-        this.musicBot = musicBot;
         this.trackQueue = new ConcurrentLinkedQueue<>();
         this.repeatMode = RepeatMode.NO_REPEAT;
     }
@@ -61,7 +58,7 @@ public class MusicTrack {
         player.stopTrack();
         if (requeueEnded && endedTrack != null) {
             if (repeatMode == RepeatMode.REPEAT_CURRENT) {
-                announce(endedTrack, MusicEmbeds.play(endedTrack, musicBot).build());
+                announce(endedTrack, MusicEmbeds.play(endedTrack, client.getGuild()).build());
                 player.playTrack(endedTrack);
                 return;
             }
@@ -74,7 +71,7 @@ public class MusicTrack {
             client.disconnectFromVoiceChannelAndResetTrack();
             return;
         }
-        announce(nextTrack, MusicEmbeds.play(nextTrack, musicBot).build());
+        announce(nextTrack, MusicEmbeds.play(nextTrack, client.getGuild()).build());
         player.playTrack(nextTrack);
     }
 

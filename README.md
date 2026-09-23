@@ -105,21 +105,22 @@ public final class BotSecret {
     // 스포티파이 플레이리스트 링크 지원용. 아래 "스포티파이 플레이리스트 설정" 절을 참고해 발급받습니다. 비워두면 플레이리스트만 비활성화됩니다.
     public static final String SPOTIFY_REFRESH_TOKEN = "";
 
-    // 가사 한국어 번역 사이드카 주소 (예: "http://127.0.0.1:8765"). 아래 "가사 번역 설정" 절 참고. 비워두면 번역만 비활성화됩니다.
+    // 가사 한국어 번역 서버 주소 (예: "http://127.0.0.1:8765"). 쉼표로 여러 개 적으면 앞에서부터 시도하고 안 되면 다음으로 넘어갑니다. 아래 "가사 번역 설정" 절 참고. 비워두면 번역만 비활성화됩니다.
     public static final String TRANSLATOR_URL = "";
 }
 ```
-### 2. SharedConstant.java 에서 MAIN_GUILD_ID 를 서비스 할 서버 guild id로 수정합니다 </br>
-(해당 서버에서만 명령어를 작동하도록 설정하는 부분으로, 수정하지 않으면 명령어가 작동하지 않습니다.)
+### 2. SharedConstant.java 에서 서비스 서버를 설정합니다 </br>
+음악 명령어는 봇이 초대된 모든 서버에서 동작합니다. 특정 서버에서만 받으려면 ``SERVICE_GUILD_IDS`` 에 서버 id 를 넣습니다 (비어 있으면 전체 허용). ``MAIN_GUILD_ID`` 는 이메일 인증 역할 부여와 롤 모집방처럼 서버 하나에 묶인 기능에만 쓰입니다.
 - kr/kro/backas/SharedConstant.java
 ```java
 package kr.kro.backas;
 
 public final class SharedConstant {
-    public static final long MAIN_GUILD_ID = 791974345965961237L; // 봇을 초대할 서버 id 로 변경
+    public static final long MAIN_GUILD_ID = 791974345965961237L; // 인증/롤 기능을 쓸 서버 id
 
     public static final long DEV_GUILD_ID = 1121632283154202694L;
     public static final long PUBLISHED_GUILD_ID = MAIN_GUILD_ID;
+    public static final Set<Long> SERVICE_GUILD_IDS = Set.of(); // 비어 있으면 모든 서버에서 명령어 허용
 
     public static final boolean ON_DEV = false;
 
@@ -155,8 +156,8 @@ public final class SharedConstant {
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/8850d664-b12c-4569-b403-59e358bb796c)
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/95db993f-c22c-4c16-86cd-f8f3a28da4b5) </br>
 
-해당 기능을 사용하기 위해서는 secret/BotSecret.java 파일의</br>
-``public static final List<String> MUSIC_BOT_TOKENS`` 항목에 값을 추가해주시면 됩니다 </br>
+메인 봇 자체가 노래봇 역할을 하므로 별도 설정 없이 초대된 모든 서버에서 서버당 음성채팅방 하나씩 재생됩니다. 한 서버에서 여러 음성채팅방을 동시에 서비스하려면 봇 계정이 채널 수만큼 필요합니다. secret/BotSecret.java 파일의</br>
+``public static final List<String> MUSIC_BOT_TOKENS`` 항목에 추가 봇 토큰을 넣고 그 봇들도 서버에 초대하면, 서버마다 초대된 봇 수만큼 음성채팅방을 동시에 쓸 수 있습니다. 로그인에 실패한 토큰은 경고만 남기고 건너뜁니다. </br>
 - secret/BotSecret.java
 ``` java
 // (해당 토큰은 실제 존재하지 않는 토큰입니다)
@@ -180,8 +181,12 @@ public static final List<String> MUSIC_BOT_TOKENS = List.of(
 
 **A. LLM (권장, 품질 좋음)**: llama.cpp + Tri-7B(트릴리온랩스, 한·영·일 특화) 4비트. RAM 약 6GB, 6코어 CPU 기준 5줄에 10초 안팎. 일본어·영어 가사를 자연스러운 한국어로 옮깁니다. 다른 GGUF 를 쓰려면 ``MODEL_URL``/``MODEL_FILE`` 환경변수로 바꿀 수 있습니다.
 1. ``translator/llm/setup.sh`` 실행 (llama.cpp 바이너리 17MB + 모델 4.7GB 다운로드, 한 번만)
-2. ``translator/llm/run.sh`` 로 실행 (기본 127.0.0.1:8765, ``TRANSLATOR_PORT`` 로 변경, ``LLM_THREADS`` 로 생성 스레드(기본 6, 물리 코어 수), ``LLM_THREADS_BATCH`` 로 프롬프트 처리 스레드(기본 12) 조정. ``nice`` 우선순위 10으로 실행되어 같은 머신의 다른 서버에 CPU 를 양보하며 ``LLM_NICE`` 로 조정)
+2. ``translator/llm/run.sh`` 로 실행 (기본 127.0.0.1:8765, ``TRANSLATOR_PORT`` 로 변경, ``LLM_THREADS`` 로 생성 스레드(기본 6, 물리 코어 수), ``LLM_THREADS_BATCH`` 로 프롬프트 처리 스레드(기본 12) 조정. ``nice`` 우선순위 10으로 실행되어 같은 머신의 다른 서버에 CPU 를 양보하며 ``LLM_NICE`` 로 조정. llama-server 의 호스트 메모리 프롬프트 캐시는 곡마다 프롬프트가 달라 쓸모가 없고 기본값 8GB 까지 계속 쌓이므로 ``--cache-ram 0`` 으로 꺼 두었으며 ``LLM_CACHE_RAM`` 으로 MiB 단위 조정 가능)
 3. ``BotSecret.TRANSLATOR_URL`` 에 ``http://127.0.0.1:8765`` 를 넣고 봇 재시작
+
+**GPU PC 를 같이 쓰는 경우 (자동 전환)**: 주소를 쉼표로 여러 개 적으면 앞에서부터 순서대로 시도합니다. 예: ``"http://192.168.0.20:8765,http://127.0.0.1:8765"``. 첫 주소(GPU PC)가 꺼져 있거나 연결이 끊기면 30초 동안 건너뛰고 다음 주소(봇 서버의 CPU llama-server)로 번역하며, 30초마다 다시 확인해 GPU PC 가 켜지면 자동으로 돌아갑니다. 번역 중에 끊겨도 같은 요청을 다음 주소로 다시 보냅니다. 재빌드 없이 바꾸려면 환경변수 ``TRANSLATOR_URL`` 또는 JVM 옵션 ``-Dtranslator.url=...`` 로 덮어쓸 수 있습니다. 가사 하단의 모델명은 실제로 번역한 쪽의 모델을 표시합니다.
+
+GPU PC(Windows) 쪽은 llama.cpp 릴리스에서 ``llama-*-bin-win-cuda-*-x64.zip`` 과 같은 릴리스의 ``cudart-*.zip`` 을 받아 ``translator/llm/bin`` 에 풀고, 모델을 ``translator/llm/models`` 에 둔 뒤 ``translator/llm/run-gpu.bat`` 로 실행합니다. 이 스크립트는 ``--host 0.0.0.0`` 과 ``-ngl 99`` 로 띄우므로 Windows 방화벽에서 8765 포트 인바운드를 허용해야 하고, 공유기 포트포워딩은 하지 않습니다. 공유기에서 GPU PC 의 IP 를 고정해 두고 절전 모드를 끄세요.
 
 **B. NLLB (가볍지만 가사 품질 낮음)**: Meta NLLB-200 을 CTranslate2 로 실행. Python 3.10 이상 필요.
 1. ``translator/setup.sh`` 실행 (모델 다운로드와 int8 변환, 한 번만)
@@ -195,11 +200,10 @@ public static final List<String> MUSIC_BOT_TOKENS = List.of(
 
 모델이 여러 개 설치되어 있으면 봇 쪽 환경변수 ``TRANSLATOR_MODEL`` 로 사용할 모델을 고정할 수 있습니다 (예: ``TRANSLATOR_MODEL=gemma4:12b``). 지정하지 않으면 서버가 알려주는 첫 번째 모델을 사용합니다.
 
-**장애 대비 (failover)**: ``TRANSLATOR_URL`` 에 주소를 쉼표로 여러 개 넣으면 앞의 것부터 우선 사용하고, 연결 실패 시 자동으로 다음 주소로 넘어갑니다. 예를 들어 GPU 머신의 Ollama 를 우선 쓰고 죽으면 같은 머신의 CPU llama.cpp 로 버티려면:
+Ollama 도 위의 "GPU PC 를 같이 쓰는 경우 (자동 전환)" 와 똑같이 쉼표 목록으로 섞어 쓸 수 있습니다. GPU 머신의 Ollama 를 우선 쓰고 꺼지면 봇 서버의 CPU llama.cpp 로 버티는 예:
 ```
 public static final String TRANSLATOR_URL = "http://192.168.0.221:11434,http://127.0.0.1:8765";
 ```
-폴백으로 넘어간 뒤에도 5분마다 우선 주소를 다시 시도해 복구되면 자동으로 돌아갑니다.
 
 봇은 주소에 접속해 두 서버를 자동으로 구분합니다. 번역은 곡 전체를 한 요청으로 보내 스트리밍으로 받으며 줄이 도착하는 대로 표시합니다. 현재 곡이 우선이고 대기열 앞 3곡은 미리 번역해 둡니다. 결과는 가사 내용 기준으로 메모리에 캐시됩니다. 한국어 가사는 번역하지 않습니다.
 타임스탬프가 없어 전체 가사로 표시되는 곡은 원문을 먼저 띄운 뒤 번역이 끝나면 같은 메시지를 수정해 각 줄 아래에 번역을 끼워 넣습니다. (임베드 글자 제한을 넘는 뒷부분은 생략 표시)</br>
