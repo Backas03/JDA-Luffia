@@ -52,10 +52,10 @@ public final class LyricsPresenter {
         if (translator == null) return "";
         String model = translator.getModelName();
         if (model.isBlank()) return "";
-        StringBuilder status = new StringBuilder("model: ").append(model);
         String compute = translator.getComputeLabel();
-        if (!compute.isBlank()) status.append("\ncompute: ").append(compute);
-        status.append("\nprocess: ").append(progressDisplay());
+        StringBuilder status = new StringBuilder();
+        if (!compute.isBlank()) status.append(compute).append(", ");
+        status.append(progressDisplay());
         int tokensPerSecond = translator.getTokensPerSecond();
         if (tokensPerSecond > 0) status.append('\n').append(tokensPerSecond).append(" token/s");
         return status.toString();
