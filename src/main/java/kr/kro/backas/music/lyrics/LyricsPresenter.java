@@ -123,7 +123,7 @@ public final class LyricsPresenter {
 
     private static String progressDisplay() {
         List<SongProgress> plan = PROGRESS_PLAN;
-        if (plan.isEmpty()) return "100% (0/0)";
+        if (plan.isEmpty()) return "0% (0/0)";
         float sum = 0f;
         int completed = 0;
         for (SongProgress entry : plan) {
@@ -214,22 +214,22 @@ public final class LyricsPresenter {
         boolean willTranslate = translator != null && translator.isEnabled()
                 && !LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(asLines));
         if (translator != null && translator.isEnabled() && !willTranslate) reportSongComplete(track);
-        String translatingBase = finalFooter + "\n" + LyricsSession.TRANSLATING_NOTE;
-        String initialFooter = willTranslate
-                ? translatingBase + "\n" + translationStatus(translator)
-                : finalFooter;
-        sendEmbeds.apply(buildFullEmbeds(track, lines, null, initialFooter)).whenComplete((message, sendError) -> {
+        String initialNote = willTranslate
+                ? LyricsSession.TRANSLATING_NOTE + "\n" + translationStatus(translator)
+                : null;
+        sendEmbeds.apply(buildFullEmbeds(track, lines, null, finalFooter, initialNote)).whenComplete((message, sendError) -> {
             if (sendError != null || message == null) {
                 LOGGER.warn("failed to send full lyrics", sendError);
                 return;
             }
             if (!willTranslate) return;
             CompletableFuture.runAsync(() -> {
+                prefetchNext(client);
                 String cacheKey = TranslationJobs.cacheKey("plain", lines);
                 Map<Integer, String> cache = translator.cacheFor(cacheKey);
                 ProgressiveEditor editor = new ProgressiveEditor(message.getChannel().getIdLong(), () ->
-                        message.editMessageEmbeds(buildFullEmbeds(track, lines, cache,
-                                        translatingBase + "\n" + translationStatus(translator)))
+                        message.editMessageEmbeds(buildFullEmbeds(track, lines, cache, finalFooter,
+                                        LyricsSession.TRANSLATING_NOTE + "\n" + translationStatus(translator)))
                                 .queue(null, e -> LOGGER.debug("progressive lyrics edit failed", e)));
                 TranslationJobs.Job job = TranslationJobs.submit(translator, cacheKey, lines, true,
                         (index, text) -> editor.requestEdit());
@@ -254,10 +254,10 @@ public final class LyricsPresenter {
                 Map<Integer, String> translations = cache;
                 editor.cancel();
                 if (job.isCancelled()) return;
-                String doneFooter = translations.isEmpty()
-                        ? finalFooter + "\n번역에 실패했습니다"
-                        : finalFooter + "\n" + machineTranslationNote(translator);
-                message.editMessageEmbeds(buildFullEmbeds(track, lines, translations, doneFooter))
+                String doneNote = translations.isEmpty()
+                        ? "번역에 실패했습니다"
+                        : machineTranslationNote(translator);
+                message.editMessageEmbeds(buildFullEmbeds(track, lines, translations, finalFooter, doneNote))
                         .queue(null, e -> LOGGER.debug("failed to attach translations", e));
                 prefetchNext(client);
             });
@@ -401,8 +401,19 @@ public final class LyricsPresenter {
     }
 
     private static List<MessageEmbed> buildFullEmbeds(AudioTrack track, List<String> lines,
-                                                      @Nullable Map<Integer, String> translations, String footer) {
+                                                      @Nullable Map<Integer, String> translations, String footer,
+                                                      @Nullable String note) {
         List<String> pages = paginate(lines, translations);
+        if (note != null && !note.isBlank()) {
+            StringBuilder small = new StringBuilder();
+            for (String noteLine : note.split("\n")) small.append("\n-# ").append(noteLine);
+            String suffix = small.toString();
+            if (!pages.isEmpty() && pages.get(pages.size() - 1).length() + suffix.length() <= 4096) {
+                pages.set(pages.size() - 1, pages.get(pages.size() - 1) + suffix);
+            } else {
+                pages.add(suffix.substring(1));
+            }
+        }
         List<MessageEmbed> embeds = new ArrayList<>();
         for (int i = 0; i < pages.size(); i++) {
             EmbedBuilder builder = new EmbedBuilder()
