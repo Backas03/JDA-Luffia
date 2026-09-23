@@ -219,7 +219,8 @@ public class LyricsSession {
         text.append("-# ").append(footer == null ? song : song + " · " + footer);
         if ((translation != null && !translation.isBlank()) || pendingTranslation) {
             for (String noteLine : LyricsPresenter.machineTranslationNote(translator).split("\n")) {
-                text.append('\n').append("-# ").append(noteLine);
+                text.append('\n');
+                if (!noteLine.isBlank()) text.append("-# ").append(noteLine);
             }
         }
         TextDisplay body = TextDisplay.of(text.toString());
