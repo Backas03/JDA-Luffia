@@ -57,7 +57,7 @@ public final class LyricsPresenter {
         if (!compute.isBlank()) status.append("\ncompute: ").append(compute);
         status.append("\nprocess: ").append(progressDisplay());
         int tokensPerSecond = translator.getTokensPerSecond();
-        if (tokensPerSecond > 0) status.append(' ').append(tokensPerSecond).append(" token/s");
+        if (tokensPerSecond > 0) status.append('\n').append(tokensPerSecond).append(" token/s");
         return status.toString();
     }
 
