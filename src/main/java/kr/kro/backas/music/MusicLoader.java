@@ -146,7 +146,7 @@ public class MusicLoader implements AudioLoadResultHandler {
             total = Math.max(total, extended.getTotalTracks());
         }
         EmbedBuilder result = MusicEmbeds.playlistEnqueued(
-                playlist, added, total, startedPlaying, musicPlayerClient.getMusicBot(), requester());
+                playlist, added, total, startedPlaying, musicPlayerClient.getGuild(), requester());
         hook.editOriginalEmbeds(result.build()).queue();
     }
 

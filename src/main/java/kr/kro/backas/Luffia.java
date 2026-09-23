@@ -1,6 +1,7 @@
 package kr.kro.backas;
 
 import kr.kro.backas.certification.CertificationManager;
+import org.slf4j.LoggerFactory;
 import kr.kro.backas.certification.listener.CertificationListener;
 import kr.kro.backas.command.HelpCommand;
 import kr.kro.backas.command.api.CommandManager;
@@ -63,10 +64,22 @@ public class Luffia {
 
         this.certificationManager = null; // new CertificationManager(discordAPI);
 
+        String translatorUrl = System.getenv("TRANSLATOR_URL");
+        if (translatorUrl == null || translatorUrl.isBlank()) {
+            translatorUrl = System.getProperty("translator.url", BotSecret.TRANSLATOR_URL);
+        }
         this.musicPlayerController = new MusicPlayerController(
                 new MusicSourceRegistry(BotSecret.SPOTIFY_CLIENT_ID, BotSecret.SPOTIFY_CLIENT_SECRET, BotSecret.SPOTIFY_REFRESH_TOKEN),
-                BotSecret.TRANSLATOR_URL);
+                translatorUrl);
         this.musicPlayerController.register(discordAPI);
+        for (String token : BotSecret.MUSIC_BOT_TOKENS) {
+            if (token == null || token.isBlank()) continue;
+            try {
+                this.musicPlayerController.register(token);
+            } catch (Exception e) {
+                LoggerFactory.getLogger(Luffia.class).warn("추가 노래봇 로그인 실패, 건너뜁니다: {}", e.toString());
+            }
+        }
         discordAPI.addEventListener(this.musicPlayerController);
 
         this.discordAPI.addEventListener(new MusicListener());

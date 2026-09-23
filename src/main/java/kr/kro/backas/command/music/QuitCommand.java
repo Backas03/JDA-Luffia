@@ -5,6 +5,7 @@ import kr.kro.backas.SharedConstant;
 import kr.kro.backas.command.api.CommandSource;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
+import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Member;
@@ -39,9 +40,7 @@ public class QuitCommand implements CommandSource {
                     .setAuthor(MemberUtil.getName(member))
                     .setTitle("음성 채팅방과 연결을 끊을 수 없습니다.")
                     .setDescription("이미 음성채팅방과 연결이 끊어져 있습니다.")
-                    .addField("노래 봇", MemberUtil.getName(
-                            MemberUtil.getMember(client.getMusicBot().getSelfUser().getIdLong())
-                    ), false)
+                    .addField("노래 봇", MusicEmbeds.botName(client == null ? null : client.getGuild()), false)
                     .setFooter(SharedConstant.RELEASE_VERSION);
             message.replyEmbeds(builder.build()).queue();
             return;
