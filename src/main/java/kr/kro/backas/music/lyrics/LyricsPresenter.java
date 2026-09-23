@@ -136,7 +136,7 @@ public final class LyricsPresenter {
                 current = entry;
             }
         }
-        java.text.DecimalFormat format = new java.text.DecimalFormat("0.##");
+        java.text.DecimalFormat format = new java.text.DecimalFormat("00.00");
         String counter = " (total: " + format.format(100.0 * sum / plan.size()) + "%, " + completed + "/" + plan.size() + ")";
         if (current == null) return "100%" + counter;
         if (current.job == null) return "가사 불러오는 중 ..." + counter;
