@@ -235,12 +235,19 @@ public final class LyricsPresenter {
                 prefetchNext(client);
                 String cacheKey = TranslationJobs.cacheKey("plain", lines);
                 Map<Integer, String> cache = translator.cacheFor(cacheKey);
-                ProgressiveEditor editor = new ProgressiveEditor(message.getChannel().getIdLong(), () ->
-                        message.editMessageEmbeds(buildFullEmbeds(track, lines, cache, finalFooter,
-                                        LyricsSession.TRANSLATING_NOTE + "\n" + translationStatus(translator)))
-                                .queue(null, e -> LOGGER.debug("progressive lyrics edit failed", e)));
+                java.util.concurrent.atomic.AtomicReference<TranslationJobs.Job> jobRef = new java.util.concurrent.atomic.AtomicReference<>();
+                ProgressiveEditor editor = new ProgressiveEditor(message.getChannel().getIdLong(), () -> {
+                    TranslationJobs.Job current = jobRef.get();
+                    boolean translating = current == null || !current.done().isDone();
+                    String note = translating
+                            ? LyricsSession.TRANSLATING_NOTE + "\n" + translationStatus(translator)
+                            : (cache.isEmpty() ? "번역에 실패했습니다" : machineTranslationNote(translator));
+                    message.editMessageEmbeds(buildFullEmbeds(track, lines, cache, finalFooter, note))
+                            .queue(null, e -> LOGGER.debug("progressive lyrics edit failed", e));
+                });
                 TranslationJobs.Job job = TranslationJobs.submit(translator, cacheKey, lines, true,
                         (index, text) -> editor.requestEdit());
+                jobRef.set(job);
                 reportSongJob(track, job);
                 ScheduledFuture<?> heartbeat = Main.getLuffia().getMusicPlayerController().getScheduler()
                         .scheduleAtFixedRate(editor::requestEdit, 3, 5, TimeUnit.SECONDS);
@@ -262,15 +269,28 @@ public final class LyricsPresenter {
                     }
                 }
                 Map<Integer, String> translations = cache;
+                if (job.isCancelled()) {
+                    heartbeat.cancel(false);
+                    editor.cancel();
+                    return;
+                }
+                prefetchNext(client);
+                editor.requestEdit();
+                while (client.isCurrentTrack(track)) {
+                    try {
+                        Thread.sleep(2000);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
                 heartbeat.cancel(false);
                 editor.cancel();
-                if (job.isCancelled()) return;
                 String doneNote = translations.isEmpty()
                         ? "번역에 실패했습니다"
                         : machineTranslationNote(translator);
                 message.editMessageEmbeds(buildFullEmbeds(track, lines, translations, finalFooter, doneNote))
                         .queue(null, e -> LOGGER.debug("failed to attach translations", e));
-                prefetchNext(client);
             });
         });
     }
