@@ -10,8 +10,12 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.ConnectException;
+import java.net.NoRouteToHostException;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpConnectTimeoutException;
+import java.nio.channels.UnresolvedAddressException;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
@@ -48,23 +52,23 @@ public class TranslationClient {
 
     private enum Mode { UNKNOWN, NLLB, LLM }
 
-    private static final long PRIMARY_RETRY_INTERVAL_MS = 5 * 60_000L;
+    private static final long RETRY_FAILED_MS = 30_000;
 
     private static final class Endpoint {
-        final String baseUrl;
-        volatile Mode mode = Mode.UNKNOWN;
-        volatile String modelName;
-        volatile String llmModelId;
+        private final String baseUrl;
+        private volatile Mode mode = Mode.UNKNOWN;
+        private volatile String modelName = "";
+        private volatile String llmModelId = "";
+        private volatile long failedAt;
 
-        Endpoint(String baseUrl) {
+        private Endpoint(String baseUrl) {
             this.baseUrl = baseUrl;
         }
     }
 
     private final List<Endpoint> endpoints;
+    private volatile Endpoint active;
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
-    private volatile int activeIndex;
-    private volatile long primaryRetryAt;
     private final Map<String, Map<Integer, String>> cache = Collections.synchronizedMap(
             new LinkedHashMap<>(64, 0.75f, true) {
                 @Override
@@ -73,19 +77,95 @@ public class TranslationClient {
                 }
             });
 
-    public TranslationClient(@Nullable String baseUrl) {
-        List<Endpoint> list = new ArrayList<>();
-        if (baseUrl != null) {
-            for (String part : baseUrl.split(",")) {
-                String trimmed = part.trim().replaceAll("/+$", "");
-                if (!trimmed.isBlank()) list.add(new Endpoint(trimmed));
+    public TranslationClient(@Nullable String urls) {
+        List<Endpoint> parsed = new ArrayList<>();
+        if (urls != null) {
+            for (String url : urls.split("[,\\s]+")) {
+                String trimmed = url.trim().replaceAll("/+$", "");
+                if (!trimmed.isBlank()) parsed.add(new Endpoint(trimmed));
             }
         }
-        this.endpoints = List.copyOf(list);
+        this.endpoints = List.copyOf(parsed);
+        if (!endpoints.isEmpty()) {
+            TranslationJobs.EXECUTOR.execute(() -> {
+                try {
+                    pick();
+                } catch (IOException e) {
+                    LOGGER.warn("no translator endpoint reachable at startup: {}", e.getMessage());
+                }
+            });
+        }
     }
 
     public boolean isEnabled() {
         return !endpoints.isEmpty();
+    }
+
+    @Nullable
+    public String getActiveUrl() {
+        Endpoint endpoint = active;
+        return endpoint == null ? null : endpoint.baseUrl;
+    }
+
+    private Endpoint pick() throws IOException {
+        long now = System.currentTimeMillis();
+        IOException last = null;
+        for (Endpoint endpoint : endpoints) {
+            if (endpoint.failedAt != 0 && now - endpoint.failedAt < RETRY_FAILED_MS) continue;
+            try {
+                detect(endpoint);
+                if (active != endpoint) {
+                    active = endpoint;
+                    LOGGER.info("translator endpoint in use: {} ({}, model={})", endpoint.baseUrl, endpoint.mode, endpoint.modelName);
+                }
+                return endpoint;
+            } catch (IOException e) {
+                markFailed(endpoint, e);
+                last = e;
+            }
+        }
+        throw new IOException("no translator endpoint available", last);
+    }
+
+    private void markFailed(Endpoint endpoint, IOException e) {
+        endpoint.failedAt = System.currentTimeMillis();
+        endpoint.mode = Mode.UNKNOWN;
+        if (active == endpoint) active = null;
+        LOGGER.warn("translator endpoint {} unavailable: {}", endpoint.baseUrl, e.toString());
+    }
+
+    private void detect(Endpoint endpoint) throws IOException {
+        if (endpoint.mode != Mode.UNKNOWN) return;
+        HttpResponse<String> response = send(HttpRequest.newBuilder(URI.create(endpoint.baseUrl + "/v1/models"))
+                .timeout(Duration.ofSeconds(5)).GET().build());
+        Mode detected = response.statusCode() == 200 && response.body().contains("\"data\"") ? Mode.LLM : Mode.NLLB;
+        if (detected == Mode.LLM) {
+            String override = System.getenv("TRANSLATOR_MODEL");
+            endpoint.llmModelId = override == null || override.isBlank() ? readLlmModelId(response.body()) : override;
+            endpoint.modelName = cleanModelName(endpoint.llmModelId);
+        } else {
+            endpoint.modelName = readNllbModelName(endpoint);
+        }
+        endpoint.mode = detected;
+        endpoint.failedAt = 0;
+        LOGGER.info("translator mode detected: {} model={} ({})", detected, endpoint.modelName, endpoint.baseUrl);
+    }
+
+    private static boolean isConnectivityFailure(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof ConnectException || current instanceof HttpConnectTimeoutException
+                    || current instanceof NoRouteToHostException || current instanceof UnresolvedAddressException) {
+                return true;
+            }
+            String message = current.getMessage();
+            if (message != null && (message.contains("Connection refused") || message.contains("translator 502")
+                    || message.contains("translator 503") || message.contains("translator request failed"))) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     public Map<Integer, String> cacheFor(String trackKey) {
@@ -104,98 +184,36 @@ public class TranslationClient {
                                   @Nullable Cancellation cancellation) throws IOException {
         if (endpoints.isEmpty()) throw new IOException("translator disabled");
         if (lines.isEmpty()) return List.of();
-        IOException failure = null;
-        for (Endpoint endpoint : endpointsInOrder()) {
+        IOException last = null;
+        for (int attempt = 0; attempt < endpoints.size(); attempt++) {
+            Endpoint endpoint = pick();
             try {
-                List<String> result = translateWith(endpoint, sourceLanguage, lines, onLine, cancellation);
-                markActive(endpoint);
+                List<String> result = endpoint.mode == Mode.LLM
+                        ? translateWithLlm(endpoint, lines, onLine, cancellation)
+                        : translateWithNllb(endpoint, sourceLanguage, lines);
+                if (result.size() != lines.size()) {
+                    LOGGER.warn("translator returned {} lines for {} inputs", result.size(), lines.size());
+                    throw new IOException("translator line count mismatch");
+                }
                 return result;
             } catch (IOException e) {
                 if (cancellation != null && cancellation.isRequested()) throw e;
-                if (endpoint == endpoints.get(0)) {
-                    primaryRetryAt = System.currentTimeMillis() + PRIMARY_RETRY_INTERVAL_MS;
-                }
-                LOGGER.warn("translator {} failed: {}", endpoint.baseUrl, e.getMessage());
-                if (failure == null) failure = e;
+                if (!isConnectivityFailure(e)) throw e;
+                markFailed(endpoint, e);
+                last = e;
             }
         }
-        throw failure;
-    }
-
-    private List<Endpoint> endpointsInOrder() {
-        int active = activeIndex;
-        List<Endpoint> order = new ArrayList<>(endpoints.size());
-        if (active != 0 && System.currentTimeMillis() >= primaryRetryAt) order.add(endpoints.get(0));
-        Endpoint current = endpoints.get(active);
-        if (!order.contains(current)) order.add(current);
-        for (Endpoint endpoint : endpoints) {
-            if (!order.contains(endpoint)) order.add(endpoint);
-        }
-        return order;
-    }
-
-    private void markActive(Endpoint endpoint) {
-        int index = endpoints.indexOf(endpoint);
-        if (index != activeIndex) {
-            activeIndex = index;
-            LOGGER.info("translator switched to {} (model={})", endpoint.baseUrl, endpoint.modelName);
-        }
-    }
-
-    private List<String> translateWith(Endpoint endpoint, String sourceLanguage, List<String> lines,
-                                       @Nullable BiConsumer<Integer, String> onLine,
-                                       @Nullable Cancellation cancellation) throws IOException {
-        Mode current = detectMode(endpoint);
-        List<String> result = current == Mode.LLM
-                ? translateWithLlm(endpoint, lines, onLine, cancellation)
-                : translateWithNllb(endpoint, sourceLanguage, lines);
-        if (result.size() != lines.size()) {
-            LOGGER.warn("translator returned {} lines for {} inputs", result.size(), lines.size());
-            throw new IOException("translator line count mismatch");
-        }
-        return result;
-    }
-
-    private Mode detectMode(Endpoint endpoint) throws IOException {
-        Mode current = endpoint.mode;
-        if (current != Mode.UNKNOWN) return current;
-        HttpResponse<String> response = send(HttpRequest.newBuilder(URI.create(endpoint.baseUrl + "/v1/models"))
-                .timeout(Duration.ofSeconds(5)).GET().build());
-        current = response.statusCode() == 200 && response.body().contains("\"data\"") ? Mode.LLM : Mode.NLLB;
-        if (current == Mode.LLM) {
-            String override = System.getenv("TRANSLATOR_MODEL");
-            endpoint.llmModelId = override == null || override.isBlank() ? readLlmModelId(response.body()) : override;
-            endpoint.modelName = cleanModelName(endpoint.llmModelId);
-        } else {
-            endpoint.modelName = readNllbModelName(endpoint);
-        }
-        endpoint.mode = current;
-        LOGGER.info("translator mode detected: {} model={} ({})", current, endpoint.modelName, endpoint.baseUrl);
-        return current;
+        throw last == null ? new IOException("no translator endpoint available") : last;
     }
 
     public boolean isLlm() {
-        if (endpoints.isEmpty()) return false;
-        try {
-            return detectMode(endpoints.get(activeIndex)) == Mode.LLM;
-        } catch (IOException e) {
-            return false;
-        }
+        Endpoint endpoint = active;
+        return endpoint != null && endpoint.mode == Mode.LLM;
     }
 
     public String getModelName() {
-        if (endpoints.isEmpty()) return "";
-        Endpoint endpoint = endpoints.get(activeIndex);
-        String name = endpoint.modelName;
-        if (name == null) {
-            try {
-                detectMode(endpoint);
-            } catch (IOException e) {
-                return "";
-            }
-            name = endpoint.modelName;
-        }
-        return name == null ? "" : name;
+        Endpoint endpoint = active;
+        return endpoint == null ? "" : endpoint.modelName;
     }
 
     private static String readLlmModelId(String body) {
@@ -277,23 +295,21 @@ public class TranslationClient {
         return body;
     }
 
+    private static final int MAX_BATCH_RETRY_DEPTH = 2;
+    private static final int MAX_SINGLE_LINE_RETRIES = 5;
+
     private List<String> translateWithLlm(Endpoint endpoint, List<String> lines, @Nullable BiConsumer<Integer, String> onLine,
                                           @Nullable Cancellation cancellation) throws IOException {
-        String content = onLine == null ? requestLlm(endpoint, lines) : streamLlm(endpoint, lines, onLine, cancellation);
-        JsonNode parsed;
-        try {
-            parsed = MAPPER.readTree(content);
-        } catch (IOException e) {
-            LOGGER.warn("llm translator returned non-json content: {}", content.length() > 200 ? content.substring(0, 200) : content);
-            throw e;
-        }
-        Map<Integer, String> byNumber = new java.util.HashMap<>();
-        for (JsonNode entry : parsed.path("t")) {
-            int n = entry.path("n").asInt(-1);
-            if (n >= 1 && n <= lines.size() && !byNumber.containsKey(n)) byNumber.put(n, entry.path("k").asText(""));
-        }
+        return translateWithLlm(endpoint, lines, onLine, cancellation, 0);
+    }
+
+    private List<String> translateWithLlm(Endpoint endpoint, List<String> lines, @Nullable BiConsumer<Integer, String> onLine,
+                                          @Nullable Cancellation cancellation, int depth) throws IOException {
+        Map<Integer, String> byNumber = onLine == null
+                ? collectInSequence(parseEntries(requestLlm(endpoint, lines)), lines.size(), null, lines)
+                : streamLlm(endpoint, lines, onLine, cancellation);
         List<String> result = new ArrayList<>();
-        List<Integer> retry = new ArrayList<>();
+        List<Integer> missing = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
             String source = lines.get(i) == null ? "" : lines.get(i);
             String translated = byNumber.get(i + 1);
@@ -301,27 +317,71 @@ public class TranslationClient {
                 result.add(source);
             } else if (!isAcceptable(source, translated)) {
                 result.add(source);
-                retry.add(i);
+                missing.add(i);
             } else {
                 result.add(translated);
             }
         }
-        if (!retry.isEmpty() && lines.size() > 1) {
-            for (int index : retry) {
-                if (cancellation != null && cancellation.isRequested()) throw new IOException("translation cancelled");
-                String source = lines.get(index);
-                String fixed = source;
-                try {
-                    List<String> retried = translateWithLlm(endpoint, List.of(source), null, null);
-                    if (isAcceptable(source, retried.get(0))) fixed = retried.get(0);
-                } catch (IOException e) {
-                    LOGGER.debug("single line retry failed for line {}", index + 1, e);
-                }
-                result.set(index, fixed);
-                if (onLine != null && !fixed.equals(source)) onLine.accept(index, fixed);
+        if (missing.isEmpty() || lines.size() == 1) return result;
+        if (cancellation != null && cancellation.isRequested()) throw new IOException("translation cancelled");
+        boolean progressed = missing.size() < lines.size();
+        if (missing.size() > 1 && depth < MAX_BATCH_RETRY_DEPTH && (progressed || depth == 0)) {
+            List<String> sources = new ArrayList<>(missing.size());
+            for (int index : missing) sources.add(lines.get(index));
+            LOGGER.info("retrying {} of {} lines as one batch (pass {})", missing.size(), lines.size(), depth + 2);
+            List<String> retried = translateWithLlm(endpoint, sources,
+                    onLine == null ? null : (offset, text) -> onLine.accept(missing.get(offset), text),
+                    cancellation, depth + 1);
+            for (int j = 0; j < missing.size(); j++) result.set(missing.get(j), retried.get(j));
+            return result;
+        }
+        int retries = 0;
+        for (int index : missing) {
+            if (retries++ >= MAX_SINGLE_LINE_RETRIES) break;
+            if (cancellation != null && cancellation.isRequested()) throw new IOException("translation cancelled");
+            String source = lines.get(index);
+            String fixed = source;
+            try {
+                List<String> retried = translateWithLlm(endpoint, List.of(source), null, null, MAX_BATCH_RETRY_DEPTH);
+                if (isAcceptable(source, retried.get(0))) fixed = retried.get(0);
+            } catch (IOException e) {
+                LOGGER.debug("single line retry failed for line {}", index + 1, e);
             }
+            result.set(index, fixed);
+            if (onLine != null && !fixed.equals(source)) onLine.accept(index, fixed);
         }
         return result;
+    }
+
+    private static List<JsonNode> parseEntries(String content) throws IOException {
+        JsonNode parsed;
+        try {
+            parsed = MAPPER.readTree(content);
+        } catch (IOException e) {
+            LOGGER.warn("llm translator returned non-json content: {}", content.length() > 200 ? content.substring(0, 200) : content);
+            throw e;
+        }
+        List<JsonNode> entries = new ArrayList<>();
+        for (JsonNode entry : parsed.path("t")) entries.add(entry);
+        return entries;
+    }
+
+    private static Map<Integer, String> collectInSequence(List<JsonNode> entries, int count,
+                                                          @Nullable Map<Integer, String> into, List<String> lines) {
+        Map<Integer, String> byNumber = into == null ? new java.util.HashMap<>() : into;
+        int expected = byNumber.size() + 1;
+        for (JsonNode entry : entries) {
+            int n = entry.path("n").asInt(-1);
+            if (byNumber.containsKey(n)) continue;
+            if (n != expected) {
+                LOGGER.warn("translator numbered a line {} where {} was expected ({} lines); ignoring the rest of this reply",
+                        n, expected, count);
+                break;
+            }
+            byNumber.put(n, entry.path("k").asText(""));
+            expected++;
+        }
+        return byNumber;
     }
 
     private static boolean isAcceptable(String source, @Nullable String translated) {
@@ -355,7 +415,8 @@ public class TranslationClient {
         }
     }
 
-    private String streamLlm(Endpoint endpoint, List<String> lines, BiConsumer<Integer, String> onLine, @Nullable Cancellation cancellation) throws IOException {
+    private Map<Integer, String> streamLlm(Endpoint endpoint, List<String> lines, BiConsumer<Integer, String> onLine,
+                                           @Nullable Cancellation cancellation) throws IOException {
         if (cancellation != null && cancellation.isRequested()) throw new IOException("translation cancelled");
         HttpRequest request = HttpRequest.newBuilder(URI.create(endpoint.baseUrl + "/v1/chat/completions"))
                 .header("Content-Type", "application/json")
@@ -378,13 +439,13 @@ public class TranslationClient {
         if (response.statusCode() / 100 != 2) {
             throw new IOException("translator " + response.statusCode());
         }
-        StringBuilder content = new StringBuilder();
         JsonArrayObjectScanner scanner = new JsonArrayObjectScanner();
-        java.util.Set<Integer> delivered = new java.util.HashSet<>();
+        Map<Integer, String> byNumber = new java.util.HashMap<>();
+        boolean broken = false;
         try (Stream<String> body = response.body()) {
             if (cancellation != null) cancellation.attach(body::close);
             Iterator<String> iterator = body.iterator();
-            while (iterator.hasNext()) {
+            while (!broken && iterator.hasNext()) {
                 if (cancellation != null && cancellation.isRequested()) throw new IOException("translation cancelled");
                 String line = iterator.next();
                 if (!line.startsWith("data:")) continue;
@@ -392,7 +453,6 @@ public class TranslationClient {
                 if (data.equals("[DONE]")) break;
                 String delta = MAPPER.readTree(data).path("choices").path(0).path("delta").path("content").asText("");
                 if (delta.isEmpty()) continue;
-                content.append(delta);
                 for (String objectLiteral : scanner.feed(delta)) {
                     JsonNode entry;
                     try {
@@ -400,10 +460,19 @@ public class TranslationClient {
                     } catch (IOException e) {
                         continue;
                     }
-                    int n = entry.path("n").asInt(-1);
-                    if (n < 1 || n > lines.size() || !delivered.add(n)) continue;
+                    int before = byNumber.size();
+                    collectInSequence(List.of(entry), lines.size(), byNumber, lines);
+                    if (byNumber.size() == before) {
+                        int n = entry.path("n").asInt(-1);
+                        if (!byNumber.containsKey(n)) {
+                            broken = true;
+                            break;
+                        }
+                        continue;
+                    }
+                    int n = byNumber.size();
                     String source = lines.get(n - 1);
-                    String translated = entry.path("k").asText("");
+                    String translated = byNumber.get(n);
                     if (LyricsLanguage.needsTranslation(source) && isAcceptable(source, translated)) {
                         onLine.accept(n - 1, translated);
                     }
@@ -411,10 +480,10 @@ public class TranslationClient {
             }
         } catch (UncheckedIOException e) {
             if (cancellation != null && cancellation.isRequested()) throw new IOException("translation cancelled", e);
-            throw e.getCause();
+            if (!broken) throw e.getCause();
         }
         if (cancellation != null && cancellation.isRequested()) throw new IOException("translation cancelled");
-        return content.toString();
+        return byNumber;
     }
 
     private static final class JsonArrayObjectScanner {
@@ -495,7 +564,7 @@ public class TranslationClient {
     public boolean isHealthy() {
         for (Endpoint endpoint : endpoints) {
             try {
-                String path = detectMode(endpoint) == Mode.NLLB ? "/health" : "/v1/models";
+                String path = endpoint.mode == Mode.NLLB ? "/health" : "/v1/models";
                 HttpRequest request = HttpRequest.newBuilder(URI.create(endpoint.baseUrl + path))
                         .timeout(Duration.ofSeconds(3))
                         .GET()

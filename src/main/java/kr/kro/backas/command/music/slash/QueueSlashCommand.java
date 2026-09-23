@@ -49,7 +49,7 @@ public class QueueSlashCommand implements SlashCommandSource {
         AudioTrack currentPlaying = client.getCurrentPlaying();
         if (currentPlaying == null) {
             event.replyEmbeds(MusicEmbeds.error(member, "현재 재생 대기 목록이 비어있습니다.", null)
-                    .addField("노래 봇", MusicEmbeds.botName(client.getMusicBot()), false)
+                    .addField("노래 봇", MusicEmbeds.botName(client.getGuild()), false)
                     .build()).queue();
             return;
         }
@@ -70,7 +70,7 @@ public class QueueSlashCommand implements SlashCommandSource {
                                 + DurationUtil.formatDurationColon((int) (currentPlayingInfo.length / 1000)),
                         true
                 ).addField("출처", MusicEmbeds.sourceLabel(currentPlaying), true)
-                .addField("노래 봇", MusicEmbeds.botName(client.getMusicBot()), true)
+                .addField("노래 봇", MusicEmbeds.botName(client.getGuild()), true)
                 .addField("반복 모드", client.getRepeatModeName(), true)
                 .addField("재생 속도", client.getCurrentPlaySpeed() + "배속", true)
                 .addField("볼륨", client.getVolume() + "%", true)
