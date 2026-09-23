@@ -48,10 +48,23 @@ public class TranslationClient {
 
     private enum Mode { UNKNOWN, NLLB, LLM }
 
-    private final String baseUrl;
+    private static final long PRIMARY_RETRY_INTERVAL_MS = 5 * 60_000L;
+
+    private static final class Endpoint {
+        final String baseUrl;
+        volatile Mode mode = Mode.UNKNOWN;
+        volatile String modelName;
+        volatile String llmModelId;
+
+        Endpoint(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+    }
+
+    private final List<Endpoint> endpoints;
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
-    private volatile Mode mode = Mode.UNKNOWN;
-    private volatile String modelName;
+    private volatile int activeIndex;
+    private volatile long primaryRetryAt;
     private final Map<String, Map<Integer, String>> cache = Collections.synchronizedMap(
             new LinkedHashMap<>(64, 0.75f, true) {
                 @Override
@@ -61,11 +74,18 @@ public class TranslationClient {
             });
 
     public TranslationClient(@Nullable String baseUrl) {
-        this.baseUrl = baseUrl == null || baseUrl.isBlank() ? null : baseUrl.replaceAll("/+$", "");
+        List<Endpoint> list = new ArrayList<>();
+        if (baseUrl != null) {
+            for (String part : baseUrl.split(",")) {
+                String trimmed = part.trim().replaceAll("/+$", "");
+                if (!trimmed.isBlank()) list.add(new Endpoint(trimmed));
+            }
+        }
+        this.endpoints = List.copyOf(list);
     }
 
     public boolean isEnabled() {
-        return baseUrl != null;
+        return !endpoints.isEmpty();
     }
 
     public Map<Integer, String> cacheFor(String trackKey) {
@@ -82,10 +102,53 @@ public class TranslationClient {
 
     public List<String> translate(String sourceLanguage, List<String> lines, @Nullable BiConsumer<Integer, String> onLine,
                                   @Nullable Cancellation cancellation) throws IOException {
-        if (baseUrl == null) throw new IOException("translator disabled");
+        if (endpoints.isEmpty()) throw new IOException("translator disabled");
         if (lines.isEmpty()) return List.of();
-        Mode current = detectMode();
-        List<String> result = current == Mode.LLM ? translateWithLlm(lines, onLine, cancellation) : translateWithNllb(sourceLanguage, lines);
+        IOException failure = null;
+        for (Endpoint endpoint : endpointsInOrder()) {
+            try {
+                List<String> result = translateWith(endpoint, sourceLanguage, lines, onLine, cancellation);
+                markActive(endpoint);
+                return result;
+            } catch (IOException e) {
+                if (cancellation != null && cancellation.isRequested()) throw e;
+                if (endpoint == endpoints.get(0)) {
+                    primaryRetryAt = System.currentTimeMillis() + PRIMARY_RETRY_INTERVAL_MS;
+                }
+                LOGGER.warn("translator {} failed: {}", endpoint.baseUrl, e.getMessage());
+                if (failure == null) failure = e;
+            }
+        }
+        throw failure;
+    }
+
+    private List<Endpoint> endpointsInOrder() {
+        int active = activeIndex;
+        List<Endpoint> order = new ArrayList<>(endpoints.size());
+        if (active != 0 && System.currentTimeMillis() >= primaryRetryAt) order.add(endpoints.get(0));
+        Endpoint current = endpoints.get(active);
+        if (!order.contains(current)) order.add(current);
+        for (Endpoint endpoint : endpoints) {
+            if (!order.contains(endpoint)) order.add(endpoint);
+        }
+        return order;
+    }
+
+    private void markActive(Endpoint endpoint) {
+        int index = endpoints.indexOf(endpoint);
+        if (index != activeIndex) {
+            activeIndex = index;
+            LOGGER.info("translator switched to {} (model={})", endpoint.baseUrl, endpoint.modelName);
+        }
+    }
+
+    private List<String> translateWith(Endpoint endpoint, String sourceLanguage, List<String> lines,
+                                       @Nullable BiConsumer<Integer, String> onLine,
+                                       @Nullable Cancellation cancellation) throws IOException {
+        Mode current = detectMode(endpoint);
+        List<String> result = current == Mode.LLM
+                ? translateWithLlm(endpoint, lines, onLine, cancellation)
+                : translateWithNllb(endpoint, sourceLanguage, lines);
         if (result.size() != lines.size()) {
             LOGGER.warn("translator returned {} lines for {} inputs", result.size(), lines.size());
             throw new IOException("translator line count mismatch");
@@ -93,51 +156,59 @@ public class TranslationClient {
         return result;
     }
 
-    private Mode detectMode() throws IOException {
-        Mode current = mode;
+    private Mode detectMode(Endpoint endpoint) throws IOException {
+        Mode current = endpoint.mode;
         if (current != Mode.UNKNOWN) return current;
-        HttpResponse<String> response = send(HttpRequest.newBuilder(URI.create(baseUrl + "/v1/models"))
+        HttpResponse<String> response = send(HttpRequest.newBuilder(URI.create(endpoint.baseUrl + "/v1/models"))
                 .timeout(Duration.ofSeconds(5)).GET().build());
         current = response.statusCode() == 200 && response.body().contains("\"data\"") ? Mode.LLM : Mode.NLLB;
-        modelName = current == Mode.LLM ? readLlmModelName(response.body()) : readNllbModelName();
-        mode = current;
-        LOGGER.info("translator mode detected: {} model={} ({})", current, modelName, baseUrl);
+        if (current == Mode.LLM) {
+            String override = System.getenv("TRANSLATOR_MODEL");
+            endpoint.llmModelId = override == null || override.isBlank() ? readLlmModelId(response.body()) : override;
+            endpoint.modelName = cleanModelName(endpoint.llmModelId);
+        } else {
+            endpoint.modelName = readNllbModelName(endpoint);
+        }
+        endpoint.mode = current;
+        LOGGER.info("translator mode detected: {} model={} ({})", current, endpoint.modelName, endpoint.baseUrl);
         return current;
     }
 
     public boolean isLlm() {
+        if (endpoints.isEmpty()) return false;
         try {
-            return detectMode() == Mode.LLM;
+            return detectMode(endpoints.get(activeIndex)) == Mode.LLM;
         } catch (IOException e) {
             return false;
         }
     }
 
     public String getModelName() {
-        String name = modelName;
+        if (endpoints.isEmpty()) return "";
+        Endpoint endpoint = endpoints.get(activeIndex);
+        String name = endpoint.modelName;
         if (name == null) {
             try {
-                detectMode();
+                detectMode(endpoint);
             } catch (IOException e) {
                 return "";
             }
-            name = modelName;
+            name = endpoint.modelName;
         }
         return name == null ? "" : name;
     }
 
-    private static String readLlmModelName(String body) {
+    private static String readLlmModelId(String body) {
         try {
-            String id = MAPPER.readTree(body).path("data").path(0).path("id").asText("");
-            return cleanModelName(id);
+            return MAPPER.readTree(body).path("data").path(0).path("id").asText("");
         } catch (IOException e) {
             return "";
         }
     }
 
-    private String readNllbModelName() {
+    private String readNllbModelName(Endpoint endpoint) {
         try {
-            HttpResponse<String> response = send(HttpRequest.newBuilder(URI.create(baseUrl + "/health"))
+            HttpResponse<String> response = send(HttpRequest.newBuilder(URI.create(endpoint.baseUrl + "/health"))
                     .timeout(Duration.ofSeconds(5)).GET().build());
             return cleanModelName(MAPPER.readTree(response.body()).path("model").asText(""));
         } catch (IOException e) {
@@ -154,35 +225,39 @@ public class TranslationClient {
         return name;
     }
 
-    private List<String> translateWithNllb(String sourceLanguage, List<String> lines) throws IOException {
+    private List<String> translateWithNllb(Endpoint endpoint, String sourceLanguage, List<String> lines) throws IOException {
         ObjectNode body = MAPPER.createObjectNode();
         body.put("src", sourceLanguage);
         body.put("tgt", LyricsLanguage.KOREAN);
         ArrayNode array = body.putArray("lines");
         lines.forEach(array::add);
-        JsonNode node = postJson("/translate", body, Duration.ofSeconds(60));
+        JsonNode node = postJson(endpoint, "/translate", body, Duration.ofSeconds(60));
         List<String> result = new ArrayList<>();
         for (JsonNode line : node.path("lines")) result.add(line.asText(""));
         return result;
     }
 
-    private ObjectNode buildLlmRequest(List<String> lines, boolean stream) {
+    private ObjectNode buildLlmRequest(Endpoint endpoint, List<String> lines, boolean stream) {
         StringBuilder user = new StringBuilder();
         user.append("Translate these ").append(lines.size()).append(" lyric lines to Korean.\n");
         for (int i = 0; i < lines.size(); i++) {
             user.append(i + 1).append(". ").append(lines.get(i) == null ? "" : lines.get(i)).append('\n');
         }
         ObjectNode body = MAPPER.createObjectNode();
-        body.put("model", "translator");
+        String model = endpoint.llmModelId;
+        body.put("model", model == null || model.isBlank() ? "translator" : model);
         body.put("temperature", 0.2);
+        body.put("reasoning_effort", "none");
         body.put("max_tokens", 56 * lines.size() + 64);
         body.put("stream", stream);
         ArrayNode messages = body.putArray("messages");
         messages.addObject().put("role", "system").put("content", LLM_SYSTEM_PROMPT);
         messages.addObject().put("role", "user").put("content", user.toString());
         ObjectNode format = body.putObject("response_format");
-        format.put("type", "json_object");
-        ObjectNode schema = format.putObject("schema");
+        format.put("type", "json_schema");
+        ObjectNode jsonSchema = format.putObject("json_schema");
+        jsonSchema.put("name", "lyrics_translation");
+        ObjectNode schema = jsonSchema.putObject("schema");
         schema.put("type", "object");
         ObjectNode properties = schema.putObject("properties");
         ObjectNode items = properties.putObject("t");
@@ -202,9 +277,9 @@ public class TranslationClient {
         return body;
     }
 
-    private List<String> translateWithLlm(List<String> lines, @Nullable BiConsumer<Integer, String> onLine,
+    private List<String> translateWithLlm(Endpoint endpoint, List<String> lines, @Nullable BiConsumer<Integer, String> onLine,
                                           @Nullable Cancellation cancellation) throws IOException {
-        String content = onLine == null ? requestLlm(lines) : streamLlm(lines, onLine, cancellation);
+        String content = onLine == null ? requestLlm(endpoint, lines) : streamLlm(endpoint, lines, onLine, cancellation);
         JsonNode parsed;
         try {
             parsed = MAPPER.readTree(content);
@@ -237,7 +312,7 @@ public class TranslationClient {
                 String source = lines.get(index);
                 String fixed = source;
                 try {
-                    List<String> retried = translateWithLlm(List.of(source), null, null);
+                    List<String> retried = translateWithLlm(endpoint, List.of(source), null, null);
                     if (isAcceptable(source, retried.get(0))) fixed = retried.get(0);
                 } catch (IOException e) {
                     LOGGER.debug("single line retry failed for line {}", index + 1, e);
@@ -255,8 +330,8 @@ public class TranslationClient {
         return translated.trim().length() >= 2 || source.trim().length() <= 2;
     }
 
-    private String requestLlm(List<String> lines) throws IOException {
-        JsonNode node = postJson("/v1/chat/completions", buildLlmRequest(lines, false), Duration.ofSeconds(300));
+    private String requestLlm(Endpoint endpoint, List<String> lines) throws IOException {
+        JsonNode node = postJson(endpoint, "/v1/chat/completions", buildLlmRequest(endpoint, lines, false), Duration.ofSeconds(300));
         return node.path("choices").path(0).path("message").path("content").asText("");
     }
 
@@ -280,12 +355,12 @@ public class TranslationClient {
         }
     }
 
-    private String streamLlm(List<String> lines, BiConsumer<Integer, String> onLine, @Nullable Cancellation cancellation) throws IOException {
+    private String streamLlm(Endpoint endpoint, List<String> lines, BiConsumer<Integer, String> onLine, @Nullable Cancellation cancellation) throws IOException {
         if (cancellation != null && cancellation.isRequested()) throw new IOException("translation cancelled");
-        HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/v1/chat/completions"))
+        HttpRequest request = HttpRequest.newBuilder(URI.create(endpoint.baseUrl + "/v1/chat/completions"))
                 .header("Content-Type", "application/json")
                 .timeout(Duration.ofSeconds(300))
-                .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(buildLlmRequest(lines, true))))
+                .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(buildLlmRequest(endpoint, lines, true))))
                 .build();
         CompletableFuture<HttpResponse<Stream<String>>> pending = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofLines());
         if (cancellation != null) cancellation.attach(() -> pending.cancel(true));
@@ -395,8 +470,8 @@ public class TranslationClient {
         return false;
     }
 
-    private JsonNode postJson(String path, ObjectNode body, Duration timeout) throws IOException {
-        HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + path))
+    private JsonNode postJson(Endpoint endpoint, String path, ObjectNode body, Duration timeout) throws IOException {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(endpoint.baseUrl + path))
                 .header("Content-Type", "application/json")
                 .timeout(timeout)
                 .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(body)))
@@ -418,15 +493,17 @@ public class TranslationClient {
     }
 
     public boolean isHealthy() {
-        if (baseUrl == null) return false;
-        try {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/health"))
-                    .timeout(Duration.ofSeconds(3))
-                    .GET()
-                    .build();
-            return send(request).statusCode() == 200;
-        } catch (IOException e) {
-            return false;
+        for (Endpoint endpoint : endpoints) {
+            try {
+                String path = detectMode(endpoint) == Mode.NLLB ? "/health" : "/v1/models";
+                HttpRequest request = HttpRequest.newBuilder(URI.create(endpoint.baseUrl + path))
+                        .timeout(Duration.ofSeconds(3))
+                        .GET()
+                        .build();
+                if (send(request).statusCode() == 200) return true;
+            } catch (IOException ignored) {
+            }
         }
+        return false;
     }
 }

@@ -176,7 +176,7 @@ public static final List<String> MUSIC_BOT_TOKENS = List.of(
 로그인한 계정이 만들었거나 라이브러리에 저장한 플레이리스트만 읽을 수 있습니다. 다른 사람의 플레이리스트를 재생하려면 해당 계정에서 먼저 저장해 두어야 합니다.
 
 #### 가사 번역 설정
-`/가사` 표시에 한국어 번역을 붙이려면 번역 서버를 같은 머신에 띄웁니다. GPU 는 필요 없습니다. 두 가지 중 하나를 고릅니다.
+`/가사` 표시에 한국어 번역을 붙이려면 번역 서버를 띄웁니다. 세 가지 중 하나를 고릅니다. A/B 는 GPU 가 필요 없고, C 는 GPU 머신에서 가장 빠릅니다.
 
 **A. LLM (권장, 품질 좋음)**: llama.cpp + Tri-7B(트릴리온랩스, 한·영·일 특화) 4비트. RAM 약 6GB, 6코어 CPU 기준 5줄에 10초 안팎. 일본어·영어 가사를 자연스러운 한국어로 옮깁니다. 다른 GGUF 를 쓰려면 ``MODEL_URL``/``MODEL_FILE`` 환경변수로 바꿀 수 있습니다.
 1. ``translator/llm/setup.sh`` 실행 (llama.cpp 바이너리 17MB + 모델 4.7GB 다운로드, 한 번만)
@@ -187,6 +187,19 @@ public static final List<String> MUSIC_BOT_TOKENS = List.of(
 1. ``translator/setup.sh`` 실행 (모델 다운로드와 int8 변환, 한 번만)
 2. ``translator/run.sh`` 로 실행
 3. ``BotSecret.TRANSLATOR_URL`` 에 같은 주소를 넣고 봇 재시작
+
+**C. Ollama (GPU 권장, 가장 빠름)**: GPU 가 있는 머신에서 Ollama 로 실행. VRAM 16GB 기준 ``gemma4:12b`` 권장.
+1. [Ollama 설치](https://ollama.com/download) 후 ``ollama pull gemma4:12b`` (약 7.6GB, 한 번만)
+2. 환경변수 ``OLLAMA_CONTEXT_LENGTH=8192``, ``OLLAMA_KEEP_ALIVE=1h`` 를 설정하고 Ollama 재시작 (기본 컨텍스트가 짧아 긴 가사가 잘릴 수 있고, 유휴 시 모델이 내려가는 것을 방지)
+3. ``BotSecret.TRANSLATOR_URL`` 에 ``http://127.0.0.1:11434`` 를 넣고 봇 재시작 (봇이 다른 머신에 있으면 Ollama 쪽에 ``OLLAMA_HOST=0.0.0.0`` 설정 후 해당 머신 주소 사용)
+
+모델이 여러 개 설치되어 있으면 봇 쪽 환경변수 ``TRANSLATOR_MODEL`` 로 사용할 모델을 고정할 수 있습니다 (예: ``TRANSLATOR_MODEL=gemma4:12b``). 지정하지 않으면 서버가 알려주는 첫 번째 모델을 사용합니다.
+
+**장애 대비 (failover)**: ``TRANSLATOR_URL`` 에 주소를 쉼표로 여러 개 넣으면 앞의 것부터 우선 사용하고, 연결 실패 시 자동으로 다음 주소로 넘어갑니다. 예를 들어 GPU 머신의 Ollama 를 우선 쓰고 죽으면 같은 머신의 CPU llama.cpp 로 버티려면:
+```
+public static final String TRANSLATOR_URL = "http://192.168.0.221:11434,http://127.0.0.1:8765";
+```
+폴백으로 넘어간 뒤에도 5분마다 우선 주소를 다시 시도해 복구되면 자동으로 돌아갑니다.
 
 봇은 주소에 접속해 두 서버를 자동으로 구분합니다. 번역은 곡 전체를 한 요청으로 보내 스트리밍으로 받으며 줄이 도착하는 대로 표시합니다. 현재 곡이 우선이고 대기열 앞 3곡은 미리 번역해 둡니다. 결과는 가사 내용 기준으로 메모리에 캐시됩니다. 한국어 가사는 번역하지 않습니다.
 타임스탬프가 없어 전체 가사로 표시되는 곡은 원문을 먼저 띄운 뒤 번역이 끝나면 같은 메시지를 수정해 각 줄 아래에 번역을 끼워 넣습니다. (임베드 글자 제한을 넘는 뒷부분은 생략 표시)</br>
