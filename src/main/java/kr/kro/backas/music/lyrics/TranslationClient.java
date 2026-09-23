@@ -507,6 +507,8 @@ public class TranslationClient {
                 if (delta.isEmpty()) continue;
                 if (firstTokenAt == 0) firstTokenAt = System.currentTimeMillis();
                 deltaCount++;
+                long streamedMs = System.currentTimeMillis() - firstTokenAt;
+                if (streamedMs > 1000) tokensPerSecond = (int) Math.round(deltaCount * 1000.0 / streamedMs);
                 for (String objectLiteral : scanner.feed(delta)) {
                     JsonNode entry;
                     try {
