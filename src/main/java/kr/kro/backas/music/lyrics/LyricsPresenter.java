@@ -45,7 +45,7 @@ public final class LyricsPresenter {
     public static String machineTranslationNote(@Nullable TranslationClient translator) {
         String note = translator != null && translator.isLlm() ? LLM_TRANSLATION_NOTE : MACHINE_TRANSLATION_NOTE;
         String status = translationStatus(translator);
-        return status.isBlank() ? note : note + "\n" + status;
+        return status.isBlank() ? note : note + "\n\n" + status;
     }
 
     public static String translationStatus(@Nullable TranslationClient translator) {
@@ -136,7 +136,7 @@ public final class LyricsPresenter {
                 current = entry;
             }
         }
-        java.text.DecimalFormat format = new java.text.DecimalFormat("00.00");
+        java.text.DecimalFormat format = new java.text.DecimalFormat("0.00");
         String counter = " (total: " + format.format(100.0 * sum / plan.size()) + "%, " + completed + "/" + plan.size() + ")";
         if (current == null) return format.format(100) + "%" + counter;
         if (current.job == null) return "가사 불러오는 중" + counter;
@@ -223,7 +223,7 @@ public final class LyricsPresenter {
                 && !LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(asLines));
         if (translator != null && translator.isEnabled() && !willTranslate) reportSongComplete(track);
         String initialNote = willTranslate
-                ? LyricsSession.TRANSLATING_NOTE + "\n" + translationStatus(translator)
+                ? LyricsSession.TRANSLATING_NOTE + "\n\n" + translationStatus(translator)
                 : null;
         sendEmbeds.apply(buildFullEmbeds(track, lines, null, finalFooter, initialNote)).whenComplete((message, sendError) -> {
             if (sendError != null || message == null) {
@@ -240,7 +240,7 @@ public final class LyricsPresenter {
                     TranslationJobs.Job current = jobRef.get();
                     boolean translating = current == null || !current.done().isDone();
                     String note = translating
-                            ? LyricsSession.TRANSLATING_NOTE + "\n" + translationStatus(translator)
+                            ? LyricsSession.TRANSLATING_NOTE + "\n\n" + translationStatus(translator)
                             : (cache.isEmpty() ? "번역에 실패했습니다" : machineTranslationNote(translator));
                     message.editMessageEmbeds(buildFullEmbeds(track, lines, cache, finalFooter, note))
                             .queue(null, e -> LOGGER.debug("progressive lyrics edit failed", e));
@@ -437,7 +437,10 @@ public final class LyricsPresenter {
         List<String> pages = paginate(lines, translations);
         if (note != null && !note.isBlank()) {
             StringBuilder small = new StringBuilder();
-            for (String noteLine : note.split("\n")) small.append("\n-# ").append(noteLine);
+            for (String noteLine : note.split("\n")) {
+                small.append('\n');
+                if (!noteLine.isBlank()) small.append("-# ").append(noteLine);
+            }
             String suffix = small.toString();
             if (!pages.isEmpty() && pages.get(pages.size() - 1).length() + suffix.length() <= 4096) {
                 pages.set(pages.size() - 1, pages.get(pages.size() - 1) + suffix);
