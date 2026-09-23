@@ -45,7 +45,7 @@ public final class LyricsPresenter {
     public static String machineTranslationNote(@Nullable TranslationClient translator) {
         String note = translator != null && translator.isLlm() ? LLM_TRANSLATION_NOTE : MACHINE_TRANSLATION_NOTE;
         String status = translationStatus(translator);
-        return status.isBlank() ? note : note + "\n\n" + status;
+        return status.isBlank() ? note : note + "\n" + status;
     }
 
     public static String translationStatus(@Nullable TranslationClient translator) {
@@ -54,11 +54,10 @@ public final class LyricsPresenter {
         if (model.isBlank()) return "";
         String compute = translator.getComputeLabel();
         StringBuilder status = new StringBuilder();
-        if (!compute.isBlank()) status.append(compute).append(", ");
-        status.append(progressDisplay());
+        if (!compute.isBlank()) status.append(compute).append(" | ");
         int tokensPerSecond = translator.getTokensPerSecond();
-        if (tokensPerSecond > 0) status.append('\n').append(tokensPerSecond).append(" token/s");
-        return status.toString();
+        if (tokensPerSecond > 0) status.append(tokensPerSecond).append(" token/s | ");
+        return status.append(progressDisplay()).toString();
     }
 
     private static final class SongProgress {
@@ -126,20 +125,13 @@ public final class LyricsPresenter {
         if (plan.isEmpty()) return "번역 준비 중 ...";
         float sum = 0f;
         int completed = 0;
-        SongProgress current = null;
         for (SongProgress entry : plan) {
             float fraction = entry.fraction();
             sum += fraction;
-            if (fraction >= 1f) {
-                completed++;
-            } else if (current == null) {
-                current = entry;
-            }
+            if (fraction >= 1f) completed++;
         }
         java.text.DecimalFormat format = new java.text.DecimalFormat("0.00");
-        String counter = " (total: " + format.format(100.0 * sum / plan.size()) + "%, " + completed + "/" + plan.size() + ")";
-        if (current == null) return format.format(100) + "%" + counter;
-        return format.format(current.fraction() * 100.0) + "%" + counter;
+        return format.format(100.0 * sum / plan.size()) + "% (" + completed + "/" + plan.size() + ")";
     }
 
     private LyricsPresenter() {
@@ -222,7 +214,7 @@ public final class LyricsPresenter {
                 && !LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(asLines));
         if (translator != null && translator.isEnabled() && !willTranslate) reportSongComplete(track);
         String initialNote = willTranslate
-                ? LyricsSession.TRANSLATING_NOTE + "\n\n" + translationStatus(translator)
+                ? LyricsSession.TRANSLATING_NOTE + "\n" + translationStatus(translator)
                 : null;
         sendEmbeds.apply(buildFullEmbeds(track, lines, null, finalFooter, initialNote)).whenComplete((message, sendError) -> {
             if (sendError != null || message == null) {
@@ -239,7 +231,7 @@ public final class LyricsPresenter {
                     TranslationJobs.Job current = jobRef.get();
                     boolean translating = current == null || !current.done().isDone();
                     String note = translating
-                            ? LyricsSession.TRANSLATING_NOTE + "\n\n" + translationStatus(translator)
+                            ? LyricsSession.TRANSLATING_NOTE + "\n" + translationStatus(translator)
                             : (cache.isEmpty() ? "번역에 실패했습니다" : machineTranslationNote(translator));
                     message.editMessageEmbeds(buildFullEmbeds(track, lines, cache, finalFooter, note))
                             .queue(null, e -> LOGGER.debug("progressive lyrics edit failed", e));
