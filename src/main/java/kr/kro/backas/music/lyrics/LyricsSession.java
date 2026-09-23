@@ -109,14 +109,21 @@ public class LyricsSession {
     private boolean startTranslation() {
         if (translator == null) return false;
         List<LyricLine> lines = lyrics.synced();
-        if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lines))) return false;
+        if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lines))) {
+            LyricsPresenter.reportSongComplete(track);
+            return false;
+        }
         boolean pending = false;
         for (int i = 0; i < sources.size(); i++) {
             if (!translations.containsKey(i) && LyricsLanguage.needsTranslation(sources.get(i))) pending = true;
         }
-        if (!pending) return false;
+        if (!pending) {
+            LyricsPresenter.reportSongComplete(track);
+            return false;
+        }
         translating = true;
         job = TranslationJobs.submit(translator, cacheKey, sources, true, null);
+        LyricsPresenter.reportSongJob(track, job);
         job.done().whenComplete((result, error) -> {
             translating = false;
             LyricsPresenter.prefetchNext(client);
