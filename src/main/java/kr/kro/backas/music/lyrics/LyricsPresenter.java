@@ -57,7 +57,7 @@ public final class LyricsPresenter {
         if (!compute.isBlank()) status.append("\ncompute: ").append(compute);
         status.append("\nprocess: ").append(progressDisplay());
         int tokensPerSecond = translator.getTokensPerSecond();
-        if (tokensPerSecond > 0) status.append("\ntoken: ").append(tokensPerSecond).append(" t/s");
+        if (tokensPerSecond > 0) status.append(' ').append(tokensPerSecond).append(" token/s");
         return status.toString();
     }
 
@@ -124,14 +124,17 @@ public final class LyricsPresenter {
     private static String progressDisplay() {
         List<SongProgress> plan = PROGRESS_PLAN;
         if (plan.isEmpty()) return "가사 정보를 불러오는 중 ...";
-        float sum = 0f;
         int completed = 0;
+        Float currentFraction = null;
         for (SongProgress entry : plan) {
             float fraction = entry.fraction();
-            sum += fraction;
-            if (fraction >= 1f) completed++;
+            if (fraction >= 1f) {
+                completed++;
+            } else if (currentFraction == null) {
+                currentFraction = fraction;
+            }
         }
-        double percent = 100.0 * sum / plan.size();
+        double percent = currentFraction == null ? 100.0 : currentFraction * 100.0;
         return new java.text.DecimalFormat("0.##").format(percent) + "% (" + completed + "/" + plan.size() + ")";
     }
 
