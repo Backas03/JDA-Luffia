@@ -139,7 +139,7 @@ public final class LyricsPresenter {
         java.text.DecimalFormat format = new java.text.DecimalFormat("00.00");
         String counter = " (total: " + format.format(100.0 * sum / plan.size()) + "%, " + completed + "/" + plan.size() + ")";
         if (current == null) return format.format(100) + "%" + counter;
-        if (current.job == null) return "가사 불러오는 중 ..." + counter;
+        if (current.job == null) return "가사 불러오는 중" + counter;
         return format.format(current.fraction() * 100.0) + "%" + counter;
     }
 
