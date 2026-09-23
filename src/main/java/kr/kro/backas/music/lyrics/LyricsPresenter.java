@@ -237,6 +237,8 @@ public final class LyricsPresenter {
                 TranslationJobs.Job job = TranslationJobs.submit(translator, cacheKey, lines, true,
                         (index, text) -> editor.requestEdit());
                 reportSongJob(track, job);
+                ScheduledFuture<?> heartbeat = Main.getLuffia().getMusicPlayerController().getScheduler()
+                        .scheduleAtFixedRate(editor::requestEdit, 3, 5, TimeUnit.SECONDS);
                 boolean demoted = false;
                 while (!job.done().isDone()) {
                     if (!demoted && !client.isCurrentTrack(track)) {
@@ -255,6 +257,7 @@ public final class LyricsPresenter {
                     }
                 }
                 Map<Integer, String> translations = cache;
+                heartbeat.cancel(false);
                 editor.cancel();
                 if (job.isCancelled()) return;
                 String doneNote = translations.isEmpty()
