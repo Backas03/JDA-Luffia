@@ -123,7 +123,7 @@ public final class LyricsPresenter {
 
     private static String progressDisplay() {
         List<SongProgress> plan = PROGRESS_PLAN;
-        if (plan.isEmpty()) return "0% (0/0)";
+        if (plan.isEmpty()) return "가사 정보를 불러오는 중 ...";
         float sum = 0f;
         int completed = 0;
         for (SongProgress entry : plan) {
