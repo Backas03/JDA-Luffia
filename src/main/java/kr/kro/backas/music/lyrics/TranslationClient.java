@@ -56,18 +56,23 @@ public class TranslationClient {
 
     private static final class Endpoint {
         private final String baseUrl;
+        private final String label;
+        private final String preferredModel;
         private volatile Mode mode = Mode.UNKNOWN;
         private volatile String modelName = "";
         private volatile String llmModelId = "";
         private volatile long failedAt;
 
-        private Endpoint(String baseUrl) {
+        private Endpoint(String baseUrl, String label, String preferredModel) {
             this.baseUrl = baseUrl;
+            this.label = label;
+            this.preferredModel = preferredModel;
         }
     }
 
     private final List<Endpoint> endpoints;
     private volatile Endpoint active;
+    private volatile int tokensPerSecond;
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
     private final Map<String, Map<Integer, String>> cache = Collections.synchronizedMap(
             new LinkedHashMap<>(64, 0.75f, true) {
@@ -81,8 +86,20 @@ public class TranslationClient {
         List<Endpoint> parsed = new ArrayList<>();
         if (urls != null) {
             for (String url : urls.split("[,\\s]+")) {
-                String trimmed = url.trim().replaceAll("/+$", "");
-                if (!trimmed.isBlank()) parsed.add(new Endpoint(trimmed));
+                String[] parts = url.trim().split("\\|", 3);
+                String trimmed = parts[0].trim().replaceAll("/+$", "");
+                if (trimmed.isBlank()) continue;
+                String label = parts.length > 1 ? parts[1].trim() : "";
+                String preferredModel = parts.length > 2 ? parts[2].trim() : "";
+                if (label.isBlank()) {
+                    try {
+                        label = URI.create(trimmed).getHost();
+                    } catch (RuntimeException e) {
+                        label = trimmed;
+                    }
+                    if (label == null || label.isBlank()) label = trimmed;
+                }
+                parsed.add(new Endpoint(trimmed, label, preferredModel));
             }
         }
         this.endpoints = List.copyOf(parsed);
@@ -105,6 +122,26 @@ public class TranslationClient {
     public String getActiveUrl() {
         Endpoint endpoint = active;
         return endpoint == null ? null : endpoint.baseUrl;
+    }
+
+    public String getComputeLabel() {
+        Endpoint endpoint = active;
+        if (endpoint == null && !endpoints.isEmpty()) endpoint = endpoints.get(0);
+        return endpoint == null ? "" : endpoint.label;
+    }
+
+    public boolean isActivePrimary() {
+        return endpoints.isEmpty() || active == null || active == endpoints.get(0);
+    }
+
+    public int getTokensPerSecond() {
+        return tokensPerSecond;
+    }
+
+    private void recordSpeed(long tokens, long elapsedMs) {
+        if (tokens >= 8 && elapsedMs > 500) {
+            tokensPerSecond = (int) Math.round(tokens * 1000.0 / elapsedMs);
+        }
     }
 
     private Endpoint pick() throws IOException {
@@ -141,7 +178,13 @@ public class TranslationClient {
         Mode detected = response.statusCode() == 200 && response.body().contains("\"data\"") ? Mode.LLM : Mode.NLLB;
         if (detected == Mode.LLM) {
             String override = System.getenv("TRANSLATOR_MODEL");
-            endpoint.llmModelId = override == null || override.isBlank() ? readLlmModelId(response.body()) : override;
+            if (!endpoint.preferredModel.isBlank()) {
+                endpoint.llmModelId = endpoint.preferredModel;
+            } else if (override != null && !override.isBlank() && response.body().contains("\"" + override + "\"")) {
+                endpoint.llmModelId = override;
+            } else {
+                endpoint.llmModelId = readLlmModelId(response.body());
+            }
             endpoint.modelName = cleanModelName(endpoint.llmModelId);
         } else {
             endpoint.modelName = readNllbModelName(endpoint);
@@ -268,6 +311,7 @@ public class TranslationClient {
         body.put("reasoning_effort", "none");
         body.put("max_tokens", 56 * lines.size() + 64);
         body.put("stream", stream);
+        if (stream) body.putObject("stream_options").put("include_usage", true);
         ArrayNode messages = body.putArray("messages");
         messages.addObject().put("role", "system").put("content", LLM_SYSTEM_PROMPT);
         messages.addObject().put("role", "user").put("content", user.toString());
@@ -391,7 +435,9 @@ public class TranslationClient {
     }
 
     private String requestLlm(Endpoint endpoint, List<String> lines) throws IOException {
+        long startedAt = System.currentTimeMillis();
         JsonNode node = postJson(endpoint, "/v1/chat/completions", buildLlmRequest(endpoint, lines, false), Duration.ofSeconds(300));
+        recordSpeed(node.path("usage").path("completion_tokens").asLong(0), System.currentTimeMillis() - startedAt);
         return node.path("choices").path(0).path("message").path("content").asText("");
     }
 
@@ -442,6 +488,9 @@ public class TranslationClient {
         JsonArrayObjectScanner scanner = new JsonArrayObjectScanner();
         Map<Integer, String> byNumber = new java.util.HashMap<>();
         boolean broken = false;
+        long firstTokenAt = 0;
+        long deltaCount = 0;
+        long usageTokens = 0;
         try (Stream<String> body = response.body()) {
             if (cancellation != null) cancellation.attach(body::close);
             Iterator<String> iterator = body.iterator();
@@ -451,8 +500,13 @@ public class TranslationClient {
                 if (!line.startsWith("data:")) continue;
                 String data = line.substring(5).trim();
                 if (data.equals("[DONE]")) break;
-                String delta = MAPPER.readTree(data).path("choices").path(0).path("delta").path("content").asText("");
+                JsonNode chunk = MAPPER.readTree(data);
+                long completion = chunk.path("usage").path("completion_tokens").asLong(0);
+                if (completion > 0) usageTokens = completion;
+                String delta = chunk.path("choices").path(0).path("delta").path("content").asText("");
                 if (delta.isEmpty()) continue;
+                if (firstTokenAt == 0) firstTokenAt = System.currentTimeMillis();
+                deltaCount++;
                 for (String objectLiteral : scanner.feed(delta)) {
                     JsonNode entry;
                     try {
@@ -483,6 +537,9 @@ public class TranslationClient {
             if (!broken) throw e.getCause();
         }
         if (cancellation != null && cancellation.isRequested()) throw new IOException("translation cancelled");
+        if (firstTokenAt > 0) {
+            recordSpeed(usageTokens > 0 ? usageTokens : deltaCount, System.currentTimeMillis() - firstTokenAt);
+        }
         return byNumber;
     }
 
