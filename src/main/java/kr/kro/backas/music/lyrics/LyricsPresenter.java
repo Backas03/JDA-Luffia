@@ -55,10 +55,84 @@ public final class LyricsPresenter {
         StringBuilder status = new StringBuilder("(model: ").append(model);
         String compute = translator.getComputeLabel();
         if (!compute.isBlank()) status.append(", compute: ").append(compute);
-        status.append(", process: ").append(TranslationJobs.progressPercent()).append('%');
+        status.append(", process: ").append(progressDisplay());
         int tokensPerSecond = translator.getTokensPerSecond();
         if (tokensPerSecond > 0) status.append(", ").append(tokensPerSecond).append(" token/s");
         return status.append(')').toString();
+    }
+
+    private static final class SongProgress {
+        private final String id;
+        private volatile TranslationJobs.Job job;
+        private volatile boolean complete;
+
+        private SongProgress(String id) {
+            this.id = id;
+        }
+
+        private float fraction() {
+            if (complete) return 1f;
+            TranslationJobs.Job current = job;
+            return current == null ? 0f : current.progress();
+        }
+    }
+
+    private static volatile List<SongProgress> PROGRESS_PLAN = List.of();
+    private static final Object PROGRESS_LOCK = new Object();
+
+    private static void updateProgressPlan(@Nullable AudioTrack current, List<AudioTrack> targets) {
+        synchronized (PROGRESS_LOCK) {
+            Map<String, SongProgress> known = new ConcurrentHashMap<>();
+            for (SongProgress entry : PROGRESS_PLAN) known.put(entry.id, entry);
+            List<SongProgress> plan = new ArrayList<>();
+            Set<String> seen = ConcurrentHashMap.newKeySet();
+            List<AudioTrack> tracks = new ArrayList<>();
+            if (current != null) tracks.add(current);
+            tracks.addAll(targets);
+            for (AudioTrack track : tracks) {
+                String id = track.getIdentifier();
+                if (!seen.add(id)) continue;
+                SongProgress entry = known.get(id);
+                plan.add(entry == null ? new SongProgress(id) : entry);
+            }
+            PROGRESS_PLAN = List.copyOf(plan);
+        }
+    }
+
+    private static SongProgress progressEntry(AudioTrack track) {
+        String id = track.getIdentifier();
+        synchronized (PROGRESS_LOCK) {
+            for (SongProgress entry : PROGRESS_PLAN) {
+                if (entry.id.equals(id)) return entry;
+            }
+            SongProgress created = new SongProgress(id);
+            List<SongProgress> plan = new ArrayList<>(PROGRESS_PLAN);
+            plan.add(created);
+            PROGRESS_PLAN = List.copyOf(plan);
+            return created;
+        }
+    }
+
+    static void reportSongJob(AudioTrack track, TranslationJobs.Job job) {
+        progressEntry(track).job = job;
+    }
+
+    static void reportSongComplete(AudioTrack track) {
+        progressEntry(track).complete = true;
+    }
+
+    private static String progressDisplay() {
+        List<SongProgress> plan = PROGRESS_PLAN;
+        if (plan.isEmpty()) return "100% (0/0)";
+        float sum = 0f;
+        int completed = 0;
+        for (SongProgress entry : plan) {
+            float fraction = entry.fraction();
+            sum += fraction;
+            if (fraction >= 1f) completed++;
+        }
+        double percent = 100.0 * sum / plan.size();
+        return new java.text.DecimalFormat("0.##").format(percent) + "% (" + completed + "/" + plan.size() + ")";
     }
 
     private LyricsPresenter() {
@@ -139,6 +213,7 @@ public final class LyricsPresenter {
         for (String line : lines) asLines.add(new LyricLine(0, line));
         boolean willTranslate = translator != null && translator.isEnabled()
                 && !LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(asLines));
+        if (translator != null && translator.isEnabled() && !willTranslate) reportSongComplete(track);
         String translatingBase = finalFooter + "\n" + LyricsSession.TRANSLATING_NOTE;
         String initialFooter = willTranslate
                 ? translatingBase + "\n" + translationStatus(translator)
@@ -158,6 +233,7 @@ public final class LyricsPresenter {
                                 .queue(null, e -> LOGGER.debug("progressive lyrics edit failed", e)));
                 TranslationJobs.Job job = TranslationJobs.submit(translator, cacheKey, lines, true,
                         (index, text) -> editor.requestEdit());
+                reportSongJob(track, job);
                 boolean demoted = false;
                 while (!job.done().isDone()) {
                     if (!demoted && !client.isCurrentTrack(track)) {
@@ -259,6 +335,7 @@ public final class LyricsPresenter {
                     List<AudioTrack> queue = client.getTrackQueue();
                     int count = translator.isActivePrimary() ? PREFETCH_COUNT_FAST : PREFETCH_COUNT;
                     List<AudioTrack> targets = new ArrayList<>(queue.subList(0, Math.min(count, queue.size())));
+                    updateProgressPlan(client.getCurrentPlaying(), targets);
                     LOGGER.info("lyrics prefetch pass over {} queued track(s)", targets.size());
                     for (AudioTrack next : targets) {
                         if (!client.isAutoLyricsEnabled()) return;
@@ -279,19 +356,32 @@ public final class LyricsPresenter {
             Lyrics lyrics = controller.getLyricsClient().find(next.getInfo());
             if (lyrics == null || lyrics.instrumental()) {
                 LOGGER.info("no lyrics to prefetch for {}", next.getInfo().title);
+                reportSongComplete(next);
                 return;
             }
             if (lyrics.hasSynced()) {
                 List<String> lines = new ArrayList<>();
                 lyrics.synced().forEach(line -> lines.add(line.text()));
-                if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lyrics.synced()))) return;
-                TranslationJobs.submit(translator, TranslationJobs.cacheKey("synced", lines), lines, false, null).done().join();
+                if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lyrics.synced()))) {
+                    reportSongComplete(next);
+                    return;
+                }
+                TranslationJobs.Job job = TranslationJobs.submit(translator, TranslationJobs.cacheKey("synced", lines), lines, false, null);
+                reportSongJob(next, job);
+                job.done().join();
             } else if (lyrics.hasPlain()) {
                 List<String> lines = fullLines(lyrics);
                 List<LyricLine> asLines = new ArrayList<>();
                 for (String line : lines) asLines.add(new LyricLine(0, line));
-                if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(asLines))) return;
-                TranslationJobs.submit(translator, TranslationJobs.cacheKey("plain", lines), lines, false, null).done().join();
+                if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(asLines))) {
+                    reportSongComplete(next);
+                    return;
+                }
+                TranslationJobs.Job job = TranslationJobs.submit(translator, TranslationJobs.cacheKey("plain", lines), lines, false, null);
+                reportSongJob(next, job);
+                job.done().join();
+            } else {
+                reportSongComplete(next);
             }
             LOGGER.info("prefetched lyrics translation for {}", next.getInfo().title);
         } catch (Exception e) {
