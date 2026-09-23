@@ -43,9 +43,22 @@ public final class LyricsPresenter {
     public static final String LLM_TRANSLATION_NOTE = "LLM으로 번역한 가사입니다. 올바르지 않을 수 있습니다.";
 
     public static String machineTranslationNote(@Nullable TranslationClient translator) {
-        String model = translator == null ? "" : translator.getModelName();
         String note = translator != null && translator.isLlm() ? LLM_TRANSLATION_NOTE : MACHINE_TRANSLATION_NOTE;
-        return model.isBlank() ? note : note + "\n(model: " + model + ")";
+        String status = translationStatus(translator);
+        return status.isBlank() ? note : note + "\n" + status;
+    }
+
+    public static String translationStatus(@Nullable TranslationClient translator) {
+        if (translator == null) return "";
+        String model = translator.getModelName();
+        if (model.isBlank()) return "";
+        StringBuilder status = new StringBuilder("(model: ").append(model);
+        String compute = translator.getComputeLabel();
+        if (!compute.isBlank()) status.append(", compute: ").append(compute);
+        status.append(", process: ").append(TranslationJobs.progressPercent()).append('%');
+        int tokensPerSecond = translator.getTokensPerSecond();
+        if (tokensPerSecond > 0) status.append(", ").append(tokensPerSecond).append(" token/s");
+        return status.append(')').toString();
     }
 
     private LyricsPresenter() {
@@ -126,8 +139,9 @@ public final class LyricsPresenter {
         for (String line : lines) asLines.add(new LyricLine(0, line));
         boolean willTranslate = translator != null && translator.isEnabled()
                 && !LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(asLines));
+        String translatingBase = finalFooter + "\n" + LyricsSession.TRANSLATING_NOTE;
         String initialFooter = willTranslate
-                ? finalFooter + "\n" + LyricsSession.TRANSLATING_NOTE + "\n(model: " + translator.getModelName() + ")"
+                ? translatingBase + "\n" + translationStatus(translator)
                 : finalFooter;
         sendEmbeds.apply(buildFullEmbeds(track, lines, null, initialFooter)).whenComplete((message, sendError) -> {
             if (sendError != null || message == null) {
@@ -139,7 +153,8 @@ public final class LyricsPresenter {
                 String cacheKey = TranslationJobs.cacheKey("plain", lines);
                 Map<Integer, String> cache = translator.cacheFor(cacheKey);
                 ProgressiveEditor editor = new ProgressiveEditor(message.getChannel().getIdLong(), () ->
-                        message.editMessageEmbeds(buildFullEmbeds(track, lines, cache, initialFooter))
+                        message.editMessageEmbeds(buildFullEmbeds(track, lines, cache,
+                                        translatingBase + "\n" + translationStatus(translator)))
                                 .queue(null, e -> LOGGER.debug("progressive lyrics edit failed", e)));
                 TranslationJobs.Job job = TranslationJobs.submit(translator, cacheKey, lines, true,
                         (index, text) -> editor.requestEdit());
@@ -216,6 +231,7 @@ public final class LyricsPresenter {
     private static final Set<String> PREFETCHING = ConcurrentHashMap.newKeySet();
 
     public static final int PREFETCH_COUNT = 3;
+    public static final int PREFETCH_COUNT_FAST = 20;
 
     private static final Map<MusicPlayerClient, Boolean> PREFETCH_RERUN = new ConcurrentHashMap<>();
     private static final Set<MusicPlayerClient> PREFETCH_RUNNING = ConcurrentHashMap.newKeySet();
@@ -241,7 +257,8 @@ public final class LyricsPresenter {
                 do {
                     PREFETCH_RERUN.remove(client);
                     List<AudioTrack> queue = client.getTrackQueue();
-                    List<AudioTrack> targets = new ArrayList<>(queue.subList(0, Math.min(PREFETCH_COUNT, queue.size())));
+                    int count = translator.isActivePrimary() ? PREFETCH_COUNT_FAST : PREFETCH_COUNT;
+                    List<AudioTrack> targets = new ArrayList<>(queue.subList(0, Math.min(count, queue.size())));
                     LOGGER.info("lyrics prefetch pass over {} queued track(s)", targets.size());
                     for (AudioTrack next : targets) {
                         if (!client.isAutoLyricsEnabled()) return;

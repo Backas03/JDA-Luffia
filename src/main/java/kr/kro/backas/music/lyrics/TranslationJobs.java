@@ -22,7 +22,15 @@ public final class TranslationJobs {
     private static final Logger LOGGER = LoggerFactory.getLogger(TranslationJobs.class);
     private static final int CHUNK = 400;
     private static final long PRIORITY_POLL_MS = 250;
+    private static final int TRACKED_WINDOW = LyricsPresenter.PREFETCH_COUNT_FAST + 1;
     private static final Map<String, Job> JOBS = new ConcurrentHashMap<>();
+    private static final Map<String, Job> TRACKED = java.util.Collections.synchronizedMap(
+            new java.util.LinkedHashMap<>(32, 0.75f, false) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, Job> eldest) {
+                    return size() > TRACKED_WINDOW;
+                }
+            });
     private static final AtomicInteger THREAD_COUNTER = new AtomicInteger();
     public static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(runnable -> {
         Thread thread = new Thread(runnable, "lyrics-translation-" + THREAD_COUNTER.incrementAndGet());
@@ -43,11 +51,33 @@ public final class TranslationJobs {
                              @Nullable BiConsumer<Integer, String> onLine) {
         Job job = JOBS.compute(key, (k, existing) ->
                 existing != null && !existing.done.isDone() ? existing : new Job(translator, k, lines));
+        synchronized (TRACKED) {
+            TRACKED.remove(key);
+            TRACKED.put(key, job);
+        }
         if (onLine != null) job.listeners.add(onLine);
         boolean fresh = job.started.compareAndSet(false, true);
         if (priority) job.promote();
         if (fresh) EXECUTOR.execute(job::run);
         return job;
+    }
+
+    public static int progressPercent() {
+        List<Job> jobs;
+        synchronized (TRACKED) {
+            jobs = new ArrayList<>(TRACKED.values());
+        }
+        int total = 0;
+        int done = 0;
+        for (Job job : jobs) {
+            for (int i = 0; i < job.lines.size(); i++) {
+                String line = job.lines.get(i);
+                if (line == null || !LyricsLanguage.needsTranslation(line)) continue;
+                total++;
+                if (job.cache.containsKey(i)) done++;
+            }
+        }
+        return total == 0 ? 100 : (int) Math.round(100.0 * done / total);
     }
 
     private static boolean priorityActive(Job self) {
