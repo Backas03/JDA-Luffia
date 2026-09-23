@@ -124,19 +124,23 @@ public final class LyricsPresenter {
     private static String progressDisplay() {
         List<SongProgress> plan = PROGRESS_PLAN;
         if (plan.isEmpty()) return "번역 준비 중 ...";
+        float sum = 0f;
         int completed = 0;
         SongProgress current = null;
         for (SongProgress entry : plan) {
-            if (entry.fraction() >= 1f) {
+            float fraction = entry.fraction();
+            sum += fraction;
+            if (fraction >= 1f) {
                 completed++;
             } else if (current == null) {
                 current = entry;
             }
         }
-        String counter = " (" + completed + "/" + plan.size() + ")";
+        java.text.DecimalFormat format = new java.text.DecimalFormat("0.##");
+        String counter = " (total: " + format.format(100.0 * sum / plan.size()) + "%, " + completed + "/" + plan.size() + ")";
         if (current == null) return "100%" + counter;
         if (current.job == null) return "가사 불러오는 중 ..." + counter;
-        return new java.text.DecimalFormat("0.##").format(current.fraction() * 100.0) + "%" + counter;
+        return format.format(current.fraction() * 100.0) + "%" + counter;
     }
 
     private LyricsPresenter() {
