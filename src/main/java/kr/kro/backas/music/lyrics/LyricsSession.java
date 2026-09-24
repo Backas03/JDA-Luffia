@@ -98,7 +98,7 @@ public class LyricsSession {
         TranslationJobs.Job current = job;
         if (current != null) current.cancel();
         try {
-            message.editMessageComponents(buildView(track, lyrics, shownIndex, translationFor(shownIndex), reason, translator, false))
+            message.editMessageComponents(buildView(client, track, lyrics, shownIndex, translationFor(shownIndex), reason, translator, false))
                     .useComponentsV2(true)
                     .queue(null, e -> {});
         } catch (RuntimeException e) {
@@ -110,7 +110,7 @@ public class LyricsSession {
         if (translator == null) return false;
         List<LyricLine> lines = lyrics.synced();
         if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lines))) {
-            LyricsPresenter.reportSongComplete(track);
+            LyricsPresenter.reportSongComplete(client, track);
             return false;
         }
         boolean pending = false;
@@ -118,12 +118,12 @@ public class LyricsSession {
             if (!translations.containsKey(i) && LyricsLanguage.needsTranslation(sources.get(i))) pending = true;
         }
         if (!pending) {
-            LyricsPresenter.reportSongComplete(track);
+            LyricsPresenter.reportSongComplete(client, track);
             return false;
         }
         translating = true;
         job = TranslationJobs.submit(translator, cacheKey, sources, true, null);
-        LyricsPresenter.reportSongJob(track, job);
+        LyricsPresenter.reportSongJob(client, track, job);
         job.done().whenComplete((result, error) -> {
             translating = false;
             LyricsPresenter.prefetchNext(client);
@@ -172,7 +172,7 @@ public class LyricsSession {
             shownTranslation = translation;
             shownPending = pending;
             lastEditAt = now;
-            message.editMessageComponents(buildView(track, lyrics, index, translation, null, translator, pending))
+            message.editMessageComponents(buildView(client, track, lyrics, index, translation, null, translator, pending))
                     .useComponentsV2(true)
                     .queue(
                             m -> editInFlight.set(false),
@@ -197,10 +197,11 @@ public class LyricsSession {
     }
 
     public static Container buildView(AudioTrack track, Lyrics lyrics, int index, @Nullable String translation, @Nullable String footer) {
-        return buildView(track, lyrics, index, translation, footer, null, false);
+        return buildView(null, track, lyrics, index, translation, footer, null, false);
     }
 
-    public static Container buildView(AudioTrack track, Lyrics lyrics, int index, @Nullable String translation,
+    public static Container buildView(@Nullable MusicPlayerClient client, AudioTrack track, Lyrics lyrics, int index,
+                                      @Nullable String translation,
                                       @Nullable String footer, @Nullable TranslationClient translator, boolean pendingTranslation) {
         List<LyricLine> lines = lyrics.synced();
         String previous = lineText(lines, index - 1);
@@ -219,7 +220,7 @@ public class LyricsSession {
         text.append("-# ").append(WIDTH_FILLER).append('\n');
         text.append("-# ").append(footer == null ? song : song + " · " + footer);
         if ((translation != null && !translation.isBlank()) || pendingTranslation) {
-            for (String noteLine : LyricsPresenter.machineTranslationNote(translator).split("\n")) {
+            for (String noteLine : LyricsPresenter.machineTranslationNote(client, translator).split("\n")) {
                 text.append('\n');
                 if (!noteLine.isBlank()) text.append("-# ").append(noteLine);
             }
