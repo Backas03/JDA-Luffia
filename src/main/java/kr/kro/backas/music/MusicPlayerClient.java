@@ -265,7 +265,9 @@ public class MusicPlayerClient {
         }
         AudioTrack track = selection.getSelectedTrack();
         track.setUserData(selection);
-        return musicTrack.enqueueOrPlay(track);
+        boolean enqueued = musicTrack.enqueueOrPlay(track);
+        if (enqueued) LyricsPresenter.prefetchNext(this);
+        return enqueued;
     }
 
     public EmbedBuilder enqueue(MusicSelection selection, @NotNull VoiceChannel memberChannel) {
