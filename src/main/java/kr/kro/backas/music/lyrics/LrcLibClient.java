@@ -230,6 +230,8 @@ public class LrcLibClient {
         );
     }
 
+    private static final Pattern CREDIT_LINE = Pattern.compile("^\\s*(作词|作詞|作曲|编曲|編曲|词|曲)\\s*[:：].*$");
+
     static List<LyricLine> parseLrc(String lrc) {
         List<LyricLine> lines = new ArrayList<>();
         if (lrc == null || lrc.isBlank()) return lines;
@@ -243,10 +245,45 @@ public class LrcLibClient {
             if (fraction != null) {
                 millis = Long.parseLong((fraction + "000").substring(0, 3));
             }
-            lines.add(new LyricLine((minutes * 60 + seconds) * 1000 + millis, matcher.group(4).trim()));
+            String text = matcher.group(4).trim();
+            if (CREDIT_LINE.matcher(text).matches()) continue;
+            lines.add(new LyricLine((minutes * 60 + seconds) * 1000 + millis, text));
         }
         lines.sort((a, b) -> Long.compare(a.timeMs(), b.timeMs()));
-        return lines;
+        return dropDuplicateTimestampTranslations(lines);
+    }
+
+    private static List<LyricLine> dropDuplicateTimestampTranslations(List<LyricLine> lines) {
+        List<LyricLine> filtered = new ArrayList<>(lines.size());
+        int i = 0;
+        while (i < lines.size()) {
+            int j = i;
+            while (j < lines.size() && lines.get(j).timeMs() == lines.get(i).timeMs()) j++;
+            LyricLine chosen = lines.get(i);
+            if (j - i > 1) {
+                for (int k = i; k < j; k++) {
+                    if (containsOriginalScript(lines.get(k).text())) {
+                        chosen = lines.get(k);
+                        break;
+                    }
+                }
+            }
+            filtered.add(chosen);
+            i = j;
+        }
+        return filtered;
+    }
+
+    private static boolean containsOriginalScript(@Nullable String text) {
+        if (text == null) return false;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if ((c >= 0x3040 && c <= 0x30FF) || (c >= 0x4E00 && c <= 0x9FFF)
+                    || (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0x0400 && c <= 0x04FF)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     static String cleanTitle(String title) {
