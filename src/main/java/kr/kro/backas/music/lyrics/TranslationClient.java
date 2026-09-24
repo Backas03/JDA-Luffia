@@ -221,6 +221,81 @@ public class TranslationClient {
         return cache.computeIfAbsent(trackKey, k -> new ConcurrentHashMap<>());
     }
 
+    private volatile Process fallbackProcess;
+
+    public void startFallbackManager(java.util.concurrent.ScheduledExecutorService scheduler) {
+        String startCommand = System.getenv("TRANSLATOR_FALLBACK_START");
+        if (endpoints.size() < 2 || startCommand == null || startCommand.isBlank()) return;
+        LOGGER.info("translator fallback manager enabled: {}", startCommand);
+        scheduler.scheduleWithFixedDelay(
+                () -> TranslationJobs.EXECUTOR.execute(() -> manageFallback(startCommand)),
+                30, 30, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    private void manageFallback(String startCommand) {
+        try {
+            boolean primaryUp = endpointResponds(endpoints.get(0));
+            boolean fallbackUp = isFallbackRunning();
+            if (primaryUp && fallbackUp) {
+                stopFallback();
+            } else if (!primaryUp && !fallbackUp) {
+                startFallback(startCommand);
+            }
+        } catch (RuntimeException e) {
+            LOGGER.warn("translator fallback manager tick failed", e);
+        }
+    }
+
+    private boolean endpointResponds(Endpoint endpoint) {
+        try {
+            String path = endpoint.mode == Mode.NLLB ? "/health" : "/v1/models";
+            HttpRequest request = HttpRequest.newBuilder(URI.create(endpoint.baseUrl + path))
+                    .timeout(Duration.ofSeconds(3))
+                    .GET()
+                    .build();
+            return send(request).statusCode() == 200;
+        } catch (IOException | RuntimeException e) {
+            return false;
+        }
+    }
+
+    private boolean isFallbackRunning() {
+        Process process = fallbackProcess;
+        if (process != null && process.isAlive()) return true;
+        return endpointResponds(endpoints.get(1));
+    }
+
+    private void startFallback(String startCommand) {
+        try {
+            LOGGER.info("primary translator down, starting cpu fallback server: {}", startCommand);
+            fallbackProcess = new ProcessBuilder("/bin/sh", "-c", startCommand)
+                    .redirectErrorStream(true)
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .start();
+        } catch (IOException e) {
+            LOGGER.warn("failed to start cpu fallback server", e);
+        }
+    }
+
+    private void stopFallback() {
+        Process process = fallbackProcess;
+        if (process != null && process.isAlive()) {
+            LOGGER.info("primary translator healthy, stopping cpu fallback server");
+            process.descendants().forEach(ProcessHandle::destroy);
+            process.destroy();
+            fallbackProcess = null;
+            return;
+        }
+        String stopCommand = System.getenv("TRANSLATOR_FALLBACK_STOP");
+        if (stopCommand == null || stopCommand.isBlank()) return;
+        LOGGER.info("primary translator healthy, stopping external cpu fallback: {}", stopCommand);
+        try {
+            new ProcessBuilder("/bin/sh", "-c", stopCommand).start();
+        } catch (IOException e) {
+            LOGGER.warn("failed to stop external cpu fallback", e);
+        }
+    }
+
     public List<String> translate(String sourceLanguage, List<String> lines) throws IOException {
         return translate(sourceLanguage, lines, null);
     }

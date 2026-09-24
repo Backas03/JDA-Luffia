@@ -59,6 +59,7 @@ public class MusicPlayerController extends ListenerAdapter {
             thread.setDaemon(true);
             return thread;
         });
+        this.translationClient.startFallbackManager(this.scheduler);
         this.lyricsClient = new LrcLibClient();
         this.bots = new CopyOnWriteArrayList<>();
         this.ownedBots = new CopyOnWriteArrayList<>();
