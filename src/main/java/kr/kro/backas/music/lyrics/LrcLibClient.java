@@ -34,7 +34,7 @@ public class LrcLibClient {
     private static final long RETRY_BASE_DELAY_MS = 1000;
     private static final Pattern LRC_LINE = Pattern.compile("\\[(\\d{1,2}):(\\d{2})(?:[.:](\\d{1,3}))?](.*)");
     private static final Pattern TITLE_NOISE = Pattern.compile(
-            "(?i)\\s*[\\[(【].*?(official|mv|m/v|music video|lyric|audio|visualizer|ver\\.?|version|remaster).*?[\\])】]\\s*|\\s*[|_]\\s*(mv|m/v|official.*)$");
+            "(?i)\\s*[\\[(【].*?(official|mv|m/v|music video|lyric|audio|visualizer|ver\\.?|version|remaster|가사|자막|한글|번역|공식|뮤직비디오|4k|8k|hd).*?[\\])】]\\s*|\\s*[|_]\\s*(mv|m/v|official.*)$");
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private static final int CACHE_SIZE = 300;
@@ -79,18 +79,86 @@ public class LrcLibClient {
         String title = cleanTitle(info.title);
         String artist = firstArtist(info.author);
         long durationSec = info.length / 1000;
+        List<String[]> candidates = candidatePairs(title, artist);
         JsonNode node = null;
-        if (!artist.isBlank()) {
-            node = get("get?track_name=" + encode(title) + "&artist_name=" + encode(artist) + "&duration=" + durationSec);
+        int attempts = 0;
+        for (String[] candidate : candidates) {
+            if (attempts++ >= 6) break;
+            node = get("get?track_name=" + encode(candidate[1]) + "&artist_name=" + encode(candidate[0]) + "&duration=" + durationSec);
+            if (node != null) break;
         }
         if (node == null) {
-            node = pickBest(get("search?q=" + encode(title + " " + artist)), durationSec);
+            attempts = 0;
+            for (String[] candidate : candidates) {
+                if (attempts++ >= 3) break;
+                node = pickBest(get("search?q=" + encode(candidate[1] + " " + candidate[0])), durationSec);
+                if (node != null) break;
+            }
         }
         if (node == null) {
             node = pickBest(get("search?track_name=" + encode(title)), durationSec);
         }
+        if (node == null) {
+            for (String[] candidate : candidates) {
+                if (candidate[1].equalsIgnoreCase(title)) continue;
+                node = pickBest(get("search?track_name=" + encode(candidate[1])), durationSec);
+                break;
+            }
+        }
         if (node == null) return null;
         return toLyrics(node);
+    }
+
+    private static final Pattern BRACKET_TITLE = Pattern.compile("^(.*?)[「『](.+?)[」』].*$");
+    private static final Pattern QUOTED_TITLE = Pattern.compile("^(.*?)\\s+['‘\"](.+?)['’\"].*$");
+    private static final Pattern TRAILING_PAREN = Pattern.compile("\\s*[\\[(（][^)\\]）]*[\\])）]");
+
+    static List<String[]> candidatePairs(String title, String channelArtist) {
+        List<String[]> pairs = new ArrayList<>();
+        addPair(pairs, channelArtist, title);
+        Matcher bracket = BRACKET_TITLE.matcher(title);
+        if (bracket.matches() && !bracket.group(1).isBlank()) addPair(pairs, bracket.group(1), bracket.group(2));
+        Matcher quoted = QUOTED_TITLE.matcher(title);
+        if (quoted.matches() && !quoted.group(1).isBlank()) addPair(pairs, quoted.group(1), quoted.group(2));
+        for (String separator : new String[]{" - ", " – ", " — ", " _ ", " / ", "/"}) {
+            int index = title.indexOf(separator);
+            if (index <= 0 || index + separator.length() >= title.length()) continue;
+            String left = title.substring(0, index);
+            String right = title.substring(index + separator.length());
+            addPair(pairs, left, right);
+            addPair(pairs, right, left);
+        }
+        return pairs;
+    }
+
+    private static void addPair(List<String[]> pairs, String artist, String trackTitle) {
+        for (String candidateArtist : variants(firstArtist(artist))) {
+            for (String candidateTitle : variants(trackTitle.trim())) {
+                if (candidateArtist.isBlank() || candidateTitle.isBlank()) continue;
+                if (containsPair(pairs, candidateArtist, candidateTitle)) continue;
+                pairs.add(new String[]{candidateArtist, candidateTitle});
+            }
+        }
+    }
+
+    private static boolean containsPair(List<String[]> pairs, String artist, String title) {
+        for (String[] pair : pairs) {
+            if (pair[0].equalsIgnoreCase(artist) && pair[1].equalsIgnoreCase(title)) return true;
+        }
+        return false;
+    }
+
+    private static final Pattern FEAT_SUFFIX = Pattern.compile("(?i)\\s+(feat\\.?|ft\\.?)\\s.*$");
+
+    private static String[] variants(String value) {
+        String trimmed = value.trim();
+        List<String> variants = new ArrayList<>();
+        variants.add(trimmed);
+        String parenStripped = TRAILING_PAREN.matcher(trimmed).replaceAll("").trim();
+        if (!parenStripped.isBlank() && !variants.contains(parenStripped)) variants.add(parenStripped);
+        String featStripped = FEAT_SUFFIX.matcher(parenStripped.isBlank() ? trimmed : parenStripped).replaceAll("").trim();
+        if (!featStripped.isBlank() && !variants.contains(featStripped)) variants.add(featStripped);
+        return variants.toArray(new String[0]);
     }
 
     @Nullable
