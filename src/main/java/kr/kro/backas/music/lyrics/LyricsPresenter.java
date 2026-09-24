@@ -42,13 +42,13 @@ public final class LyricsPresenter {
 
     public static final String LLM_TRANSLATION_NOTE = "LLM으로 번역한 가사입니다. 올바르지 않을 수 있습니다.";
 
-    public static String machineTranslationNote(@Nullable TranslationClient translator) {
+    public static String machineTranslationNote(@Nullable MusicPlayerClient client, @Nullable TranslationClient translator) {
         String note = translator != null && translator.isLlm() ? LLM_TRANSLATION_NOTE : MACHINE_TRANSLATION_NOTE;
-        String status = translationStatus(translator);
+        String status = translationStatus(client, translator);
         return status.isBlank() ? note : note + "\n" + status;
     }
 
-    public static String translationStatus(@Nullable TranslationClient translator) {
+    public static String translationStatus(@Nullable MusicPlayerClient client, @Nullable TranslationClient translator) {
         if (translator == null) return "";
         String model = translator.getModelName();
         if (model.isBlank()) return "";
@@ -56,7 +56,7 @@ public final class LyricsPresenter {
         StringBuilder status = new StringBuilder();
         if (!compute.isBlank()) status.append(compute).append(" | ");
         status.append(translator.getTokensPerSecond()).append(" token/s | ");
-        return status.append(progressDisplay()).toString();
+        return status.append(progressDisplay(client)).toString();
     }
 
     private static final class SongProgress {
@@ -75,13 +75,13 @@ public final class LyricsPresenter {
         }
     }
 
-    private static volatile List<SongProgress> PROGRESS_PLAN = List.of();
+    private static final Map<MusicPlayerClient, List<SongProgress>> PROGRESS_PLANS = new ConcurrentHashMap<>();
     private static final Object PROGRESS_LOCK = new Object();
 
-    private static void updateProgressPlan(@Nullable AudioTrack current, List<AudioTrack> targets) {
+    private static void updateProgressPlan(MusicPlayerClient client, @Nullable AudioTrack current, List<AudioTrack> targets) {
         synchronized (PROGRESS_LOCK) {
             Map<String, SongProgress> known = new ConcurrentHashMap<>();
-            for (SongProgress entry : PROGRESS_PLAN) known.put(entry.id, entry);
+            for (SongProgress entry : PROGRESS_PLANS.getOrDefault(client, List.of())) known.put(entry.id, entry);
             List<SongProgress> plan = new ArrayList<>();
             Set<String> seen = ConcurrentHashMap.newKeySet();
             List<AudioTrack> tracks = new ArrayList<>();
@@ -93,34 +93,35 @@ public final class LyricsPresenter {
                 SongProgress entry = known.get(id);
                 plan.add(entry == null ? new SongProgress(id) : entry);
             }
-            PROGRESS_PLAN = List.copyOf(plan);
+            PROGRESS_PLANS.put(client, List.copyOf(plan));
         }
     }
 
-    private static SongProgress progressEntry(AudioTrack track) {
+    private static SongProgress progressEntry(MusicPlayerClient client, AudioTrack track) {
         String id = track.getIdentifier();
         synchronized (PROGRESS_LOCK) {
-            for (SongProgress entry : PROGRESS_PLAN) {
+            List<SongProgress> current = PROGRESS_PLANS.getOrDefault(client, List.of());
+            for (SongProgress entry : current) {
                 if (entry.id.equals(id)) return entry;
             }
             SongProgress created = new SongProgress(id);
-            List<SongProgress> plan = new ArrayList<>(PROGRESS_PLAN);
+            List<SongProgress> plan = new ArrayList<>(current);
             plan.add(created);
-            PROGRESS_PLAN = List.copyOf(plan);
+            PROGRESS_PLANS.put(client, List.copyOf(plan));
             return created;
         }
     }
 
-    static void reportSongJob(AudioTrack track, TranslationJobs.Job job) {
-        progressEntry(track).job = job;
+    static void reportSongJob(MusicPlayerClient client, AudioTrack track, TranslationJobs.Job job) {
+        progressEntry(client, track).job = job;
     }
 
-    static void reportSongComplete(AudioTrack track) {
-        progressEntry(track).complete = true;
+    static void reportSongComplete(MusicPlayerClient client, AudioTrack track) {
+        progressEntry(client, track).complete = true;
     }
 
-    private static String progressDisplay() {
-        List<SongProgress> plan = PROGRESS_PLAN;
+    private static String progressDisplay(@Nullable MusicPlayerClient client) {
+        List<SongProgress> plan = client == null ? List.of() : PROGRESS_PLANS.getOrDefault(client, List.of());
         if (plan.isEmpty()) return "번역 준비 중 ...";
         float sum = 0f;
         int completed = 0;
@@ -211,9 +212,9 @@ public final class LyricsPresenter {
         for (String line : lines) asLines.add(new LyricLine(0, line));
         boolean willTranslate = translator != null && translator.isEnabled()
                 && !LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(asLines));
-        if (translator != null && translator.isEnabled() && !willTranslate) reportSongComplete(track);
+        if (translator != null && translator.isEnabled() && !willTranslate) reportSongComplete(client, track);
         String initialNote = willTranslate
-                ? LyricsSession.TRANSLATING_NOTE + "\n" + translationStatus(translator)
+                ? LyricsSession.TRANSLATING_NOTE + "\n" + translationStatus(client, translator)
                 : null;
         sendEmbeds.apply(buildFullEmbeds(track, lines, null, finalFooter, initialNote)).whenComplete((message, sendError) -> {
             if (sendError != null || message == null) {
@@ -230,15 +231,15 @@ public final class LyricsPresenter {
                     TranslationJobs.Job current = jobRef.get();
                     boolean translating = current == null || !current.done().isDone();
                     String note = translating
-                            ? LyricsSession.TRANSLATING_NOTE + "\n" + translationStatus(translator)
-                            : (cache.isEmpty() ? "번역에 실패했습니다" : machineTranslationNote(translator));
+                            ? LyricsSession.TRANSLATING_NOTE + "\n" + translationStatus(client, translator)
+                            : (cache.isEmpty() ? "번역에 실패했습니다" : machineTranslationNote(client, translator));
                     message.editMessageEmbeds(buildFullEmbeds(track, lines, cache, finalFooter, note))
                             .queue(null, e -> LOGGER.debug("progressive lyrics edit failed", e));
                 });
                 TranslationJobs.Job job = TranslationJobs.submit(translator, cacheKey, lines, true,
                         (index, text) -> editor.requestEdit());
                 jobRef.set(job);
-                reportSongJob(track, job);
+                reportSongJob(client, track, job);
                 ScheduledFuture<?> heartbeat = Main.getLuffia().getMusicPlayerController().getScheduler()
                         .scheduleAtFixedRate(() -> editor.requestIdleRefresh(5000), 2, 1, TimeUnit.SECONDS);
                 boolean demoted = false;
@@ -278,7 +279,7 @@ public final class LyricsPresenter {
                 editor.cancel();
                 String doneNote = translations.isEmpty()
                         ? "번역에 실패했습니다"
-                        : machineTranslationNote(translator);
+                        : machineTranslationNote(client, translator);
                 message.editMessageEmbeds(buildFullEmbeds(track, lines, translations, finalFooter, doneNote))
                         .queue(null, e -> LOGGER.debug("failed to attach translations", e));
             });
@@ -363,11 +364,11 @@ public final class LyricsPresenter {
                     List<AudioTrack> queue = client.getTrackQueue();
                     int count = translator.isActivePrimary() ? PREFETCH_COUNT_FAST : PREFETCH_COUNT;
                     List<AudioTrack> targets = new ArrayList<>(queue.subList(0, Math.min(count, queue.size())));
-                    updateProgressPlan(client.getCurrentPlaying(), targets);
+                    updateProgressPlan(client, client.getCurrentPlaying(), targets);
                     LOGGER.info("lyrics prefetch pass over {} queued track(s)", targets.size());
                     for (AudioTrack next : targets) {
                         if (!client.isAutoLyricsEnabled()) return;
-                        prefetchTrack(controller, translator, next);
+                        prefetchTrack(client, controller, translator, next);
                     }
                 } while (PREFETCH_RERUN.remove(client) != null && client.isAutoLyricsEnabled());
             } finally {
@@ -376,7 +377,7 @@ public final class LyricsPresenter {
         });
     }
 
-    private static void prefetchTrack(MusicPlayerController controller, TranslationClient translator, AudioTrack next) {
+    private static void prefetchTrack(MusicPlayerClient client, MusicPlayerController controller, TranslationClient translator, AudioTrack next) {
         String key = next.getIdentifier();
         if (!PREFETCHING.add(key)) return;
         try {
@@ -384,32 +385,32 @@ public final class LyricsPresenter {
             Lyrics lyrics = controller.getLyricsClient().find(next.getInfo());
             if (lyrics == null || lyrics.instrumental()) {
                 LOGGER.info("no lyrics to prefetch for {}", next.getInfo().title);
-                reportSongComplete(next);
+                reportSongComplete(client, next);
                 return;
             }
             if (lyrics.hasSynced()) {
                 List<String> lines = new ArrayList<>();
                 lyrics.synced().forEach(line -> lines.add(line.text()));
                 if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lyrics.synced()))) {
-                    reportSongComplete(next);
+                    reportSongComplete(client, next);
                     return;
                 }
                 TranslationJobs.Job job = TranslationJobs.submit(translator, TranslationJobs.cacheKey("synced", lines), lines, false, null);
-                reportSongJob(next, job);
+                reportSongJob(client, next, job);
                 job.done().join();
             } else if (lyrics.hasPlain()) {
                 List<String> lines = fullLines(lyrics);
                 List<LyricLine> asLines = new ArrayList<>();
                 for (String line : lines) asLines.add(new LyricLine(0, line));
                 if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(asLines))) {
-                    reportSongComplete(next);
+                    reportSongComplete(client, next);
                     return;
                 }
                 TranslationJobs.Job job = TranslationJobs.submit(translator, TranslationJobs.cacheKey("plain", lines), lines, false, null);
-                reportSongJob(next, job);
+                reportSongJob(client, next, job);
                 job.done().join();
             } else {
-                reportSongComplete(next);
+                reportSongComplete(client, next);
             }
             LOGGER.info("prefetched lyrics translation for {}", next.getInfo().title);
         } catch (Exception e) {
