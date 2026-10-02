@@ -19,10 +19,12 @@ import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -52,6 +54,14 @@ public class LrcLibClient {
         }
     };
     private static final Map<String, Object> LOCKS = new ConcurrentHashMap<>();
+    private static final long MISS_TTL_MS = 10 * 60 * 1000;
+    private static final int MISS_CACHE_SIZE = 500;
+    private static final Map<String, Long> MISSES = Collections.synchronizedMap(new LinkedHashMap<>(64, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
+            return size() > MISS_CACHE_SIZE;
+        }
+    });
 
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
@@ -78,6 +88,8 @@ public class LrcLibClient {
                     cached = CACHE.get(identifier);
                 }
                 if (cached != null) return cached.orElse(null);
+                Long missedAt = MISSES.get(identifier);
+                if (missedAt != null && System.currentTimeMillis() - missedAt < MISS_TTL_MS) return null;
                 String diskPath = "lyrics/" + TranslationJobs.sha256(identifier) + ".json";
                 Lyrics found = DiskCache.defaultCache().read(diskPath, Lyrics.class);
                 boolean fromDisk = found != null;
@@ -87,6 +99,8 @@ public class LrcLibClient {
                         CACHE.put(identifier, Optional.of(found));
                     }
                     if (!fromDisk) DiskCache.defaultCache().write(diskPath, found);
+                } else {
+                    MISSES.put(identifier, System.currentTimeMillis());
                 }
                 return found;
             } finally {
@@ -101,59 +115,76 @@ public class LrcLibClient {
         String artist = firstArtist(info.author);
         long durationSec = info.length / 1000;
         List<String[]> candidates = candidatePairs(title, artist);
+        CompletableFuture<Lyrics> resolved = resolver == null || hasCatalogMetadata(info) ? null
+                : CompletableFuture.supplyAsync(() -> lookupResolved(info), TranslationJobs.EXECUTOR);
         Failures failures = new Failures();
         JsonNode node = null;
         int attempts = 0;
         for (String[] candidate : candidates) {
-            if (attempts++ >= 6) break;
+            if (attempts++ >= 6 || hasResult(resolved)) break;
             node = tryGet(failures, "get?track_name=" + encode(candidate[1]) + "&artist_name=" + encode(candidate[0]) + "&duration=" + durationSec);
             if (node != null) break;
         }
         if (node == null) {
             attempts = 0;
             for (String[] candidate : candidates) {
-                if (attempts++ >= 3) break;
+                if (attempts++ >= 3 || hasResult(resolved)) break;
                 node = pickBest(tryGet(failures, "search?q=" + encode(candidate[1] + " " + candidate[0])), durationSec);
                 if (node != null) break;
             }
         }
-        if (node == null) {
+        if (node == null && !hasResult(resolved)) {
             node = pickBest(tryGet(failures, "search?track_name=" + encode(title)), durationSec);
         }
-        if (node == null) {
+        if (node == null && !hasResult(resolved)) {
             for (String[] candidate : candidates) {
                 if (candidate[1].equalsIgnoreCase(title)) continue;
                 node = pickBest(tryGet(failures, "search?track_name=" + encode(candidate[1])), durationSec);
                 break;
             }
         }
-        boolean lengthDiffers = false;
-        if (node == null && resolver != null && !hasCatalogMetadata(info)) {
+        if (node != null) return toLyrics(node);
+        Lyrics byResolver = resolved == null ? null : resolved.join();
+        if (byResolver != null) return byResolver;
+        if (failures.last != null) throw failures.last;
+        return null;
+    }
+
+    private static boolean hasResult(@Nullable CompletableFuture<Lyrics> resolved) {
+        return resolved != null && resolved.isDone() && resolved.getNow(null) != null;
+    }
+
+    @Nullable
+    private Lyrics lookupResolved(AudioTrackInfo info) {
+        try {
             SongResolver.Song song = resolver.resolve(info);
-            if (song != null) {
-                if (!song.artist().isBlank()) {
-                    node = tryGet(failures, "get?track_name=" + encode(song.title()) + "&artist_name=" + encode(song.artist())
-                            + "&duration=" + durationSec);
-                }
+            if (song == null) return null;
+            long durationSec = info.length / 1000;
+            Failures failures = new Failures();
+            JsonNode node = null;
+            boolean lengthDiffers = false;
+            if (!song.artist().isBlank()) {
+                node = tryGet(failures, "get?track_name=" + encode(song.title()) + "&artist_name=" + encode(song.artist())
+                        + "&duration=" + durationSec);
+            }
+            if (node == null) {
+                JsonNode results = song.artist().isBlank() ? null
+                        : tryGet(failures, "search?track_name=" + encode(song.title()) + "&artist_name=" + encode(song.artist()));
+                if (results == null) results = tryGet(failures, "search?track_name=" + encode(song.title()));
+                ArrayNode same = sameSong(results, song, matchKey(info.title + " " + info.author));
+                node = pickBest(same, durationSec);
                 if (node == null) {
-                    JsonNode results = song.artist().isBlank() ? null
-                            : tryGet(failures, "search?track_name=" + encode(song.title()) + "&artist_name=" + encode(song.artist()));
-                    if (results == null) results = tryGet(failures, "search?track_name=" + encode(song.title()));
-                    ArrayNode same = sameSong(results, song, matchKey(info.title + " " + info.author));
-                    node = pickBest(same, durationSec);
-                    if (node == null) {
-                        node = withPlainFirst(same);
-                        lengthDiffers = node != null;
-                    }
+                    node = withPlainFirst(same);
+                    lengthDiffers = node != null;
                 }
             }
-        }
-        if (node == null) {
-            if (failures.last != null) throw failures.last;
+            if (node == null) return null;
+            Lyrics lyrics = toLyrics(node);
+            return lengthDiffers ? plainOnly(lyrics) : lyrics;
+        } catch (IOException | RuntimeException e) {
+            LOGGER.debug("lyrics lookup by resolved song failed for {}", info.title, e);
             return null;
         }
-        Lyrics lyrics = toLyrics(node);
-        return lengthDiffers ? plainOnly(lyrics) : lyrics;
     }
 
     private static boolean hasCatalogMetadata(AudioTrackInfo info) {
