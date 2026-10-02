@@ -79,8 +79,8 @@ public class MusicPlayerController extends ListenerAdapter {
         });
         this.translationClient.startEndpointMonitor(this.scheduler);
         this.translationClient.startFallbackManager(this.scheduler);
-        this.aiShuffleClassifier = new AiShuffleClassifier(this.translationClient);
         this.aiTrackTagger = new AiTrackTagger(this.translationClient);
+        this.aiShuffleClassifier = new AiShuffleClassifier(this.translationClient, this.aiTrackTagger);
         this.scheduler.scheduleWithFixedDelay(this::flushAiCaches, AI_CACHE_FLUSH_SECONDS, AI_CACHE_FLUSH_SECONDS, TimeUnit.SECONDS);
         this.aiPlaylistBuilder = new AiPlaylistBuilder(this.translationClient, this.aiShuffleClassifier);
         this.lyricsClient = new LrcLibClient();

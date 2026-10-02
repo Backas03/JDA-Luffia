@@ -16,7 +16,12 @@ public final class TrackHints {
             SLANG_GUIDE,
             "Use what you know about the artists and songs, together with the hints on each line:",
             "- script: writing systems in the title and artist. kana = Japanese, hangul = Korean, han = Chinese characters (Chinese or Japanese kanji), latin = English or romanized.",
-            "- isrc: country code of the recording's ISRC (JP = Japan, KR = Korea, US = United States, ...). - means unknown.",
+            "- isrc: country where the recording was registered (JP = Japan, KR = Korea, US = United States, ...). - means unknown."
+                    + " It is only a weak hint: K-pop groups often register recordings in Japan or the US. What you know about the artist comes first.",
+            "- A song belongs to the music scene of its artist, and to one scene only: K-pop groups are K-pop and Korean songs even when their members are Japanese,"
+                    + " when they sing in English or Japanese, or when the isrc is JP (XG, TWICE, BTS, NewJeans). Japanese songs and J-pop are songs by artists of the Japanese scene."
+                    + " Western artists are pop, never J-pop or K-pop.",
+            "- A title in Latin letters does not mean English vocals. Japanese and Korean artists often use English or romanized titles and still sing in their own language.",
             "- Genre hints often appear in titles or artist names, e.g. 初音ミク, 鏡音リン, 巡音ルカ, GUMI, IA, 可不, 重音テト or VOCALOID for vocaloid songs.");
 
     private static final int MAX_FIELD_LENGTH = 120;
@@ -30,6 +35,11 @@ public final class TrackHints {
                 + " | script: " + script(info.title + " " + info.author)
                 + " | isrc: " + isrcCountry(info.isrc)
                 + " | length: " + (info.isStream ? "live" : DurationUtil.formatDurationColon((int) (info.length / 1000)));
+    }
+
+    public static String describe(AudioTrackInfo info, @Nullable AiTrackTagger.Tag tag) {
+        if (tag == null) return describe(info);
+        return describe(info) + " | tag: " + tag.genre() + ", " + tag.language();
     }
 
     public static String field(@Nullable String value) {
