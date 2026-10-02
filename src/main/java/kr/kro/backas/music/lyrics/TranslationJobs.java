@@ -151,6 +151,14 @@ public final class TranslationJobs {
 
         private void deliver(int index, String source, @Nullable String text) {
             if (text == null || text.isBlank() || text.equals(source)) return;
+            publish(index, text);
+        }
+
+        private void keepOriginal(int index, String source) {
+            if (!source.isBlank()) publish(index, source);
+        }
+
+        private void publish(int index, String text) {
             if (text.equals(cache.put(index, text))) return;
             for (BiConsumer<Integer, String> listener : listeners) {
                 try {
@@ -182,7 +190,11 @@ public final class TranslationJobs {
                                 songContext, this::schedulingPriority);
                         int untranslated = 0;
                         for (int i = 0; i < indices.size(); i++) {
-                            deliver(indices.get(i), sources.get(i), translated.get(i));
+                            if (LyricsLanguage.isLatinOnly(sources.get(i)) && sources.get(i).equals(translated.get(i))) {
+                                keepOriginal(indices.get(i), sources.get(i));
+                            } else {
+                                deliver(indices.get(i), sources.get(i), translated.get(i));
+                            }
                             if (!cache.containsKey(indices.get(i))) {
                                 cache.put(indices.get(i), "");
                                 untranslated++;
