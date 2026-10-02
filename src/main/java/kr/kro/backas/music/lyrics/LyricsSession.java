@@ -29,6 +29,9 @@ public class LyricsSession {
     private static final Logger LOGGER = LoggerFactory.getLogger(LyricsSession.class);
     public static final long TICK_MS = 200;
     public static final long MIN_EDIT_INTERVAL_MS = 1200;
+    private static final long CLOCK_EDIT_INTERVAL_MS = 1000;
+    private static final long CLOCK_EDIT_GUARD_MS = 300;
+    private static final int CLOCK_EDIT_RESERVE = 1;
     public static final long DEFAULT_OFFSET_MS = 600;
     public static final String TRANSLATING_NOTE = "번역 중...";
     private static final String BLANK = "​";
@@ -54,6 +57,7 @@ public class LyricsSession {
     private int shownIndex = -2;
     private String shownTranslation;
     private boolean shownPending;
+    private String shownClock = "";
     private long lastEditAt;
     private final AtomicBoolean editInFlight = new AtomicBoolean(false);
     private final AtomicBoolean stopped = new AtomicBoolean(false);
@@ -193,14 +197,20 @@ public class LyricsSession {
             boolean pending = isPendingTranslation(index, translation);
             boolean sameLine = index == shownIndex;
             boolean sameTranslation = translation == null ? shownTranslation == null : translation.equals(shownTranslation);
-            if (sameLine && sameTranslation && pending == shownPending) return;
+            boolean clockOnly = sameLine && sameTranslation && pending == shownPending;
+            String clock = playbackClock(client, track);
+            if (clockOnly && (clock.equals(shownClock) || !hasRoomBeforeNextLine(index, position))) return;
             long now = System.currentTimeMillis();
-            if (now - lastEditAt < MIN_EDIT_INTERVAL_MS) return;
-            if (!EditRateLimiter.tryAcquire(message.getChannel().getIdLong())) return;
+            if (now - lastEditAt < (clockOnly ? CLOCK_EDIT_INTERVAL_MS : MIN_EDIT_INTERVAL_MS)) return;
             if (!editInFlight.compareAndSet(false, true)) return;
+            if (!EditRateLimiter.tryAcquire(message.getChannel().getIdLong(), clockOnly ? CLOCK_EDIT_RESERVE : 0)) {
+                editInFlight.set(false);
+                return;
+            }
             shownIndex = index;
             shownTranslation = translation;
             shownPending = pending;
+            shownClock = clock;
             lastEditAt = now;
             message.editMessageComponents(buildView(client, track, lyrics, index, translation, null, translator, pending))
                     .useComponentsV2(true)
@@ -214,6 +224,13 @@ public class LyricsSession {
             LOGGER.warn("lyrics tick failed", e);
             stop("가사 표시 중 오류가 발생했습니다");
         }
+    }
+
+    private boolean hasRoomBeforeNextLine(int index, long positionMs) {
+        List<LyricLine> lines = lyrics.synced();
+        if (index + 1 >= lines.size()) return true;
+        double speed = Math.max(0.1, client.getCurrentPlaySpeed());
+        return (lines.get(index + 1).timeMs() - positionMs) / speed > MIN_EDIT_INTERVAL_MS + CLOCK_EDIT_GUARD_MS;
     }
 
     private int indexAt(long positionMs) {
@@ -253,7 +270,7 @@ public class LyricsSession {
         if (footer != null) text.append(" · ").append(footer);
         else if (client != null) text.append(" | ").append(playbackClock(client, track));
         if ((translation != null && !translation.isBlank()) || pendingTranslation) {
-            String note = LyricsPresenter.machineTranslationNote(client, translator);
+            String note = LyricsPresenter.translationStatus(client, translator);
             if (!note.isBlank()) {
                 for (String noteLine : note.split("\n")) {
                     text.append('\n');
