@@ -4,6 +4,7 @@ import club.minnced.discord.jdave.interop.JDaveSessionFactory;
 import kr.kro.backas.SharedConstant;
 import kr.kro.backas.music.ai.AiGuard;
 import kr.kro.backas.music.ai.AiRemovalConfirmations;
+import kr.kro.backas.music.ai.AiSongResolver;
 import kr.kro.backas.music.ai.ChartClient;
 import kr.kro.backas.music.ai.SongInfoClient;
 import kr.kro.backas.music.ai.AiPlaylistBuilder;
@@ -83,7 +84,7 @@ public class MusicPlayerController extends ListenerAdapter {
         this.aiShuffleClassifier = new AiShuffleClassifier(this.translationClient, this.aiTrackTagger);
         this.scheduler.scheduleWithFixedDelay(this::flushAiCaches, AI_CACHE_FLUSH_SECONDS, AI_CACHE_FLUSH_SECONDS, TimeUnit.SECONDS);
         this.aiPlaylistBuilder = new AiPlaylistBuilder(this.translationClient, this.aiShuffleClassifier);
-        this.lyricsClient = new LrcLibClient();
+        this.lyricsClient = new LrcLibClient(new AiSongResolver(this.translationClient));
         this.bots = new CopyOnWriteArrayList<>();
         this.ownedBots = new CopyOnWriteArrayList<>();
         this.clients = new ConcurrentHashMap<>();
