@@ -2,6 +2,7 @@ package kr.kro.backas.music.lyrics;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import kr.kro.backas.music.cache.DiskCache;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -13,6 +14,7 @@ import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -32,6 +34,9 @@ public class LrcLibClient {
     private static final long DURATION_TOLERANCE_SEC = 5;
     private static final int RETRY_ATTEMPTS = 4;
     private static final long RETRY_BASE_DELAY_MS = 1000;
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(15);
+    private static final int TIMEOUT_RETRIES = 1;
+    private static final int MAX_FAILED_REQUESTS = 2;
     private static final Pattern LRC_LINE = Pattern.compile("\\[(\\d{1,2}):(\\d{2})(?:[.:](\\d{1,3}))?](.*)");
     private static final Pattern TITLE_NOISE = Pattern.compile(
             "(?i)\\s*[\\[(【].*?(official|mv|m/v|music video|lyric|audio|visualizer|ver\\.?|version|remaster|가사|자막|한글|번역|공식|뮤직비디오|4k|8k|hd).*?[\\])】]\\s*|\\s*[|_]\\s*(mv|m/v|official.*)$");
@@ -61,11 +66,15 @@ public class LrcLibClient {
                     cached = CACHE.get(identifier);
                 }
                 if (cached != null) return cached.orElse(null);
-                Lyrics found = lookup(info);
+                String diskPath = "lyrics/" + TranslationJobs.sha256(identifier) + ".json";
+                Lyrics found = DiskCache.defaultCache().read(diskPath, Lyrics.class);
+                boolean fromDisk = found != null;
+                if (!fromDisk) found = lookup(info);
                 if (found != null) {
                     synchronized (CACHE) {
                         CACHE.put(identifier, Optional.of(found));
                     }
+                    if (!fromDisk) DiskCache.defaultCache().write(diskPath, found);
                 }
                 return found;
             } finally {
@@ -80,33 +89,55 @@ public class LrcLibClient {
         String artist = firstArtist(info.author);
         long durationSec = info.length / 1000;
         List<String[]> candidates = candidatePairs(title, artist);
+        Failures failures = new Failures();
         JsonNode node = null;
         int attempts = 0;
         for (String[] candidate : candidates) {
             if (attempts++ >= 6) break;
-            node = get("get?track_name=" + encode(candidate[1]) + "&artist_name=" + encode(candidate[0]) + "&duration=" + durationSec);
+            node = tryGet(failures, "get?track_name=" + encode(candidate[1]) + "&artist_name=" + encode(candidate[0]) + "&duration=" + durationSec);
             if (node != null) break;
         }
         if (node == null) {
             attempts = 0;
             for (String[] candidate : candidates) {
                 if (attempts++ >= 3) break;
-                node = pickBest(get("search?q=" + encode(candidate[1] + " " + candidate[0])), durationSec);
+                node = pickBest(tryGet(failures, "search?q=" + encode(candidate[1] + " " + candidate[0])), durationSec);
                 if (node != null) break;
             }
         }
         if (node == null) {
-            node = pickBest(get("search?track_name=" + encode(title)), durationSec);
+            node = pickBest(tryGet(failures, "search?track_name=" + encode(title)), durationSec);
         }
         if (node == null) {
             for (String[] candidate : candidates) {
                 if (candidate[1].equalsIgnoreCase(title)) continue;
-                node = pickBest(get("search?track_name=" + encode(candidate[1])), durationSec);
+                node = pickBest(tryGet(failures, "search?track_name=" + encode(candidate[1])), durationSec);
                 break;
             }
         }
-        if (node == null) return null;
+        if (node == null) {
+            if (failures.last != null) throw failures.last;
+            return null;
+        }
         return toLyrics(node);
+    }
+
+    private static final class Failures {
+        private int count;
+        private IOException last;
+    }
+
+    @Nullable
+    private JsonNode tryGet(Failures failures, String pathAndQuery) throws IOException {
+        try {
+            return get(pathAndQuery);
+        } catch (IOException e) {
+            if (Thread.currentThread().isInterrupted()) throw e;
+            failures.last = e;
+            if (++failures.count >= MAX_FAILED_REQUESTS) throw e;
+            LOGGER.info("LRCLIB request failed, trying the next candidate: {}", e.toString());
+            return null;
+        }
     }
 
     private static final Pattern BRACKET_TITLE = Pattern.compile("^(.*?)[「『](.+?)[」』].*$");
@@ -165,13 +196,13 @@ public class LrcLibClient {
     private JsonNode get(String pathAndQuery) throws IOException {
         HttpRequest request = HttpRequest.newBuilder(URI.create(API_BASE + pathAndQuery))
                 .header("User-Agent", USER_AGENT)
-                .timeout(Duration.ofSeconds(10))
+                .timeout(REQUEST_TIMEOUT)
                 .GET()
                 .build();
-        HttpResponse<String> response = send(request);
+        HttpResponse<String> response = sendRetryingTimeouts(request);
         for (int attempt = 1; attempt <= RETRY_ATTEMPTS && (response.statusCode() == 503 || response.statusCode() == 429); attempt++) {
             sleepQuietly(RETRY_BASE_DELAY_MS * attempt);
-            response = send(request);
+            response = sendRetryingTimeouts(request);
         }
         if (response.statusCode() == 404) return null;
         if (response.statusCode() / 100 != 2) {
@@ -180,6 +211,17 @@ public class LrcLibClient {
         JsonNode node = MAPPER.readTree(response.body());
         if (node.isArray() && node.isEmpty()) return null;
         return node;
+    }
+
+    private HttpResponse<String> sendRetryingTimeouts(HttpRequest request) throws IOException {
+        for (int attempt = 0; ; attempt++) {
+            try {
+                return send(request);
+            } catch (HttpTimeoutException e) {
+                if (attempt >= TIMEOUT_RETRIES) throw e;
+                LOGGER.info("LRCLIB request timed out, retrying: {}", request.uri().getPath());
+            }
+        }
     }
 
     private HttpResponse<String> send(HttpRequest request) throws IOException {

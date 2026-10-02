@@ -41,6 +41,10 @@ public class Luffia {
         this.commandManager.registerSlashCommand(new LyricsSlashCommand());
         this.commandManager.registerSlashCommand(new PauseOrResumeSlashCommand());
         this.commandManager.registerSlashCommand(new SkipSlashCommand());
+        this.commandManager.registerSlashCommand(new ShuffleSlashCommand());
+        this.commandManager.registerSlashCommand(new AiSlashCommand());
+        this.commandManager.registerSlashCommand(new AiShuffleSlashCommand());
+        this.commandManager.registerSlashCommand(new AiAdminSlashCommand());
         this.commandManager.registerSlashCommand(new EqualizerSlashCommand());
         this.commandManager.registerSlashCommand(new KaraokeModeSlashCommand());
         this.commandManager.registerSlashCommand(new LOLUserInfoSlashCommand());
@@ -65,9 +69,16 @@ public class Luffia {
         this.certificationManager = null; // new CertificationManager(discordAPI);
 
         String translatorUrl = System.getenv("TRANSLATOR_URL");
+        String translatorSource = "환경변수 TRANSLATOR_URL";
         if (translatorUrl == null || translatorUrl.isBlank()) {
-            translatorUrl = System.getProperty("translator.url", BotSecret.TRANSLATOR_URL);
+            translatorUrl = System.getProperty("translator.url");
+            translatorSource = "-Dtranslator.url";
         }
+        if (translatorUrl == null || translatorUrl.isBlank()) {
+            translatorUrl = BotSecret.TRANSLATOR_URL;
+            translatorSource = "BotSecret.TRANSLATOR_URL";
+        }
+        LoggerFactory.getLogger(Luffia.class).info("번역/AI 서버 주소 ({}): {}", translatorSource, translatorUrl);
         this.musicPlayerController = new MusicPlayerController(
                 new MusicSourceRegistry(BotSecret.SPOTIFY_CLIENT_ID, BotSecret.SPOTIFY_CLIENT_SECRET, BotSecret.SPOTIFY_REFRESH_TOKEN),
                 translatorUrl);
@@ -81,6 +92,7 @@ public class Luffia {
             }
         }
         discordAPI.addEventListener(this.musicPlayerController);
+        discordAPI.addEventListener(this.musicPlayerController.getAiRemovalConfirmations());
 
         this.discordAPI.addEventListener(new MusicListener());
         this.discordAPI.addEventListener(new CertificationListener());

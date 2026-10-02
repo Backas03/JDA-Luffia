@@ -7,8 +7,11 @@ import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEve
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class MusicTrack {
@@ -29,12 +32,16 @@ public class MusicTrack {
         return repeatMode.getName();
     }
 
+    public RepeatMode getRepeatMode() {
+        return repeatMode;
+    }
+
     public void setRepeatMode(RepeatMode mode) {
         this.repeatMode = mode;
     }
 
     public void reset() {
-        client.disableAutoLyrics("재생을 중지했습니다");
+        client.dismissLyrics();
         this.player.stopTrack();
         this.trackQueue.clear();
         this.repeatMode = RepeatMode.NO_REPEAT;
@@ -54,7 +61,7 @@ public class MusicTrack {
     }
 
     public synchronized void playNextTrack(@Nullable AudioTrack endedTrack, boolean requeueEnded) {
-        client.stopLyrics("곡이 바뀌었습니다");
+        client.dismissLyrics();
         player.stopTrack();
         if (requeueEnded && endedTrack != null) {
             if (repeatMode == RepeatMode.REPEAT_CURRENT) {
@@ -68,6 +75,7 @@ public class MusicTrack {
         }
         AudioTrack nextTrack = trackQueue.poll();
         if (nextTrack == null) {
+            if (client.getAutoplay().onQueueEmpty()) return;
             client.disconnectFromVoiceChannelAndResetTrack();
             return;
         }
@@ -87,6 +95,7 @@ public class MusicTrack {
     }
 
     public synchronized int skip(int count) {
+        AudioTrack current = player.getPlayingTrack();
         List<AudioTrack> dropped = new ArrayList<>();
         for (int i = 1; i < count; i++) {
             AudioTrack next = trackQueue.poll();
@@ -94,11 +103,56 @@ public class MusicTrack {
             dropped.add(next);
         }
         if (repeatMode == RepeatMode.REPEAT_ALL) {
+            if (current != null) trackQueue.add(current.makeClone());
             trackQueue.addAll(dropped);
         }
-        AudioTrack current = player.getPlayingTrack();
-        playNextTrack(current == null ? null : current.makeClone());
+        playNextTrack(null, false);
         return dropped.size() + (current == null ? 0 : 1);
+    }
+
+    public synchronized int shuffle() {
+        List<AudioTrack> tracks = new ArrayList<>(trackQueue);
+        Collections.shuffle(tracks);
+        trackQueue.clear();
+        trackQueue.addAll(tracks);
+        return tracks.size();
+    }
+
+    public synchronized int prioritize(Set<AudioTrack> matched) {
+        List<AudioTrack> front = new ArrayList<>();
+        List<AudioTrack> rest = new ArrayList<>();
+        for (AudioTrack track : trackQueue) {
+            if (matched.contains(track)) front.add(track);
+            else rest.add(track);
+        }
+        Collections.shuffle(front);
+        trackQueue.clear();
+        trackQueue.addAll(front);
+        trackQueue.addAll(rest);
+        return front.size();
+    }
+
+    public synchronized int remove(Set<AudioTrack> tracks) {
+        int before = trackQueue.size();
+        trackQueue.removeIf(tracks::contains);
+        return before - trackQueue.size();
+    }
+
+    public synchronized int reorder(List<AudioTrack> order) {
+        Set<AudioTrack> present = Collections.newSetFromMap(new IdentityHashMap<>());
+        present.addAll(trackQueue);
+        Set<AudioTrack> placed = Collections.newSetFromMap(new IdentityHashMap<>());
+        List<AudioTrack> arranged = new ArrayList<>();
+        for (AudioTrack track : order) {
+            if (present.contains(track) && placed.add(track)) arranged.add(track);
+        }
+        int reordered = arranged.size();
+        for (AudioTrack track : trackQueue) {
+            if (placed.add(track)) arranged.add(track);
+        }
+        trackQueue.clear();
+        trackQueue.addAll(arranged);
+        return reordered;
     }
 
     public boolean hasNextTrack() {

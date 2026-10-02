@@ -6,6 +6,7 @@ import kr.kro.backas.SharedConstant;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
+import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.components.container.Container;
@@ -25,38 +26,37 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 public final class LyricsPresenter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LyricsPresenter.class);
     private static final int EMBED_TEXT_LIMIT = 4000;
+    private static final int MAX_LINE_LENGTH = 300;
+    private static final int MAX_AUTHOR_LENGTH = 250;
     private static final int MESSAGE_TEXT_BUDGET = 5800;
     private static final String TRUNCATED_NOTE = "… (이하 생략)";
     public static final String MACHINE_TRANSLATION_NOTE = "기계 번역한 가사입니다. 올바르지 않을 수 있습니다.";
 
-    public static final String LLM_TRANSLATION_NOTE = "LLM으로 번역한 가사입니다. 올바르지 않을 수 있습니다.";
-
     public static String machineTranslationNote(@Nullable MusicPlayerClient client, @Nullable TranslationClient translator) {
-        String note = translator != null && translator.isLlm() ? LLM_TRANSLATION_NOTE : MACHINE_TRANSLATION_NOTE;
         String status = translationStatus(client, translator);
-        return status.isBlank() ? note : note + "\n" + status;
+        if (translator != null && translator.isLlm()) return status;
+        return status.isBlank() ? MACHINE_TRANSLATION_NOTE : MACHINE_TRANSLATION_NOTE + "\n" + status;
     }
 
     public static String translationStatus(@Nullable MusicPlayerClient client, @Nullable TranslationClient translator) {
         if (translator == null) return "";
         String model = translator.getModelName();
         if (model.isBlank()) return "";
-        String compute = translator.getComputeLabel();
-        StringBuilder status = new StringBuilder();
-        if (!compute.isBlank()) status.append(compute).append(" | ");
-        status.append(translator.getTokensPerSecond()).append(" token/s | ");
-        return status.append(progressDisplay(client)).toString();
+        return translator.computeSummary() + " | " + progressDisplay(client);
     }
 
     private static final class SongProgress {
@@ -162,7 +162,7 @@ public final class LyricsPresenter {
                     } catch (Exception e) {
                         throw new RuntimeException(e);
                     }
-                })
+                }, TranslationJobs.EXECUTOR)
                 .whenComplete((lyrics, error) -> {
                     if (error != null) {
                         Throwable cause = error.getCause() == null ? error : error.getCause();
@@ -182,7 +182,9 @@ public final class LyricsPresenter {
                     }
                     if (!client.isCurrentTrack(track)) return;
                     if (liveWanted && lyrics.hasSynced()) {
-                        client.stopLyrics("새 가사 표시로 대체되었습니다");
+                        LyricsSession previous = client.getLyricsSession();
+                        if (previous != null && !previous.isForTrack(track)) client.dismissLyrics();
+                        else client.stopLyrics("새 가사 표시로 대체되었습니다");
                         Container initial = LyricsSession.buildView(track, lyrics, -1, null, "가사 동기화 준비 중");
                         sendView.apply(initial).whenComplete((message, sendError) -> {
                             if (sendError != null || message == null) {
@@ -216,11 +218,13 @@ public final class LyricsPresenter {
         String initialNote = willTranslate
                 ? LyricsSession.TRANSLATING_NOTE + "\n" + translationStatus(client, translator)
                 : null;
+        boolean dismissOnEnd = requester == null && liveWanted;
         sendEmbeds.apply(buildFullEmbeds(track, lines, null, finalFooter, initialNote)).whenComplete((message, sendError) -> {
             if (sendError != null || message == null) {
                 LOGGER.warn("failed to send full lyrics", sendError);
                 return;
             }
+            if (dismissOnEnd) deleteWhenTrackEnds(client, track, message);
             if (!willTranslate) return;
             CompletableFuture.runAsync(() -> {
                 prefetchNext(client);
@@ -237,7 +241,7 @@ public final class LyricsPresenter {
                             .queue(null, e -> LOGGER.debug("progressive lyrics edit failed", e));
                 });
                 TranslationJobs.Job job = TranslationJobs.submit(translator, cacheKey, lines, true,
-                        (index, text) -> editor.requestEdit());
+                        (index, text) -> editor.requestEdit(), TranslationJobs.songContext(track));
                 jobRef.set(job);
                 reportSongJob(client, track, job);
                 ScheduledFuture<?> heartbeat = Main.getLuffia().getMusicPlayerController().getScheduler()
@@ -277,6 +281,7 @@ public final class LyricsPresenter {
                 }
                 heartbeat.cancel(false);
                 editor.cancel();
+                if (dismissOnEnd) return;
                 String doneNote = translations.isEmpty()
                         ? "번역에 실패했습니다"
                         : machineTranslationNote(client, translator);
@@ -284,6 +289,18 @@ public final class LyricsPresenter {
                         .queue(null, e -> LOGGER.debug("failed to attach translations", e));
             });
         });
+    }
+
+    private static void deleteWhenTrackEnds(MusicPlayerClient client, AudioTrack track, Message message) {
+        ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getScheduler();
+        AtomicBoolean deleted = new AtomicBoolean(false);
+        AtomicReference<ScheduledFuture<?>> watcher = new AtomicReference<>();
+        watcher.set(scheduler.scheduleAtFixedRate(() -> {
+            if (client.isCurrentTrack(track) || !deleted.compareAndSet(false, true)) return;
+            ScheduledFuture<?> self = watcher.get();
+            if (self != null) self.cancel(false);
+            LyricsSession.deleteMessage(message);
+        }, 1, 1, TimeUnit.SECONDS));
     }
 
     private static final class ProgressiveEditor {
@@ -341,11 +358,13 @@ public final class LyricsPresenter {
     private static final Map<MusicPlayerClient, Boolean> PREFETCH_RERUN = new ConcurrentHashMap<>();
     private static final Set<MusicPlayerClient> PREFETCH_RUNNING = ConcurrentHashMap.newKeySet();
 
+    private static List<AudioTrack> prefetchTargets(MusicPlayerClient client, TranslationClient translator) {
+        List<AudioTrack> queue = client.getTrackQueue();
+        int count = translator.hasUsableGpu() ? PREFETCH_COUNT_FAST : PREFETCH_COUNT;
+        return new ArrayList<>(queue.subList(0, Math.min(count, queue.size())));
+    }
+
     public static void prefetchNext(MusicPlayerClient client) {
-        if (!client.isAutoLyricsEnabled()) {
-            LOGGER.info("lyrics prefetch skipped: auto lyrics disabled");
-            return;
-        }
         MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
         TranslationClient translator = controller.getTranslationClient();
         if (translator == null || !translator.isEnabled()) {
@@ -354,6 +373,7 @@ public final class LyricsPresenter {
         }
         if (!PREFETCH_RUNNING.add(client)) {
             PREFETCH_RERUN.put(client, Boolean.TRUE);
+            updateProgressPlan(client, client.getCurrentPlaying(), prefetchTargets(client, translator));
             LOGGER.info("lyrics prefetch already running, will rerun when it finishes");
             return;
         }
@@ -361,16 +381,27 @@ public final class LyricsPresenter {
             try {
                 do {
                     PREFETCH_RERUN.remove(client);
-                    List<AudioTrack> queue = client.getTrackQueue();
-                    int count = translator.isActivePrimary() ? PREFETCH_COUNT_FAST : PREFETCH_COUNT;
-                    List<AudioTrack> targets = new ArrayList<>(queue.subList(0, Math.min(count, queue.size())));
+                    List<AudioTrack> targets = prefetchTargets(client, translator);
                     updateProgressPlan(client, client.getCurrentPlaying(), targets);
-                    LOGGER.info("lyrics prefetch pass over {} queued track(s)", targets.size());
+                    int parallelism = translator.parallelism();
+                    LOGGER.info("lyrics prefetch pass over {} queued track(s), {} at a time", targets.size(), parallelism);
+                    Semaphore permits = new Semaphore(parallelism);
+                    List<CompletableFuture<Void>> running = new ArrayList<>();
                     for (AudioTrack next : targets) {
-                        if (!client.isAutoLyricsEnabled()) return;
-                        prefetchTrack(client, controller, translator, next);
+                        if (!client.hasJoinedToVoiceChannel()) break;
+                        permits.acquireUninterruptibly();
+                        running.add(CompletableFuture.runAsync(() -> {
+                            try {
+                                prefetchTrack(client, controller, translator, next);
+                            } catch (RuntimeException e) {
+                                LOGGER.warn("lyrics prefetch failed for {}", next.getInfo().title, e);
+                            } finally {
+                                permits.release();
+                            }
+                        }, TranslationJobs.EXECUTOR));
                     }
-                } while (PREFETCH_RERUN.remove(client) != null && client.isAutoLyricsEnabled());
+                    CompletableFuture.allOf(running.toArray(new CompletableFuture[0])).join();
+                } while (PREFETCH_RERUN.remove(client) != null && client.hasJoinedToVoiceChannel());
             } finally {
                 PREFETCH_RUNNING.remove(client);
             }
@@ -395,7 +426,8 @@ public final class LyricsPresenter {
                     reportSongComplete(client, next);
                     return;
                 }
-                TranslationJobs.Job job = TranslationJobs.submit(translator, TranslationJobs.cacheKey("synced", lines), lines, false, null);
+                TranslationJobs.Job job = TranslationJobs.submit(translator, TranslationJobs.cacheKey("synced", lines), lines, false, null,
+                        TranslationJobs.songContext(next));
                 reportSongJob(client, next, job);
                 job.done().join();
             } else if (lyrics.hasPlain()) {
@@ -406,7 +438,8 @@ public final class LyricsPresenter {
                     reportSongComplete(client, next);
                     return;
                 }
-                TranslationJobs.Job job = TranslationJobs.submit(translator, TranslationJobs.cacheKey("plain", lines), lines, false, null);
+                TranslationJobs.Job job = TranslationJobs.submit(translator, TranslationJobs.cacheKey("plain", lines), lines, false, null,
+                        TranslationJobs.songContext(next));
                 reportSongJob(client, next, job);
                 job.done().join();
             } else {
@@ -452,7 +485,7 @@ public final class LyricsPresenter {
                     .setColor(MusicEmbeds.PRIMARY)
                     .setDescription(pages.get(i));
             if (i == 0) {
-                builder.setAuthor(track.getInfo().author + " - " + track.getInfo().title, track.getInfo().uri)
+                builder.setAuthor(DiscordSafe.text(track.getInfo().author + " - " + track.getInfo().title, MAX_AUTHOR_LENGTH), track.getInfo().uri)
                         .setThumbnail(MusicEmbeds.thumbnailOf(track));
             }
             if (i == pages.size() - 1) {
@@ -464,26 +497,12 @@ public final class LyricsPresenter {
     }
 
     private static List<String> paginate(List<String> lines, @Nullable Map<Integer, String> translations) {
-        boolean anyTranslated = false;
-        if (translations != null) {
-            for (String value : translations.values()) {
-                if (value != null && !value.isBlank()) {
-                    anyTranslated = true;
-                    break;
-                }
-            }
-        }
         List<String> pages = new ArrayList<>();
         StringBuilder page = new StringBuilder();
         int used = 0;
         for (int i = 0; i < lines.size(); i++) {
-            String entry = lines.get(i);
-            String translation = translations == null ? null : translations.get(i);
-            if ((translation == null || translation.isBlank()) && anyTranslated
-                    && entry != null && !entry.isBlank()
-                    && (!LyricsLanguage.needsTranslation(entry) || (translations != null && translations.containsKey(i)))) {
-                translation = entry;
-            }
+            String entry = DiscordSafe.text(lines.get(i), MAX_LINE_LENGTH);
+            String translation = translations == null ? null : DiscordSafe.text(translations.get(i), MAX_LINE_LENGTH);
             if (translation != null && !translation.isBlank()) {
                 entry += "\n-# " + translation;
             }

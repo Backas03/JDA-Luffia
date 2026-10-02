@@ -75,7 +75,8 @@ public class QueueSlashCommand implements SlashCommandSource {
                 .addField("재생 속도", client.getCurrentPlaySpeed() + "배속", true)
                 .addField("볼륨", client.getVolume() + "%", true)
                 .addField("노래방모드", client.getKaraokeMode().getName(), true)
-                .addField("이퀄라이저", client.getCurrentEqualizer().getName(), true);
+                .addField("이퀄라이저", client.getCurrentEqualizer().getName(), true)
+                .addField("AI 추천", autoplayStatus(client), true);
         List<AudioTrack> queue = client.getTrackQueue();
         if (!queue.isEmpty()) {
             builder.addField("", "아래는 대기열 목록입니다 (" + queue.size() + "곡)", false);
@@ -95,6 +96,12 @@ public class QueueSlashCommand implements SlashCommandSource {
             }
         }
         event.replyEmbeds(builder.build()).queue();
+    }
+
+    private static String autoplayStatus(MusicPlayerClient client) {
+        if (!client.getAutoplay().isEnabled()) return "꺼짐";
+        String criteria = client.getAutoplay().getCriteria();
+        return criteria.isBlank() ? "켜짐" : "켜짐 (" + criteria + ")";
     }
 
     @Override
