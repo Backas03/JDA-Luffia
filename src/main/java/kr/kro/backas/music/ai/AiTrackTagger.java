@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.IntConsumer;
 
+import org.jetbrains.annotations.Nullable;
+
 public class AiTrackTagger {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AiTrackTagger.class);
@@ -27,7 +29,7 @@ public class AiTrackTagger {
     public static final int MAX_TRACKS = 200;
     private static final int BATCH_SIZE = 20;
     private static final int CACHE_SIZE = 20_000;
-    private static final String DISK_PATH = "ai-tags.json";
+    private static final String DISK_PATH = "ai-tags-v2.json";
     private static final String SCHEMA_NAME = "track_tags";
     public static final List<String> GENRES = List.of(
             "vocaloid", "anime", "j-pop", "j-rock", "k-pop", "k-ballad", "hip-hop", "r&b",
@@ -37,7 +39,9 @@ public class AiTrackTagger {
             "You tag songs in a music queue so that similar songs can be played next to each other.",
             "For every numbered track give:",
             "- g: the genre, one of: " + String.join(", ", GENRES) + ". Use vocaloid for songs sung by a voice synthesizer, anime for anime theme songs, game for game music.",
-            "- l: the language of the vocals: ko, ja, en, zh, instrumental for songs without vocals, other otherwise.",
+            "- l: the language of the vocals: ko, ja, en, zh, instrumental for songs without vocals, other otherwise."
+                    + " Do not guess it from the letters of the title: k-pop and k-ballad are ko and j-pop, j-rock, vocaloid and anime are ja,"
+                    + " unless you know the song is sung entirely in another language.",
             "- e: energy from 1 (calm, slow) to 5 (intense, fast).",
             TrackHints.HINT_GUIDE,
             "Output JSON only: {\"r\": [{\"n\": 1, \"g\": \"j-pop\", \"l\": \"ja\", \"e\": 3}, ...]}",
@@ -76,6 +80,11 @@ public class AiTrackTagger {
             });
             LOGGER.info("loaded {} cached ai tag(s)", cache.size());
         }
+    }
+
+    @Nullable
+    public Tag cached(AudioTrack track) {
+        return cache.get(track.getIdentifier());
     }
 
     public void flush() {
