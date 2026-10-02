@@ -328,13 +328,13 @@ public class LrcLibClient {
         return false;
     }
 
-    static String cleanTitle(String title) {
+    public static String cleanTitle(String title) {
         if (title == null) return "";
         String cleaned = TITLE_NOISE.matcher(title).replaceAll("").trim();
         return cleaned.isBlank() ? title.trim() : cleaned;
     }
 
-    static String firstArtist(@Nullable String author) {
+    public static String firstArtist(@Nullable String author) {
         if (author == null) return "";
         String first = author.split("[,/&]")[0].trim();
         return first.replaceAll("(?i)\\s*-\\s*topic$", "").trim();

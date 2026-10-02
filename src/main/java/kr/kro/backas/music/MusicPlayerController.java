@@ -5,6 +5,7 @@ import kr.kro.backas.SharedConstant;
 import kr.kro.backas.music.ai.AiGuard;
 import kr.kro.backas.music.ai.AiRemovalConfirmations;
 import kr.kro.backas.music.ai.ChartClient;
+import kr.kro.backas.music.ai.SongInfoClient;
 import kr.kro.backas.music.ai.AiPlaylistBuilder;
 import kr.kro.backas.music.ai.AiShuffleClassifier;
 import kr.kro.backas.music.ai.AiTrackTagger;
@@ -65,6 +66,7 @@ public class MusicPlayerController extends ListenerAdapter {
     private final AiPlaylistBuilder aiPlaylistBuilder;
     private final AiGuard aiGuard = new AiGuard();
     private final ChartClient chartClient = new ChartClient();
+    private final SongInfoClient songInfoClient = new SongInfoClient();
     private final AiRemovalConfirmations aiRemovalConfirmations = new AiRemovalConfirmations();
 
     public MusicPlayerController(MusicSourceRegistry sourceRegistry, String translatorUrl) {
@@ -141,6 +143,10 @@ public class MusicPlayerController extends ListenerAdapter {
 
     public ChartClient getChartClient() {
         return chartClient;
+    }
+
+    public SongInfoClient getSongInfoClient() {
+        return songInfoClient;
     }
 
     public AiRemovalConfirmations getAiRemovalConfirmations() {
