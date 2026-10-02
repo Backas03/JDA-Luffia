@@ -44,6 +44,20 @@ class AiAgentTest {
     }
 
     @Test
+    void allowsMassRemovalOnlyWhenTheRequestAsksForIt() {
+        assertTrue(AiAgent.asksForRemoval("대기열에서 한국 노래 다 빼줘"));
+        assertTrue(AiAgent.asksForRemoval("일본곡 뺴고 싹다 제거해"));
+        assertTrue(AiAgent.asksForRemoval("일본 노래만 남겨줘"));
+        assertTrue(AiAgent.asksForRemoval("대기열 비워줘"));
+        assertTrue(AiAgent.asksForRemoval("kpop 삭제"));
+        assertTrue(AiAgent.asksForRemoval("Remove all korean songs"));
+        assertFalse(AiAgent.asksForRemoval("다음노래에 뱅드림 마이고 히토시즈쿠 노래 로 바꿔줘"));
+        assertFalse(AiAgent.asksForRemoval("다음 곡으로 YOASOBI 아이돌 틀어줘"));
+        assertFalse(AiAgent.asksForRemoval("요즘 유행하는 jpop 틀어줘"));
+        assertFalse(AiAgent.asksForRemoval("볼륨 30으로 하고 두 곡 넘겨줘"));
+    }
+
+    @Test
     void toolDefinitionsAreWellFormed() {
         Set<String> names = new HashSet<>();
         for (JsonNode tool : AiAgent.TOOLS) {
@@ -59,6 +73,13 @@ class AiAgentTest {
             }
         }
         assertEquals(17, names.size());
+        for (JsonNode tool : AiAgent.TOOLS) {
+            JsonNode function = tool.path("function");
+            boolean adds = Set.of("add_songs", "play_songs", "play_chart").contains(function.path("name").asText());
+            JsonNode next = function.path("parameters").path("properties").path("next");
+            assertEquals(adds, !next.isMissingNode(), function.path("name").asText());
+            if (adds) assertEquals("boolean", next.path("type").asText());
+        }
         assertTrue(names.containsAll(Set.of("remove_from_queue", "keep_only_in_queue", "play_chart", "add_songs", "set_autoplay", "skip", "get_song_info")));
     }
 }

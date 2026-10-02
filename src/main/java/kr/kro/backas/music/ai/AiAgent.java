@@ -52,16 +52,26 @@ public class AiAgent {
     private static final int MAX_CHART_LOOKUP = 20;
     private static final int LYRICS_WARMUP_SECONDS = 8;
     private static final String DIVERSE_ARTISTS = "true to take at most one song per artist";
+    private static final List<String> REMOVAL_WORDS = List.of("빼", "뺴", "지워", "지우", "삭제", "제거", "비워", "비우", "없애", "남겨", "남기",
+            "제외", "걸러", "날려", "치워", "remove", "delete", "clear", "drop");
+    static final String REMOVAL_NOT_REQUESTED = "the user did not ask to remove songs, so nothing was removed. Do not remove anything."
+            + " To change or replace the next song call add_songs with next set to true.";
+    private static final String PLAY_NEXT ="true to put the songs at the front of the queue so they play right after the current song; default false adds them to the end";
     private static final String SYSTEM_PROMPT = String.join("\n",
             "You control a Discord music bot for Korean users by calling tools.",
             "Read the user's request inside <request> tags and call the tools needed to do it. Call get_queue first when you need to know what is playing or queued.",
             "Use play_chart for trending, popular or latest songs, play_songs for songs of a genre, mood, artist or era, and add_songs only for specific songs the user named.",
+            "When the user wants the songs to play next or right after the current song (다음 곡으로, 다음 노래로, 바로 다음에, 이거 끝나면, 먼저), set next to true on add_songs, play_songs or play_chart."
+                    + " Without such wording leave next out, and say in your reply whether the songs will play next or were added to the end of the queue.",
+            "To change or replace the next song with a named song (다음 노래를 X로 바꿔줘, 다음 곡 X로 해줘), call add_songs with next set to true. The song that was next simply moves back one place: never remove anything for this.",
+            "Remove songs only when the user clearly asks to delete, remove, clear or keep only some songs (빼줘, 지워줘, 삭제, 제거, 비워줘, 남겨줘). A request to play, add, change or replace a song is never a removal.",
             "To delete songs like X use remove_from_queue with criteria X. To keep only songs like X (delete everything else) use keep_only_in_queue with criteria X.",
             "Always write criteria as a positive description of the songs (e.g. 한국 노래, 일본 노래), never as a negation such as 한국 노래가 아닌 곡.",
             "If the user wants varied or non-overlapping artists (e.g. 아티스트 안 겹치게, 다양하게), set diverse_artists to true on play_chart, play_songs and set_autoplay.",
             "Use get_song_info when the user asks about a song itself: what it is, who made it, when it came out, what it is about or its background."
                     + " Without a position it describes the song playing now.",
-            "If no tool can do what the user asks, do not call a tool and reply that you cannot do it.",
+            "If no tool can do what the user asks, or the request is too vague to act on, do not call a tool and reply that you cannot do it or ask what they want."
+                    + " Always write your reply in Korean, whatever language the request or the tool results are in.",
             "When you are done with an action, reply in one or two short Korean sentences describing what you did. If a removal needs confirmation, tell the user to press the button below.",
             "When the user asked for information about a song, answer in detail in Korean instead, in 6 to 12 sentences of plain text without markdown, with a blank line between topics:"
                     + " who made and sings it and when it was released with its album and genre; what the song is about (its story, speaker and mood in your own words, never quoting lyric lines);"
@@ -112,6 +122,7 @@ public class AiAgent {
     private final List<String> actions = new ArrayList<>();
     private PendingRemoval pendingRemoval;
     private int added;
+    private String request = "";
 
     public AiAgent(MusicPlayerController controller, MusicPlayerClient client, Member member,
                    SlashCommandInteractionEvent event, VoiceChannel voiceChannel, StatusListener listener) {
@@ -124,6 +135,7 @@ public class AiAgent {
     }
 
     public Result run(String request) throws IOException {
+        this.request = request;
         ArrayNode messages = MAPPER.createArrayNode();
         messages.addObject().put("role", "system").put("content", SYSTEM_PROMPT);
         messages.addObject().put("role", "user").put("content", "<request>" + PromptSafe.data(request.strip()) + "</request>");
@@ -240,12 +252,14 @@ public class AiAgent {
 
     private String removeFromQueue(JsonNode args, boolean keepOnly) throws IOException {
         String criteria = criteria(args, "criteria");
+        if (!asksForRemoval(request)) return error(REMOVAL_NOT_REQUESTED);
         List<AudioTrack> queue = client.getTrackQueue();
         if (queue.isEmpty()) return error("the queue is empty");
         Set<AudioTrack> matched = identitySet();
         if (criteria.isBlank()) matched.addAll(queue);
         else matched.addAll(controller.getAiShuffleClassifier().classify(criteria, queue, done ->
-                listener.progress(keepOnly ? "남길 곡을 찾고 있습니다" : "제거할 곡을 찾고 있습니다", done, queue.size())));
+                listener.progress(keepOnly ? "남길 곡을 찾고 있습니다" : "제거할 곡을 찾고 있습니다", done, queue.size()),
+                (tagged, total) -> listener.progress("곡의 장르와 언어를 분석하고 있습니다", tagged, total)));
         Set<AudioTrack> toRemove = identitySet();
         for (AudioTrack track : queue) {
             if (matched.contains(track) != keepOnly) toRemove.add(track);
@@ -322,9 +336,10 @@ public class AiAgent {
         int perArtist = ArtistVariety.perArtist(args.path("diverse_artists").asBoolean(false));
         List<AudioTrack> tracks = controller.getAiPlaylistBuilder().build(manager(), description, description, count, perArtist,
                 listener::status);
-        int enqueued = enqueue(tracks);
-        actions.add("'" + description + "' " + enqueued + "곡 추가" + varietyNote(perArtist));
-        return addedResult(tracks, enqueued);
+        boolean next = args.path("next").asBoolean(false);
+        int enqueued = enqueue(tracks, next);
+        actions.add("'" + description + "' " + enqueued + "곡 " + placement(next) + varietyNote(perArtist));
+        return addedResult(tracks, enqueued, next);
     }
 
     private String playChart(JsonNode args) throws IOException {
@@ -338,9 +353,10 @@ public class AiAgent {
         List<String> queries = new ArrayList<>();
         for (ChartClient.ChartSong song : chart) queries.add(song.artist() + " " + song.title());
         List<AudioTrack> tracks = searchAll(queries);
-        int enqueued = enqueue(tracks);
-        actions.add(country.toUpperCase(Locale.ROOT) + " 인기 차트에서 " + enqueued + "곡 추가" + varietyNote(perArtist));
-        return addedResult(tracks, enqueued);
+        boolean next = args.path("next").asBoolean(false);
+        int enqueued = enqueue(tracks, next);
+        actions.add(country.toUpperCase(Locale.ROOT) + " 인기 차트에서 " + enqueued + "곡 " + placement(next) + varietyNote(perArtist));
+        return addedResult(tracks, enqueued, next);
     }
 
     private static String varietyNote(int perArtist) {
@@ -375,9 +391,10 @@ public class AiAgent {
         }
         if (queries.isEmpty()) return error("no valid songs were given");
         List<AudioTrack> tracks = searchAll(queries);
-        int enqueued = enqueue(tracks);
-        actions.add("요청한 곡 " + queries.size() + "곡 중 " + enqueued + "곡 추가");
-        return addedResult(tracks, enqueued);
+        boolean next = args.path("next").asBoolean(false);
+        int enqueued = enqueue(tracks, next);
+        actions.add("요청한 곡 " + queries.size() + "곡 중 " + enqueued + "곡 " + placement(next));
+        return addedResult(tracks, enqueued, next);
     }
 
     private String setAutoplay(JsonNode args) {
@@ -446,6 +463,16 @@ public class AiAgent {
         return Math.min(AiGuard.MAX_QUEUE - client.getTrackQueue().size(), MAX_ADDS - added);
     }
 
+    private int enqueue(List<AudioTrack> tracks, boolean next) {
+        int count = enqueue(tracks);
+        if (next && count > 0) client.reorderQueue(new ArrayList<>(tracks.subList(0, count)));
+        return count;
+    }
+
+    private static String placement(boolean next) {
+        return next ? "다음 곡으로 추가" : "추가";
+    }
+
     private int enqueue(List<AudioTrack> tracks) {
         if (tracks.isEmpty()) return 0;
         if (client.getCurrentPlaying() == null) {
@@ -499,9 +526,10 @@ public class AiAgent {
         return client.getAudioPlayerManager();
     }
 
-    private String addedResult(List<AudioTrack> tracks, int enqueued) {
+    private String addedResult(List<AudioTrack> tracks, int enqueued, boolean next) {
         ObjectNode out = MAPPER.createObjectNode();
         out.put("status", "ok").put("added", enqueued);
+        out.put("placed", next ? "front of the queue, plays right after the current song" : "end of the queue");
         ArrayNode titles = out.putArray("titles");
         for (int i = 0; i < Math.min(enqueued, 10); i++) titles.add(TrackHints.field(tracks.get(i).getInfo().title));
         return out.toString();
@@ -513,6 +541,14 @@ public class AiAgent {
         node.put("title", TrackHints.field(track.getInfo().title));
         node.put("artist", TrackHints.field(track.getInfo().author));
         return node;
+    }
+
+    static boolean asksForRemoval(String request) {
+        String text = request.toLowerCase(Locale.ROOT);
+        for (String word : REMOVAL_WORDS) {
+            if (text.contains(word)) return true;
+        }
+        return false;
     }
 
     static String criteria(JsonNode args, String field) {
@@ -567,10 +603,12 @@ public class AiAgent {
         property(playSongs, "description", "string", "Korean description of the songs to add", true);
         property(playSongs, "count", "integer", "number of songs, 1 to 50, default 10", true).put("minimum", 1).put("maximum", 50);
         property(playSongs, "diverse_artists", "boolean", DIVERSE_ARTISTS, false);
+        property(playSongs, "next", "boolean", PLAY_NEXT, false);
         ObjectNode playChart = tool(tools, "play_chart", "Add the current top songs of a country's music chart, at most 2 per artist. Use for trending, popular or latest songs.");
         property(playChart, "country", "string", "two-letter country code: jp for J-pop, kr for K-pop, us for US pop", true);
         property(playChart, "count", "integer", "number of songs, 1 to 50, default 10", true).put("minimum", 1).put("maximum", 50);
         property(playChart, "diverse_artists", "boolean", DIVERSE_ARTISTS, false);
+        property(playChart, "next", "boolean", PLAY_NEXT, false);
         ObjectNode getChart = tool(tools, "get_chart", "Look up the current top songs of a country's music chart without adding them.");
         property(getChart, "country", "string", "two-letter country code, e.g. jp, kr, us", true);
         property(getChart, "count", "integer", "number of songs, 1 to 20", true).put("minimum", 1).put("maximum", 20);
@@ -583,7 +621,8 @@ public class AiAgent {
         songProperties.putObject("artist").put("type", "string");
         songProperties.putObject("title").put("type", "string");
         song.putArray("required").add("title");
-        ObjectNode autoplay = tool(tools, "set_autoplay", "Turn continuous recommendations of similar songs on or off.");
+        property(addSongs, "next", "boolean", PLAY_NEXT, false);
+        ObjectNode autoplay =tool(tools, "set_autoplay", "Turn continuous recommendations of similar songs on or off.");
         property(autoplay, "enabled", "boolean", null, true);
         property(autoplay, "criteria", "string", "optional Korean description of what to recommend", false);
         property(autoplay, "diverse_artists", "boolean", "true to avoid artists that already played in this session", false);
