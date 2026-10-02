@@ -19,13 +19,18 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -428,9 +433,42 @@ public final class LyricsPresenter {
         return new ArrayList<>(queue.subList(0, Math.min(count, queue.size())));
     }
 
+    private static final int LOOKUP_THREADS = 3;
+    private static final int WARMED_SIZE = 2000;
+    private static final ExecutorService LOOKUP_EXECUTOR = Executors.newFixedThreadPool(LOOKUP_THREADS, runnable -> {
+        Thread thread = new Thread(runnable, "lyrics-lookup");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private static final Set<String> WARMED = Collections.newSetFromMap(Collections.synchronizedMap(
+            new LinkedHashMap<>(64, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
+                    return size() > WARMED_SIZE;
+                }
+            }));
+
+    private static void warmLyrics(MusicPlayerController controller, List<AudioTrack> tracks) {
+        for (AudioTrack track : tracks) {
+            String identifier = track.getIdentifier();
+            if (!WARMED.add(identifier)) continue;
+            LOOKUP_EXECUTOR.execute(() -> {
+                try {
+                    controller.getLyricsClient().find(track.getInfo());
+                } catch (IOException | RuntimeException e) {
+                    WARMED.remove(identifier);
+                    LOGGER.debug("lyrics lookup ahead of time failed for {}", track.getInfo().title, e);
+                }
+            });
+        }
+    }
+
     public static void prefetchNext(MusicPlayerClient client) {
         MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
         TranslationClient translator = controller.getTranslationClient();
+        List<AudioTrack> queue = client.getTrackQueue();
+        boolean llmIsSlow = translator != null && translator.isEnabled() && !translator.hasUsableGpu();
+        warmLyrics(controller, queue.subList(0, Math.min(llmIsSlow ? PREFETCH_COUNT : PREFETCH_COUNT_FAST, queue.size())));
         if (translator == null || !translator.isEnabled()) {
             LOGGER.info("lyrics prefetch skipped: translator disabled");
             return;

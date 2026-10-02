@@ -322,7 +322,7 @@ public class MusicPlayerClient {
 
     public int reorderQueue(List<AudioTrack> order) {
         int reordered = musicTrack.reorder(order);
-        if (reordered > 1) LyricsPresenter.prefetchNext(this);
+        if (reordered > 0) LyricsPresenter.prefetchNext(this);
         return reordered;
     }
 
