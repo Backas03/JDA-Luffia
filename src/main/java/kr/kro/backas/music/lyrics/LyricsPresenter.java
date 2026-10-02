@@ -46,13 +46,6 @@ public final class LyricsPresenter {
     private static final int MESSAGE_TEXT_BUDGET = 5800;
     private static final String TRUNCATED_NOTE = "… (이하 생략)";
     private static final long CLOCK_INTERVAL_MS = 1000;
-    public static final String MACHINE_TRANSLATION_NOTE = "기계 번역한 가사입니다. 올바르지 않을 수 있습니다.";
-
-    public static String machineTranslationNote(@Nullable MusicPlayerClient client, @Nullable TranslationClient translator) {
-        String status = translationStatus(client, translator);
-        if (translator != null && translator.isLlm()) return status;
-        return status.isBlank() ? MACHINE_TRANSLATION_NOTE : MACHINE_TRANSLATION_NOTE + "\n" + status;
-    }
 
     public static String translationStatus(@Nullable MusicPlayerClient client, @Nullable TranslationClient translator) {
         if (translator == null || !isDebugDisplay()) return "";
@@ -249,7 +242,7 @@ public final class LyricsPresenter {
                     boolean translating = current == null || !current.done().isDone();
                     note = translating
                             ? translatingNote(client, translator)
-                            : (cache.isEmpty() ? "번역에 실패했습니다" : machineTranslationNote(client, translator));
+                            : (cache.isEmpty() ? "번역에 실패했습니다" : translationStatus(client, translator));
                 }
                 return message.editMessageEmbeds(buildFullEmbeds(track, lines, cache,
                         clockFooter(client, track, finalFooter, showClock), note)).submit();
@@ -310,7 +303,7 @@ public final class LyricsPresenter {
                 if (dismissOnEnd) return;
                 String doneNote = translations.isEmpty()
                         ? "번역에 실패했습니다"
-                        : machineTranslationNote(client, translator);
+                        : translationStatus(client, translator);
                 message.editMessageEmbeds(buildFullEmbeds(track, lines, translations, finalFooter, doneNote))
                         .queue(null, e -> LOGGER.debug("failed to attach translations", e));
             });
