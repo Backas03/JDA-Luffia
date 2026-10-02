@@ -16,11 +16,15 @@ public final class EditRateLimiter {
     }
 
     public static boolean tryAcquire(long channelId) {
+        return tryAcquire(channelId, 0);
+    }
+
+    public static boolean tryAcquire(long channelId, int reserve) {
         Deque<Long> stamps = HISTORY.computeIfAbsent(channelId, id -> new ArrayDeque<>());
         synchronized (stamps) {
             long now = System.currentTimeMillis();
             while (!stamps.isEmpty() && now - stamps.peekFirst() >= WINDOW_MS) stamps.pollFirst();
-            if (stamps.size() >= MAX_EDITS_PER_WINDOW) return false;
+            if (stamps.size() >= MAX_EDITS_PER_WINDOW - reserve) return false;
             stamps.addLast(now);
             return true;
         }
