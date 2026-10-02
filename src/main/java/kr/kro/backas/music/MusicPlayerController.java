@@ -2,6 +2,12 @@ package kr.kro.backas.music;
 
 import club.minnced.discord.jdave.interop.JDaveSessionFactory;
 import kr.kro.backas.SharedConstant;
+import kr.kro.backas.music.ai.AiGuard;
+import kr.kro.backas.music.ai.AiRemovalConfirmations;
+import kr.kro.backas.music.ai.ChartClient;
+import kr.kro.backas.music.ai.AiPlaylistBuilder;
+import kr.kro.backas.music.ai.AiShuffleClassifier;
+import kr.kro.backas.music.ai.AiTrackTagger;
 import kr.kro.backas.music.lyrics.LrcLibClient;
 import kr.kro.backas.music.lyrics.TranslationClient;
 import kr.kro.backas.music.source.MusicSourceRegistry;
@@ -12,9 +18,11 @@ import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.audio.AudioModuleConfig;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.GuildVoiceState;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.entities.channel.unions.AudioChannelUnion;
+import net.dv8tion.jda.api.events.guild.voice.GuildVoiceUpdateEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
@@ -36,10 +44,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class MusicPlayerController extends ListenerAdapter {
     private static final Logger LOGGER = LoggerFactory.getLogger(MusicPlayerController.class);
     private static final int SHUTDOWN_TIMEOUT_SECONDS = 5;
+    private static final long AI_CACHE_FLUSH_SECONDS = 60;
 
     private final MusicSourceRegistry sourceRegistry;
     private final List<JDA> bots;
@@ -50,6 +60,12 @@ public class MusicPlayerController extends ListenerAdapter {
     private final ScheduledExecutorService scheduler;
     private final LrcLibClient lyricsClient;
     private final TranslationClient translationClient;
+    private final AiShuffleClassifier aiShuffleClassifier;
+    private final AiTrackTagger aiTrackTagger;
+    private final AiPlaylistBuilder aiPlaylistBuilder;
+    private final AiGuard aiGuard = new AiGuard();
+    private final ChartClient chartClient = new ChartClient();
+    private final AiRemovalConfirmations aiRemovalConfirmations = new AiRemovalConfirmations();
 
     public MusicPlayerController(MusicSourceRegistry sourceRegistry, String translatorUrl) {
         this.sourceRegistry = sourceRegistry;
@@ -60,6 +76,10 @@ public class MusicPlayerController extends ListenerAdapter {
             return thread;
         });
         this.translationClient.startFallbackManager(this.scheduler);
+        this.aiShuffleClassifier = new AiShuffleClassifier(this.translationClient);
+        this.aiTrackTagger = new AiTrackTagger(this.translationClient);
+        this.scheduler.scheduleWithFixedDelay(this::flushAiCaches, AI_CACHE_FLUSH_SECONDS, AI_CACHE_FLUSH_SECONDS, TimeUnit.SECONDS);
+        this.aiPlaylistBuilder = new AiPlaylistBuilder(this.translationClient, this.aiShuffleClassifier);
         this.lyricsClient = new LrcLibClient();
         this.bots = new CopyOnWriteArrayList<>();
         this.ownedBots = new CopyOnWriteArrayList<>();
@@ -82,6 +102,7 @@ public class MusicPlayerController extends ListenerAdapter {
 
     public void register(JDA discordAPI) {
         bots.add(discordAPI);
+        discordAPI.addEventListener(new PresenceListener());
         LOGGER.info("music bot registered: {} ({} guilds)", discordAPI.getSelfUser().getName(), discordAPI.getGuilds().size());
     }
 
@@ -99,6 +120,30 @@ public class MusicPlayerController extends ListenerAdapter {
 
     public TranslationClient getTranslationClient() {
         return translationClient;
+    }
+
+    public AiShuffleClassifier getAiShuffleClassifier() {
+        return aiShuffleClassifier;
+    }
+
+    public AiTrackTagger getAiTrackTagger() {
+        return aiTrackTagger;
+    }
+
+    public AiPlaylistBuilder getAiPlaylistBuilder() {
+        return aiPlaylistBuilder;
+    }
+
+    public AiGuard getAiGuard() {
+        return aiGuard;
+    }
+
+    public ChartClient getChartClient() {
+        return chartClient;
+    }
+
+    public AiRemovalConfirmations getAiRemovalConfirmations() {
+        return aiRemovalConfirmations;
     }
 
     public void search(Identifier id, String query, Member member, SlashCommandInteractionEvent slashEvent) {
@@ -231,11 +276,10 @@ public class MusicPlayerController extends ListenerAdapter {
     }
 
     public void updatePresence(JDA bot) {
-        List<VoiceChannel> playing = new ArrayList<>();
-        for (MusicPlayerClient client : clients.values()) {
-            if (client.getMusicBot() != bot) continue;
-            VoiceChannel joined = client.getJoinedVoiceChannel();
-            if (joined != null) playing.add(joined);
+        List<AudioChannelUnion> playing = new ArrayList<>();
+        for (Guild guild : bot.getGuilds()) {
+            GuildVoiceState state = guild.getSelfMember().getVoiceState();
+            if (state != null && state.getChannel() != null) playing.add(state.getChannel());
         }
         String activity = switch (playing.size()) {
             case 0 -> SharedConstant.DEFAULT_ACTIVITY;
@@ -245,7 +289,25 @@ public class MusicPlayerController extends ListenerAdapter {
         bot.getPresence().setActivity(Activity.playing(activity));
     }
 
+    private final class PresenceListener extends ListenerAdapter {
+        @Override
+        public void onGuildVoiceUpdate(@NotNull GuildVoiceUpdateEvent event) {
+            if (event.getMember().getIdLong() != event.getJDA().getSelfUser().getIdLong()) return;
+            updatePresence(event.getJDA());
+        }
+    }
+
+    private void flushAiCaches() {
+        try {
+            aiShuffleClassifier.flush();
+            aiTrackTagger.flush();
+        } catch (RuntimeException e) {
+            LOGGER.warn("failed to save ai caches", e);
+        }
+    }
+
     public void shutdownGracefully() {
+        flushAiCaches();
         for (MusicPlayerClient client : clients.values()) {
             client.shutdownGracefully();
         }

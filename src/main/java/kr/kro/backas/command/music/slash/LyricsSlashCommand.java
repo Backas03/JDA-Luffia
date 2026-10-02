@@ -30,7 +30,7 @@ public class LyricsSlashCommand implements SlashCommandSource {
     public SlashCommandData buildCommand() {
         return Commands.slash(COMMAND_NAME, getDescription())
                 .addOptions(
-                        new OptionData(OptionType.STRING, MODE_ARGUMENT, "실시간(기본, 항상 켜져 있음), 전체, 끄기(다시 켜려면 실시간)", false)
+                        new OptionData(OptionType.STRING, MODE_ARGUMENT, "실시간(기본, 항상 켜져 있음), 전체, 끄기(지금 곡만, 다음 곡부터 다시 표시)", false)
                                 .addChoice("실시간", MODE_LIVE)
                                 .addChoice("전체", MODE_FULL)
                                 .addChoice("끄기", MODE_OFF),
@@ -62,8 +62,8 @@ public class LyricsSlashCommand implements SlashCommandSource {
         Long offset = offsetOption == null ? null : offsetOption.getAsLong();
 
         if (MODE_OFF.equals(mode)) {
-            boolean stopped = client.disableAutoLyrics("가사 표시를 껐습니다");
-            event.reply(stopped ? "가사 표시를 껐습니다. 다시 켜려면 `/가사`를 실행하세요." : "가사 표시가 이미 꺼져 있습니다.").queue();
+            boolean stopped = client.stopLyrics("이번 곡의 가사 표시를 껐습니다");
+            event.reply(stopped ? "이번 곡의 가사 표시를 껐습니다. 다음 곡부터는 다시 자동으로 표시됩니다." : "지금 표시 중인 가사가 없습니다.").queue();
             return;
         }
         LyricsSession existing = client.getLyricsSession();
@@ -77,7 +77,7 @@ public class LyricsSlashCommand implements SlashCommandSource {
         long offsetMs = offset == null ? client.getLyricsOffsetMs() : offset;
         InteractionHook hook = event.deferReply().complete();
         if (MODE_LIVE.equals(mode)) {
-            client.enableAutoLyrics(event.getMessageChannel(), offsetMs);
+            client.useLyricsChannel(event.getMessageChannel(), offsetMs);
         }
         LyricsPresenter.presentViaHook(client, track, hook, offsetMs, MODE_LIVE.equals(mode), member);
     }

@@ -19,6 +19,7 @@ dependencies {
     implementation("commons-configuration:commons-configuration:1.10")
     testImplementation(platform("org.junit:junit-bom:5.9.2"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.9.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     implementation("net.dv8tion:JDA:6.6.0")
     implementation("club.minnced:jdave-api:0.1.8")
     runtimeOnly("club.minnced:jdave-native-win-x86-64:0.1.8")

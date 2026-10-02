@@ -9,7 +9,10 @@ import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.player.event.AudioEventAdapter;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
-import kr.kro.backas.Main;
+import com.sedmelluq.discord.lavaplayer.track.InternalAudioTrack;
+import com.sedmelluq.discord.lavaplayer.track.playback.AudioFrameBuffer;
+import com.sedmelluq.discord.lavaplayer.track.playback.LocalAudioTrackExecutor;
+import kr.kro.backas.music.ai.AiAutoplay;
 import kr.kro.backas.music.filter.ConfiguredEqualizer;
 import kr.kro.backas.music.filter.KaraokeMode;
 import kr.kro.backas.music.filter.VocalEchoFilter;
@@ -25,8 +28,11 @@ import net.dv8tion.jda.api.entities.channel.unions.AudioChannelUnion;
 import net.dv8tion.jda.api.managers.AudioManager;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
+import java.util.Set;
 
 public class MusicPlayerClient {
     public static final int DEFAULT_VOLUME = 10;
@@ -39,12 +45,14 @@ public class MusicPlayerClient {
     private final long guildId;
     private final MusicTrack musicTrack;
     private final AudioPlayer audioPlayer;
+    private final AiAutoplay autoplay;
     private volatile double currentPlaySpeed = 1.0;
+    private final Object speedLock = new Object();
+    private final Deque<double[]> bufferedSpeeds = new ArrayDeque<>();
     private volatile KaraokeMode karaokeMode = KaraokeMode.OFF;
     private volatile double realPositionMs;
     private volatile ConfiguredEqualizer currentEqualizer = ConfiguredEqualizer.NORMAL;
     private volatile LyricsSession lyricsSession;
-    private volatile boolean autoLyricsEnabled = true;
     private volatile MessageChannel lyricsChannel;
     private volatile long lyricsOffsetMs = LyricsSession.DEFAULT_OFFSET_MS;
 
@@ -58,12 +66,17 @@ public class MusicPlayerClient {
         this.audioPlayer.addListener(new AudioEventAdapter() {
             @Override
             public void onTrackStart(AudioPlayer player, AudioTrack track) {
+                synchronized (speedLock) {
+                    bufferedSpeeds.clear();
+                }
                 realPositionMs = track.getPosition();
                 onTrackStarted(track);
+                autoplay.onTrackStarted(track);
             }
         });
 
         this.musicTrack = new MusicTrack(this, this.audioPlayer);
+        this.autoplay = new AiAutoplay(this);
         MusicTrackHandler trackHandler = new MusicTrackHandler(this.musicTrack, this);
         this.audioPlayer.addListener(trackHandler);
 
@@ -95,8 +108,24 @@ public class MusicPlayerClient {
     }
 
     public void setPlaySpeed(double speed) {
-        this.currentPlaySpeed = speed;
+        synchronized (speedLock) {
+            int buffered = bufferedFrames();
+            int pending = 0;
+            for (double[] segment : bufferedSpeeds) pending += (int) segment[1];
+            if (buffered > pending) bufferedSpeeds.addLast(new double[]{currentPlaySpeed, buffered - pending});
+            this.currentPlaySpeed = speed;
+        }
         updateFilter();
+    }
+
+    private int bufferedFrames() {
+        AudioTrack track = audioPlayer.getPlayingTrack();
+        if (track instanceof InternalAudioTrack internal
+                && internal.getActiveExecutor() instanceof LocalAudioTrackExecutor executor) {
+            AudioFrameBuffer buffer = executor.getAudioBuffer();
+            if (buffer != null) return Math.max(0, buffer.getFullCapacity() - buffer.getRemainingCapacity());
+        }
+        return 0;
     }
 
     public void setKaraokeMode(KaraokeMode mode) {
@@ -168,26 +197,19 @@ public class MusicPlayerClient {
         return true;
     }
 
-    public void enableAutoLyrics(MessageChannel channel, long offsetMs) {
-        this.autoLyricsEnabled = true;
+    public void dismissLyrics() {
+        LyricsSession session = lyricsSession;
+        if (session == null) return;
+        lyricsSession = null;
+        session.dismiss();
+    }
+
+    public void useLyricsChannel(MessageChannel channel, long offsetMs) {
         this.lyricsChannel = channel;
         this.lyricsOffsetMs = offsetMs;
     }
 
-    public boolean disableAutoLyrics(String reason) {
-        boolean wasEnabled = autoLyricsEnabled;
-        autoLyricsEnabled = false;
-        lyricsChannel = null;
-        boolean stopped = stopLyrics(reason);
-        return wasEnabled || stopped;
-    }
-
-    public boolean isAutoLyricsEnabled() {
-        return autoLyricsEnabled;
-    }
-
     private void resetLyricsPreferences() {
-        autoLyricsEnabled = true;
         lyricsChannel = null;
         lyricsOffsetMs = LyricsSession.DEFAULT_OFFSET_MS;
     }
@@ -215,7 +237,6 @@ public class MusicPlayerClient {
     }
 
     private void onTrackStarted(AudioTrack track) {
-        if (!autoLyricsEnabled) return;
         MessageChannel channel = lyricsChannelFor(track);
         if (channel == null) return;
         LyricsSession current = lyricsSession;
@@ -281,6 +302,38 @@ public class MusicPlayerClient {
         return new ArrayList<>(musicTrack.getTrackQueue());
     }
 
+    public int shuffleQueue() {
+        int shuffled = musicTrack.shuffle();
+        if (shuffled > 1) LyricsPresenter.prefetchNext(this);
+        return shuffled;
+    }
+
+    public int prioritizeQueue(Set<AudioTrack> matched) {
+        int prioritized = musicTrack.prioritize(matched);
+        if (prioritized > 0) LyricsPresenter.prefetchNext(this);
+        return prioritized;
+    }
+
+    public int removeFromQueue(Set<AudioTrack> tracks) {
+        int removed = musicTrack.remove(tracks);
+        if (removed > 0) LyricsPresenter.prefetchNext(this);
+        return removed;
+    }
+
+    public int reorderQueue(List<AudioTrack> order) {
+        int reordered = musicTrack.reorder(order);
+        if (reordered > 1) LyricsPresenter.prefetchNext(this);
+        return reordered;
+    }
+
+    public RepeatMode getRepeatMode() {
+        return musicTrack.getRepeatMode();
+    }
+
+    public AiAutoplay getAutoplay() {
+        return autoplay;
+    }
+
     public boolean isNowPlaying() {
         return musicTrack.isNowPlaying();
     }
@@ -290,7 +343,17 @@ public class MusicPlayerClient {
     }
 
     public void updatePosition() {
-        realPositionMs = realPositionMs + 20 * currentPlaySpeed;
+        double speed;
+        synchronized (speedLock) {
+            double[] head = bufferedSpeeds.peekFirst();
+            if (head == null) {
+                speed = currentPlaySpeed;
+            } else {
+                speed = head[0];
+                if (--head[1] <= 0) bufferedSpeeds.pollFirst();
+            }
+        }
+        realPositionMs = realPositionMs + 20 * speed;
     }
 
     public String getRepeatModeName() {
@@ -332,7 +395,6 @@ public class MusicPlayerClient {
         }
         VoiceChannel own = musicBot.getVoiceChannelById(channel.getIdLong());
         manager.openAudioConnection(own == null ? channel : own);
-        Main.getLuffia().getMusicPlayerController().updatePresence(musicBot);
     }
 
     public void disconnectFromVoiceChannelAndResetTrack() {
@@ -340,10 +402,10 @@ public class MusicPlayerClient {
         if (manager == null || !manager.isConnected()) return;
         manager.closeAudioConnection();
 
+        autoplay.reset();
         musicTrack.reset();
         resetLyricsPreferences();
         audioPlayer.setVolume(DEFAULT_VOLUME);
-        Main.getLuffia().getMusicPlayerController().updatePresence(musicBot);
     }
 
     public void shutdownGracefully() {

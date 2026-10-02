@@ -3,6 +3,7 @@ package kr.kro.backas.music.lyrics;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
+import kr.kro.backas.util.DiscordSafe;
 import net.dv8tion.jda.api.components.container.Container;
 import net.dv8tion.jda.api.components.section.Section;
 import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
@@ -21,6 +22,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class LyricsSession {
+    private static final int MAX_LINE_LENGTH = 300;
+    private static final int MAX_SONG_LENGTH = 200;
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LyricsSession.class);
     public static final long TICK_MS = 200;
@@ -93,10 +96,7 @@ public class LyricsSession {
     }
 
     public void stop(String reason) {
-        if (!stopped.compareAndSet(false, true)) return;
-        if (ticker != null) ticker.cancel(false);
-        TranslationJobs.Job current = job;
-        if (current != null) current.cancel();
+        if (!halt()) return;
         try {
             message.editMessageComponents(buildView(client, track, lyrics, shownIndex, translationFor(shownIndex), reason, translator, false))
                     .useComponentsV2(true)
@@ -104,6 +104,27 @@ public class LyricsSession {
         } catch (RuntimeException e) {
             LOGGER.debug("failed to finalize lyrics message", e);
         }
+    }
+
+    public void dismiss() {
+        if (!halt()) return;
+        deleteMessage(message);
+    }
+
+    static void deleteMessage(Message message) {
+        try {
+            message.delete().queue(null, e -> LOGGER.debug("failed to delete lyrics message", e));
+        } catch (RuntimeException e) {
+            LOGGER.debug("failed to delete lyrics message", e);
+        }
+    }
+
+    private boolean halt() {
+        if (!stopped.compareAndSet(false, true)) return false;
+        if (ticker != null) ticker.cancel(false);
+        TranslationJobs.Job current = job;
+        if (current != null) current.cancel();
+        return true;
     }
 
     private boolean startTranslation() {
@@ -122,7 +143,7 @@ public class LyricsSession {
             return false;
         }
         translating = true;
-        job = TranslationJobs.submit(translator, cacheKey, sources, true, null);
+        job = TranslationJobs.submit(translator, cacheKey, sources, true, null, TranslationJobs.songContext(track));
         LyricsPresenter.reportSongJob(client, track, job);
         job.done().whenComplete((result, error) -> {
             translating = false;
@@ -135,16 +156,11 @@ public class LyricsSession {
     private String translationFor(int index) {
         if (index < 0) return null;
         String cached = translations.get(index);
-        if (cached != null && !cached.isBlank()) return cached;
-        if (translator == null || (!translating && translations.isEmpty())) return null;
-        String source = index < sources.size() ? sources.get(index) : null;
-        if (source == null || source.isBlank()) return null;
-        if (cached == null && LyricsLanguage.needsTranslation(source)) return null;
-        return source;
+        return cached == null || cached.isBlank() ? null : cached;
     }
 
     private boolean isPendingTranslation(int index, @Nullable String translation) {
-        if (translation != null || !translating || index < 0) return false;
+        if (translation != null || !translating || index < 0 || translations.containsKey(index)) return false;
         String text = lineText(lyrics.synced(), index);
         return LyricsLanguage.needsTranslation(text);
     }
@@ -153,11 +169,11 @@ public class LyricsSession {
         try {
             if (stopped.get()) return;
             if (!isForTrack(client.getCurrentPlaying())) {
-                stop("재생이 끝났습니다");
+                dismiss();
                 return;
             }
             if (client.isPaused()) return;
-            long position = (long) client.getRealPositionMs() + offsetMs;
+            long position = (long) (client.getRealPositionMs() + offsetMs * client.getCurrentPlaySpeed());
             int index = indexAt(position);
             String translation = translationFor(index);
             boolean pending = isPendingTranslation(index, translation);
@@ -207,7 +223,8 @@ public class LyricsSession {
         String previous = lineText(lines, index - 1);
         String current = lineText(lines, index);
         String next = lineText(lines, index + 1);
-        String song = track.getInfo().author + " - " + track.getInfo().title;
+        String song = DiscordSafe.text(track.getInfo().author + " - " + track.getInfo().title, MAX_SONG_LENGTH);
+        translation = translation == null ? null : DiscordSafe.text(translation, MAX_LINE_LENGTH);
         StringBuilder text = new StringBuilder();
         text.append(previous.isBlank() ? BLANK : "*" + previous + "*").append('\n');
         text.append("## ").append(current.isBlank() ? "♪" : current).append('\n');
@@ -235,7 +252,6 @@ public class LyricsSession {
 
     private static String lineText(List<LyricLine> lines, int index) {
         if (index < 0 || index >= lines.size()) return "";
-        String text = lines.get(index).text();
-        return text == null ? "" : text;
+        return DiscordSafe.text(lines.get(index).text(), MAX_LINE_LENGTH);
     }
 }
