@@ -197,7 +197,7 @@ public static final List<String> MUSIC_BOT_TOKENS = List.of(
 2. ``translator/llm/run.sh`` 로 실행 (기본 127.0.0.1:8765, ``TRANSLATOR_PORT`` 로 변경, ``LLM_THREADS`` 로 생성 스레드(기본 6, 물리 코어 수), ``LLM_THREADS_BATCH`` 로 프롬프트 처리 스레드(기본 12) 조정. ``nice`` 우선순위 10으로 실행되어 같은 머신의 다른 서버에 CPU 를 양보하며 ``LLM_NICE`` 로 조정. llama-server 의 호스트 메모리 프롬프트 캐시는 곡마다 프롬프트가 달라 쓸모가 없고 기본값 8GB 까지 계속 쌓이므로 ``--cache-ram 0`` 으로 꺼 두었으며 ``LLM_CACHE_RAM`` 으로 MiB 단위 조정 가능)
 3. ``BotSecret.TRANSLATOR_URL`` 에 ``http://127.0.0.1:8765`` 를 넣고 봇 재시작
 
-**GPU PC 를 같이 쓰는 경우**: 주소를 쉼표로 여러 개 적으면 GPU 서버들은 **동시에** 쓰이고, 목록의 마지막 주소는 CPU 예비 서버로 GPU 가 모두 꺼졌을 때만 씁니다. 예: ``"http://192.168.0.20:8765,http://127.0.0.1:8765"``. 꺼져 있거나 연결이 끊긴 서버는 30초 동안 건너뛰고, 번역 중에 끊기면 같은 요청을 다른 서버로 다시 보냅니다. 재빌드 없이 바꾸려면 환경변수 ``TRANSLATOR_URL`` 또는 JVM 옵션 ``-Dtranslator.url=...`` 로 덮어쓸 수 있습니다. 서버를 적는 형식과 분배 방식은 아래 "여러 GPU 서버 동시 사용" 을 참고하세요.
+**GPU PC 를 같이 쓰는 경우**: 주소를 쉼표로 여러 개 적으면 GPU 서버들은 **동시에** 쓰이고, 목록의 마지막 주소는 CPU 예비 서버로 GPU 가 모두 꺼졌을 때만 씁니다. 예: ``"http://192.168.0.20:8765,http://127.0.0.1:8765"``. 꺼져 있거나 연결이 끊긴 서버는 30초 동안 건너뛰고, 번역 중에 끊기면 같은 요청을 다른 서버로 다시 보냅니다. 끊겼던 서버는 요청이 없어도 30초마다 다시 확인해, 살아나면 바로 다시 쓰고 속도를 측정한 적이 없으면 한 번 측정합니다. 재빌드 없이 바꾸려면 환경변수 ``TRANSLATOR_URL`` 또는 JVM 옵션 ``-Dtranslator.url=...`` 로 덮어쓸 수 있습니다. 서버를 적는 형식과 분배 방식은 아래 "여러 GPU 서버 동시 사용" 을 참고하세요.
 
 GPU PC(Windows) 쪽은 llama.cpp 릴리스에서 ``llama-*-bin-win-cuda-*-x64.zip`` 과 같은 릴리스의 ``cudart-*.zip`` 을 받아 ``translator/llm/bin`` 에 풀고, 모델을 ``translator/llm/models`` 에 둔 뒤 ``translator/llm/run-gpu.bat`` 로 실행합니다. 이 스크립트는 ``--host 0.0.0.0`` 과 ``-ngl 99`` 로 띄우므로 Windows 방화벽에서 8765 포트 인바운드를 허용해야 하고, 공유기 포트포워딩은 하지 않습니다. 공유기에서 GPU PC 의 IP 를 고정해 두고 절전 모드를 끄세요.
 
@@ -241,6 +241,8 @@ GPU 서버(Ollama) 권장 설정: ``OLLAMA_HOST=0.0.0.0``, ``OLLAMA_NUM_PARALLEL
 FROM gemma4:12b
 PARAMETER num_ctx 8192
 ```
+
+Linux GPU 서버에서 systemd 서비스 대신 tmux 로 띄우려면 ``sudo systemctl disable --now ollama`` 로 서비스를 끄고 ``bash translator/ollama/run.sh`` 를 실행합니다. ``ollama`` 라는 tmux 세션을 만들어 왼쪽에는 홈 디렉터리 셸, 오른쪽에는 ``ollama serve`` 를 띄우고 바로 붙으며, 이미 떠 있으면 붙기만 합니다 (``Ctrl+B`` 다음 ``D`` 로 빠져나옴). 위 권장 설정을 기본값으로 넣고 (``OLLAMA_HOST=0.0.0.0:11434``, ``OLLAMA_CONTEXT_LENGTH=8192``, ``OLLAMA_KEEP_ALIVE=-1``, ``OLLAMA_NUM_PARALLEL=1``, ``OLLAMA_MAX_LOADED_MODELS=1``), 같은 이름의 환경변수로 값을 바꿀 수 있습니다 (예: ``OLLAMA_NUM_PARALLEL=4 bash translator/ollama/run.sh``). 서비스로 받아 둔 모델은 ``ollama`` 계정 아래에 있어 보이지 않으므로 띄운 뒤 ``ollama pull`` 을 한 번 더 해야 합니다. 끌 때는 ``bash translator/ollama/run.sh stop``, 재부팅 후 자동 실행은 ``crontab -e`` 에 ``@reboot bash /경로/translator/ollama/run.sh`` 를 추가합니다.
 
 **CPU 폴백 서버 자동 관리**: 봇 서버에서 환경변수 ``TRANSLATOR_FALLBACK_START`` 에 CPU llama-server 실행 명령(예: ``/home/유저/JDA-Luffia/translator/llm/run.sh``)을 넣어두면, 봇이 30초마다 GPU 서버들을 확인해 하나라도 살아 있으면 CPU 서버를 꺼서 코어를 돌려주고, GPU 가 모두 죽으면 CPU 서버를 자동으로 띄웁니다. 봇이 직접 띄우지 않은 기존 CPU 서버까지 끄려면 ``TRANSLATOR_FALLBACK_STOP`` 에 종료 명령(예: ``pkill -f llama-server``)을 추가로 지정합니다. 환경변수가 없으면 이 기능은 꺼져 있습니다. GPU 장애 시 CPU 서버가 모델을 로드하는 동안(수십 초)은 번역이 잠시 실패할 수 있고, 로드가 끝나면 자동으로 이어집니다.
 

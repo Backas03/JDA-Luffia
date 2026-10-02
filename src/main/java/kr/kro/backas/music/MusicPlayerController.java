@@ -75,6 +75,7 @@ public class MusicPlayerController extends ListenerAdapter {
             thread.setDaemon(true);
             return thread;
         });
+        this.translationClient.startEndpointMonitor(this.scheduler);
         this.translationClient.startFallbackManager(this.scheduler);
         this.aiShuffleClassifier = new AiShuffleClassifier(this.translationClient);
         this.aiTrackTagger = new AiTrackTagger(this.translationClient);
