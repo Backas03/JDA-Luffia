@@ -26,14 +26,18 @@ public class AiAdminSlashCommand implements SlashCommandSource {
     private static final String ENABLE = "켜기";
     private static final String DISABLE = "끄기";
     private static final String STATUS = "상태";
+    private static final String DEBUG_ENABLE = "디버그 켜기";
+    private static final String DEBUG_DISABLE = "디버그 끄기";
 
     @Override
     public SlashCommandData buildCommand() {
         return Commands.slash(COMMAND_NAME, getDescription())
-                .addOptions(new OptionData(OptionType.STRING, ACTION_ARGUMENT, "켜기, 끄기, 상태", true)
+                .addOptions(new OptionData(OptionType.STRING, ACTION_ARGUMENT, "켜기, 끄기, 상태, 디버그 켜기, 디버그 끄기", true)
                         .addChoice(ENABLE, ENABLE)
                         .addChoice(DISABLE, DISABLE)
-                        .addChoice(STATUS, STATUS));
+                        .addChoice(STATUS, STATUS)
+                        .addChoice(DEBUG_ENABLE, DEBUG_ENABLE)
+                        .addChoice(DEBUG_DISABLE, DEBUG_DISABLE));
     }
 
     @Override
@@ -51,11 +55,14 @@ public class AiAdminSlashCommand implements SlashCommandSource {
         switch (action) {
             case ENABLE -> guard.setEnabled(true);
             case DISABLE -> guard.setEnabled(false);
+            case DEBUG_ENABLE -> guard.setDebug(true);
+            case DEBUG_DISABLE -> guard.setDebug(false);
             default -> {
             }
         }
         if (!STATUS.equals(action)) {
-            LOGGER.info("ai {} by {}", guard.isEnabled() ? "enabled" : "disabled", event.getUser().getId());
+            LOGGER.info("ai {}, debug display {} by {}", guard.isEnabled() ? "enabled" : "disabled",
+                    guard.isDebug() ? "on" : "off", event.getUser().getId());
         }
         TranslationClient translator = controller.getTranslationClient();
         EmbedBuilder builder = new EmbedBuilder()
@@ -67,6 +74,7 @@ public class AiAdminSlashCommand implements SlashCommandSource {
         for (LlmScheduler.EndpointStatus status : translator.scheduler().snapshot()) {
             builder.addField(status.label() + (status.fallback() ? " (CPU 예비)" : ""), describe(status), false);
         }
+        builder.addField("디버그 표시", guard.isDebug() ? "켜짐 (가사 하단에 GPU, token/s, 진행률 표시)" : "꺼짐", false);
         event.replyEmbeds(builder.setFooter(SharedConstant.RELEASE_VERSION).build()).setEphemeral(true).queue();
     }
 
@@ -86,7 +94,7 @@ public class AiAdminSlashCommand implements SlashCommandSource {
 
     @Override
     public String getDescription() {
-        return "AI 기능을 켜거나 끄고 상태를 확인합니다 (봇 제작자 전용)";
+        return "AI 기능을 켜거나 끄고 상태와 디버그 표시를 관리합니다 (봇 제작자 전용)";
     }
 
     @Override

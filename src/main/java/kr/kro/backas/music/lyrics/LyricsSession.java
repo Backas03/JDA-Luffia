@@ -4,6 +4,7 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.util.DiscordSafe;
+import kr.kro.backas.util.DurationUtil;
 import net.dv8tion.jda.api.components.container.Container;
 import net.dv8tion.jda.api.components.section.Section;
 import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
@@ -32,6 +33,9 @@ public class LyricsSession {
     public static final String TRANSLATING_NOTE = "번역 중...";
     private static final String BLANK = "​";
     private static final String WIDTH_FILLER = "⠀".repeat(48);
+    private static final String CLOCK_SEPARATOR = " — ";
+    public static final String REST = "♪";
+    private static final String FAILED_TRANSLATION = "-";
 
     private final MusicPlayerClient client;
     private final AudioTrack track;
@@ -42,6 +46,7 @@ public class LyricsSession {
     private final Map<Integer, String> translations;
     private final List<String> sources;
     private final String cacheKey;
+    private final boolean translatable;
     private volatile long offsetMs;
     private volatile boolean translating;
     private volatile TranslationJobs.Job job;
@@ -70,6 +75,7 @@ public class LyricsSession {
         for (LyricLine line : lyrics.synced()) this.sources.add(line.text());
         this.cacheKey = TranslationJobs.cacheKey("synced", sources);
         this.translations = this.translator == null ? Map.of() : this.translator.cacheFor(cacheKey);
+        this.translatable = isTranslatable(this.translator, lyrics);
         this.offsetMs = offsetMs;
     }
 
@@ -129,8 +135,7 @@ public class LyricsSession {
 
     private boolean startTranslation() {
         if (translator == null) return false;
-        List<LyricLine> lines = lyrics.synced();
-        if (LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lines))) {
+        if (!translatable) {
             LyricsPresenter.reportSongComplete(client, track);
             return false;
         }
@@ -152,11 +157,20 @@ public class LyricsSession {
         return true;
     }
 
+    public static boolean isTranslatable(@Nullable TranslationClient translator, Lyrics lyrics) {
+        return translator != null && translator.isEnabled()
+                && !LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(lyrics.synced()));
+    }
+
     @Nullable
     private String translationFor(int index) {
-        if (index < 0) return null;
+        if (!translatable) return null;
+        String source = index < 0 || index >= sources.size() || sources.get(index) == null ? "" : sources.get(index);
+        if (source.isBlank()) return REST;
         String cached = translations.get(index);
-        return cached == null || cached.isBlank() ? null : cached;
+        if (cached != null && !cached.isBlank()) return cached;
+        if (!LyricsLanguage.needsTranslation(source)) return source;
+        return cached == null && translating ? null : FAILED_TRANSLATION;
     }
 
     private boolean isPendingTranslation(int index, @Nullable String translation) {
@@ -227,7 +241,7 @@ public class LyricsSession {
         translation = translation == null ? null : DiscordSafe.text(translation, MAX_LINE_LENGTH);
         StringBuilder text = new StringBuilder();
         text.append(previous.isBlank() ? BLANK : "*" + previous + "*").append('\n');
-        text.append("## ").append(current.isBlank() ? "♪" : current).append('\n');
+        text.append("## ").append(current.isBlank() ? REST : current).append('\n');
         if (translation != null && !translation.isBlank()) {
             text.append("-# ").append(translation).append('\n').append(BLANK).append('\n');
         } else if (pendingTranslation) {
@@ -235,11 +249,16 @@ public class LyricsSession {
         }
         text.append(next.isBlank() ? BLANK : "*" + next + "*").append('\n');
         text.append("-# ").append(WIDTH_FILLER).append('\n');
-        text.append("-# ").append(footer == null ? song : song + " · " + footer);
+        text.append("-# ").append(song);
+        if (footer != null) text.append(" · ").append(footer);
+        else if (client != null) text.append(" | ").append(playbackClock(client, track));
         if ((translation != null && !translation.isBlank()) || pendingTranslation) {
-            for (String noteLine : LyricsPresenter.machineTranslationNote(client, translator).split("\n")) {
-                text.append('\n');
-                if (!noteLine.isBlank()) text.append("-# ").append(noteLine);
+            String note = LyricsPresenter.machineTranslationNote(client, translator);
+            if (!note.isBlank()) {
+                for (String noteLine : note.split("\n")) {
+                    text.append('\n');
+                    if (!noteLine.isBlank()) text.append("-# ").append(noteLine);
+                }
             }
         }
         TextDisplay body = TextDisplay.of(text.toString());
@@ -248,6 +267,13 @@ public class LyricsSession {
                 ? Container.of(body)
                 : Container.of(Section.of(Thumbnail.fromUrl(artwork), body));
         return container.withAccentColor(MusicEmbeds.PRIMARY);
+    }
+
+    static String playbackClock(MusicPlayerClient client, AudioTrack track) {
+        long length = track.getInfo().length;
+        long position = Math.max(0, (long) client.getRealPositionMs());
+        if (track.getInfo().isStream || length <= 0) return DurationUtil.formatClock(position / 1000);
+        return DurationUtil.formatClock(Math.min(position, length) / 1000) + CLOCK_SEPARATOR + DurationUtil.formatClock(length / 1000);
     }
 
     private static String lineText(List<LyricLine> lines, int index) {
