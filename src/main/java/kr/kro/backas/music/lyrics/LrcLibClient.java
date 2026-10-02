@@ -2,6 +2,7 @@ package kr.kro.backas.music.lyrics;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import kr.kro.backas.music.cache.DiskCache;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import org.jetbrains.annotations.Nullable;
@@ -32,6 +33,7 @@ public class LrcLibClient {
     private static final String API_BASE = "https://lrclib.net/api/";
     private static final String USER_AGENT = "JDA-Luffia/1.0 (https://github.com/Backas03/JDA-Luffia)";
     private static final long DURATION_TOLERANCE_SEC = 5;
+    private static final int MIN_ARTIST_KEY_LENGTH = 3;
     private static final int RETRY_ATTEMPTS = 4;
     private static final long RETRY_BASE_DELAY_MS = 1000;
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(15);
@@ -54,6 +56,16 @@ public class LrcLibClient {
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
             .build();
+    @Nullable
+    private final SongResolver resolver;
+
+    public LrcLibClient() {
+        this(null);
+    }
+
+    public LrcLibClient(@Nullable SongResolver resolver) {
+        this.resolver = resolver;
+    }
 
     @Nullable
     public Lyrics find(AudioTrackInfo info) throws IOException {
@@ -115,11 +127,88 @@ public class LrcLibClient {
                 break;
             }
         }
+        boolean lengthDiffers = false;
+        if (node == null && resolver != null && !hasCatalogMetadata(info)) {
+            SongResolver.Song song = resolver.resolve(info);
+            if (song != null) {
+                if (!song.artist().isBlank()) {
+                    node = tryGet(failures, "get?track_name=" + encode(song.title()) + "&artist_name=" + encode(song.artist())
+                            + "&duration=" + durationSec);
+                }
+                if (node == null) {
+                    JsonNode results = song.artist().isBlank() ? null
+                            : tryGet(failures, "search?track_name=" + encode(song.title()) + "&artist_name=" + encode(song.artist()));
+                    if (results == null) results = tryGet(failures, "search?track_name=" + encode(song.title()));
+                    ArrayNode same = sameSong(results, song, matchKey(info.title + " " + info.author));
+                    node = pickBest(same, durationSec);
+                    if (node == null) {
+                        node = withPlainFirst(same);
+                        lengthDiffers = node != null;
+                    }
+                }
+            }
+        }
         if (node == null) {
             if (failures.last != null) throw failures.last;
             return null;
         }
-        return toLyrics(node);
+        Lyrics lyrics = toLyrics(node);
+        return lengthDiffers ? plainOnly(lyrics) : lyrics;
+    }
+
+    private static boolean hasCatalogMetadata(AudioTrackInfo info) {
+        return info.uri != null && info.uri.contains("open.spotify.com");
+    }
+
+    static ArrayNode sameSong(@Nullable JsonNode results, SongResolver.Song song, String videoKey) {
+        ArrayNode same = MAPPER.createArrayNode();
+        if (results == null || !results.isArray()) return same;
+        String title = matchKey(song.title());
+        String artist = matchKey(song.artist());
+        if (title.isEmpty()) return same;
+        for (JsonNode candidate : results) {
+            if (candidate.path("plainLyrics").asText("").isBlank() && candidate.path("syncedLyrics").asText("").isBlank()) continue;
+            if (!matchKey(candidate.path("trackName").asText("")).equals(title)) continue;
+            String candidateArtist = matchKey(candidate.path("artistName").asText(""));
+            if (candidateArtist.isEmpty()) continue;
+            boolean namedByAi = !artist.isEmpty() && (candidateArtist.contains(artist) || artist.contains(candidateArtist));
+            boolean namedInVideo = candidateArtist.length() >= MIN_ARTIST_KEY_LENGTH && videoKey.contains(candidateArtist);
+            if (namedByAi || namedInVideo) same.add(candidate);
+        }
+        return same;
+    }
+
+    @Nullable
+    static JsonNode withPlainFirst(ArrayNode candidates) {
+        JsonNode best = null;
+        for (JsonNode candidate : candidates) {
+            if (best == null || (best.path("plainLyrics").asText("").isBlank() && !candidate.path("plainLyrics").asText("").isBlank())) {
+                best = candidate;
+            }
+        }
+        return best;
+    }
+
+    static Lyrics plainOnly(Lyrics lyrics) {
+        String plain = lyrics.plain();
+        if ((plain == null || plain.isBlank()) && lyrics.hasSynced()) {
+            StringBuilder text = new StringBuilder();
+            for (LyricLine line : lyrics.synced()) text.append(line.text()).append('\n');
+            plain = text.toString().strip();
+        }
+        return new Lyrics(lyrics.trackName(), lyrics.artistName(), plain == null || plain.isBlank() ? null : plain, List.of(),
+                lyrics.instrumental());
+    }
+
+    static String matchKey(@Nullable String text) {
+        if (text == null) return "";
+        String normalized = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFKC).toLowerCase(java.util.Locale.ROOT);
+        StringBuilder key = new StringBuilder();
+        for (int i = 0; i < normalized.length(); i++) {
+            char c = normalized.charAt(i);
+            if (Character.isLetterOrDigit(c)) key.append(c);
+        }
+        return key.toString();
     }
 
     private static final class Failures {
@@ -148,7 +237,7 @@ public class LrcLibClient {
         List<String[]> pairs = new ArrayList<>();
         addPair(pairs, channelArtist, title);
         Matcher bracket = BRACKET_TITLE.matcher(title);
-        if (bracket.matches() && !bracket.group(1).isBlank()) addPair(pairs, bracket.group(1), bracket.group(2));
+        if (bracket.matches()) addPair(pairs, bracket.group(1).isBlank() ? channelArtist : bracket.group(1), bracket.group(2));
         Matcher quoted = QUOTED_TITLE.matcher(title);
         if (quoted.matches() && !quoted.group(1).isBlank()) addPair(pairs, quoted.group(1), quoted.group(2));
         for (String separator : new String[]{" - ", " – ", " — ", " _ ", " / ", "/"}) {
