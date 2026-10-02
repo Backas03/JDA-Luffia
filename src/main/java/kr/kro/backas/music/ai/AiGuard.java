@@ -19,6 +19,7 @@ public class AiGuard {
     private final Map<Long, Long> lastUse = new HashMap<>();
     private final Map<Long, Deque<Long>> guildUses = new HashMap<>();
     private volatile boolean enabled = true;
+    private volatile boolean debug;
 
     public AiGuard() {
         this(System::currentTimeMillis);
@@ -34,6 +35,14 @@ public class AiGuard {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public boolean isDebug() {
+        return debug;
+    }
+
+    public void setDebug(boolean debug) {
+        this.debug = debug;
     }
 
     @Nullable

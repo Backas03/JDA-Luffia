@@ -35,6 +35,16 @@ public final class DurationUtil {
         return String.format("%02d", minutes) + ":" + String.format("%02d", seconds);
     }
 
+    public static String formatClock(long seconds) {
+        long hours = seconds / 3600;
+        long minutes = (seconds / 60) % 60;
+        String rest = String.format("%02d", seconds % 60);
+        if (hours != 0) {
+            return hours + ":" + String.format("%02d", minutes) + ":" + rest;
+        }
+        return minutes + ":" + rest;
+    }
+
     public static String parseDuration(Duration duration) {
         long days = duration.getStandardDays();
         long hours = duration.getStandardHours() % 24;
