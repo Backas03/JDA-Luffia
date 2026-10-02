@@ -35,6 +35,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 public final class LyricsPresenter {
 
@@ -44,6 +45,7 @@ public final class LyricsPresenter {
     private static final int MAX_AUTHOR_LENGTH = 250;
     private static final int MESSAGE_TEXT_BUDGET = 5800;
     private static final String TRUNCATED_NOTE = "… (이하 생략)";
+    private static final long CLOCK_INTERVAL_MS = 1000;
     public static final String MACHINE_TRANSLATION_NOTE = "기계 번역한 가사입니다. 올바르지 않을 수 있습니다.";
 
     public static String machineTranslationNote(@Nullable MusicPlayerClient client, @Nullable TranslationClient translator) {
@@ -53,10 +55,19 @@ public final class LyricsPresenter {
     }
 
     public static String translationStatus(@Nullable MusicPlayerClient client, @Nullable TranslationClient translator) {
-        if (translator == null) return "";
+        if (translator == null || !isDebugDisplay()) return "";
         String model = translator.getModelName();
         if (model.isBlank()) return "";
         return translator.computeSummary() + " | " + progressDisplay(client);
+    }
+
+    private static boolean isDebugDisplay() {
+        return Main.getLuffia().getMusicPlayerController().getAiGuard().isDebug();
+    }
+
+    private static String translatingNote(@Nullable MusicPlayerClient client, @Nullable TranslationClient translator) {
+        String status = translationStatus(client, translator);
+        return status.isBlank() ? LyricsSession.TRANSLATING_NOTE : LyricsSession.TRANSLATING_NOTE + "\n" + status;
     }
 
     private static final class SongProgress {
@@ -185,7 +196,9 @@ public final class LyricsPresenter {
                         LyricsSession previous = client.getLyricsSession();
                         if (previous != null && !previous.isForTrack(track)) client.dismissLyrics();
                         else client.stopLyrics("새 가사 표시로 대체되었습니다");
-                        Container initial = LyricsSession.buildView(track, lyrics, -1, null, "가사 동기화 준비 중");
+                        String initialTranslation = LyricsSession.isTranslatable(controller.getTranslationClient(), lyrics)
+                                ? LyricsSession.REST : null;
+                        Container initial = LyricsSession.buildView(track, lyrics, -1, initialTranslation, "가사 동기화 준비 중");
                         sendView.apply(initial).whenComplete((message, sendError) -> {
                             if (sendError != null || message == null) {
                                 LOGGER.warn("failed to send lyrics message", sendError);
@@ -215,37 +228,50 @@ public final class LyricsPresenter {
         boolean willTranslate = translator != null && translator.isEnabled()
                 && !LyricsLanguage.KOREAN.equals(LyricsLanguage.detect(asLines));
         if (translator != null && translator.isEnabled() && !willTranslate) reportSongComplete(client, track);
-        String initialNote = willTranslate
-                ? LyricsSession.TRANSLATING_NOTE + "\n" + translationStatus(client, translator)
-                : null;
+        String initialNote = willTranslate ? translatingNote(client, translator) : null;
         boolean dismissOnEnd = requester == null && liveWanted;
-        sendEmbeds.apply(buildFullEmbeds(track, lines, null, finalFooter, initialNote)).whenComplete((message, sendError) -> {
+        boolean showClock = liveWanted;
+        sendEmbeds.apply(buildFullEmbeds(track, lines, null, clockFooter(client, track, finalFooter, showClock), initialNote)).whenComplete((message, sendError) -> {
             if (sendError != null || message == null) {
                 LOGGER.warn("failed to send full lyrics", sendError);
                 return;
             }
             if (dismissOnEnd) deleteWhenTrackEnds(client, track, message);
+            if (!willTranslate && !showClock) return;
+            String cacheKey = TranslationJobs.cacheKey("plain", lines);
+            Map<Integer, String> cache = willTranslate ? translator.cacheFor(cacheKey) : null;
+            AtomicReference<TranslationJobs.Job> jobRef = new AtomicReference<>();
+            ProgressiveEditor editor = new ProgressiveEditor(message.getChannel().getIdLong(),
+                    showClock ? CLOCK_INTERVAL_MS : ProgressiveEditor.MIN_INTERVAL_MS, () -> {
+                String note = null;
+                if (willTranslate) {
+                    TranslationJobs.Job current = jobRef.get();
+                    boolean translating = current == null || !current.done().isDone();
+                    note = translating
+                            ? translatingNote(client, translator)
+                            : (cache.isEmpty() ? "번역에 실패했습니다" : machineTranslationNote(client, translator));
+                }
+                return message.editMessageEmbeds(buildFullEmbeds(track, lines, cache,
+                        clockFooter(client, track, finalFooter, showClock), note)).submit();
+            });
+            if (showClock) {
+                startClock(client, track, editor, () -> {
+                    if (willTranslate || dismissOnEnd) return;
+                    message.editMessageEmbeds(buildFullEmbeds(track, lines, null, finalFooter, null))
+                            .queue(null, e -> LOGGER.debug("failed to finalize full lyrics", e));
+                });
+            }
             if (!willTranslate) return;
             CompletableFuture.runAsync(() -> {
                 prefetchNext(client);
-                String cacheKey = TranslationJobs.cacheKey("plain", lines);
-                Map<Integer, String> cache = translator.cacheFor(cacheKey);
-                java.util.concurrent.atomic.AtomicReference<TranslationJobs.Job> jobRef = new java.util.concurrent.atomic.AtomicReference<>();
-                ProgressiveEditor editor = new ProgressiveEditor(message.getChannel().getIdLong(), () -> {
-                    TranslationJobs.Job current = jobRef.get();
-                    boolean translating = current == null || !current.done().isDone();
-                    String note = translating
-                            ? LyricsSession.TRANSLATING_NOTE + "\n" + translationStatus(client, translator)
-                            : (cache.isEmpty() ? "번역에 실패했습니다" : machineTranslationNote(client, translator));
-                    message.editMessageEmbeds(buildFullEmbeds(track, lines, cache, finalFooter, note))
-                            .queue(null, e -> LOGGER.debug("progressive lyrics edit failed", e));
-                });
                 TranslationJobs.Job job = TranslationJobs.submit(translator, cacheKey, lines, true,
                         (index, text) -> editor.requestEdit(), TranslationJobs.songContext(track));
                 jobRef.set(job);
                 reportSongJob(client, track, job);
                 ScheduledFuture<?> heartbeat = Main.getLuffia().getMusicPlayerController().getScheduler()
-                        .scheduleAtFixedRate(() -> editor.requestIdleRefresh(5000), 2, 1, TimeUnit.SECONDS);
+                        .scheduleAtFixedRate(() -> {
+                            if (isDebugDisplay()) editor.requestIdleRefresh(5000);
+                        }, 2, 1, TimeUnit.SECONDS);
                 boolean demoted = false;
                 while (!job.done().isDone()) {
                     if (!demoted && !client.isCurrentTrack(track)) {
@@ -291,6 +317,30 @@ public final class LyricsPresenter {
         });
     }
 
+    private static String clockFooter(MusicPlayerClient client, AudioTrack track, String footer, boolean showClock) {
+        if (!showClock || !client.isCurrentTrack(track)) return footer;
+        return LyricsSession.playbackClock(client, track) + " · " + footer;
+    }
+
+    private static void startClock(MusicPlayerClient client, AudioTrack track, ProgressiveEditor editor, Runnable onEnd) {
+        ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getScheduler();
+        AtomicReference<ScheduledFuture<?>> ticker = new AtomicReference<>();
+        AtomicReference<String> shown = new AtomicReference<>(LyricsSession.playbackClock(client, track));
+        AtomicBoolean ended = new AtomicBoolean(false);
+        ticker.set(scheduler.scheduleAtFixedRate(() -> {
+            if (!client.isCurrentTrack(track)) {
+                if (!ended.compareAndSet(false, true)) return;
+                ScheduledFuture<?> self = ticker.get();
+                if (self != null) self.cancel(false);
+                editor.cancel();
+                onEnd.run();
+                return;
+            }
+            String clock = LyricsSession.playbackClock(client, track);
+            if (!clock.equals(shown.getAndSet(clock))) editor.requestEdit();
+        }, 1, 1, TimeUnit.SECONDS));
+    }
+
     private static void deleteWhenTrackEnds(MusicPlayerClient client, AudioTrack track, Message message) {
         ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getScheduler();
         AtomicBoolean deleted = new AtomicBoolean(false);
@@ -305,22 +355,26 @@ public final class LyricsPresenter {
 
     private static final class ProgressiveEditor {
         private static final long MIN_INTERVAL_MS = 2000;
+        private static final long IN_FLIGHT_RETRY_MS = 250;
         private final long channelId;
-        private final Runnable edit;
+        private final long minIntervalMs;
+        private final Supplier<CompletableFuture<?>> edit;
         private final ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getScheduler();
         private long lastEditAt;
         private ScheduledFuture<?> pending;
+        private boolean inFlight;
         private boolean cancelled;
 
-        ProgressiveEditor(long channelId, Runnable edit) {
+        ProgressiveEditor(long channelId, long minIntervalMs, Supplier<CompletableFuture<?>> edit) {
             this.channelId = channelId;
+            this.minIntervalMs = minIntervalMs;
             this.edit = edit;
             this.lastEditAt = System.currentTimeMillis();
         }
 
         synchronized void requestEdit() {
             if (cancelled || pending != null) return;
-            long wait = Math.max(0, lastEditAt + MIN_INTERVAL_MS - System.currentTimeMillis());
+            long wait = Math.max(0, lastEditAt + minIntervalMs - System.currentTimeMillis());
             pending = scheduler.schedule(this::run, wait, TimeUnit.MILLISECONDS);
         }
 
@@ -334,14 +388,30 @@ public final class LyricsPresenter {
             synchronized (this) {
                 pending = null;
                 if (cancelled) return;
+                if (inFlight) {
+                    pending = scheduler.schedule(this::run, IN_FLIGHT_RETRY_MS, TimeUnit.MILLISECONDS);
+                    return;
+                }
                 if (!EditRateLimiter.tryAcquire(channelId)) {
                     long retry = Math.max(500, EditRateLimiter.millisUntilNext(channelId));
                     pending = scheduler.schedule(this::run, retry, TimeUnit.MILLISECONDS);
                     return;
                 }
                 lastEditAt = System.currentTimeMillis();
+                inFlight = true;
             }
-            edit.run();
+            CompletableFuture<?> sent;
+            try {
+                sent = edit.get();
+            } catch (RuntimeException e) {
+                sent = CompletableFuture.failedFuture(e);
+            }
+            sent.whenComplete((result, error) -> {
+                synchronized (this) {
+                    inFlight = false;
+                }
+                if (error != null) LOGGER.debug("progressive lyrics edit failed", error);
+            });
         }
 
         synchronized void cancel() {
