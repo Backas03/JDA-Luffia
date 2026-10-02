@@ -51,6 +51,7 @@ public class TranslationClient {
     private static final int TRANSLATION_GROWTH_SLACK = 30;
     private static final int ALIGN_WINDOW = 3;
     private static final int TOKENS_PER_LINE = 25;
+    private static final long ENDPOINT_RECHECK_SECONDS = 30;
     private static final java.util.regex.Pattern MARKUP_TAG = java.util.regex.Pattern.compile("</?[A-Za-z][A-Za-z0-9-]*(\\s[^<>]*)?/?>");
     private static final java.util.regex.Pattern ALIGNMENT_NOISE = java.util.regex.Pattern.compile(
             "[\\s\\p{Punct}「」『』【】〈〉《》、。・…〜～♪☆★‘’“”]");
@@ -307,6 +308,29 @@ public class TranslationClient {
 
     private static String translationPath(String trackKey) {
         return "translations/" + DiskCache.safeName(trackKey) + ".json";
+    }
+
+    public void startEndpointMonitor(java.util.concurrent.ScheduledExecutorService executor) {
+        if (endpoints.isEmpty()) return;
+        executor.scheduleWithFixedDelay(
+                () -> TranslationJobs.EXECUTOR.execute(this::recheckFailedEndpoints),
+                ENDPOINT_RECHECK_SECONDS, ENDPOINT_RECHECK_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    void recheckFailedEndpoints() {
+        for (LlmEndpoint endpoint : endpoints) {
+            if (!endpoint.isFailed()) continue;
+            try {
+                detect(endpoint);
+            } catch (IOException | RuntimeException e) {
+                continue;
+            }
+            LOGGER.info("translator endpoint {} is reachable again", endpoint.baseUrl());
+            scheduler.wake();
+            if (endpoint.mode() == LlmEndpoint.Mode.LLM && !endpoint.isFallback() && !endpoint.speed().isMeasured(1)) {
+                calibrate(endpoint);
+            }
+        }
     }
 
     private volatile Process fallbackProcess;
