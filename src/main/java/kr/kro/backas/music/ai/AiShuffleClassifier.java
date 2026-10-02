@@ -81,7 +81,17 @@ public class AiShuffleClassifier {
         diskCache.write(DISK_PATH, stored);
     }
 
+    public interface TagProgress {
+        void tagged(int done, int total);
+    }
+
     public Set<AudioTrack> classify(String request, List<AudioTrack> tracks, IntConsumer onProgress) throws IOException {
+        return classify(request, tracks, onProgress, (done, total) -> {
+        });
+    }
+
+    public Set<AudioTrack> classify(String request, List<AudioTrack> tracks, IntConsumer onProgress, TagProgress onTagged)
+            throws IOException {
         String normalized = request.strip().replaceAll("\\s+", " ");
         Set<AudioTrack> matched = Collections.newSetFromMap(new IdentityHashMap<>());
         List<AudioTrack> pending = new ArrayList<>();
@@ -97,8 +107,8 @@ public class AiShuffleClassifier {
         }
         onProgress.accept(done);
         if (pending.isEmpty()) return matched;
-        tagger.tag(pending, tagged -> {
-        });
+        tagger.tag(pending, tagged -> onTagged.tagged(tagged, pending.size()));
+        onProgress.accept(done);
         LOGGER.info("ai shuffle classifying {} track(s), {} cached, request={}", pending.size(), done, normalized);
         int cachedCount = done;
         List<Boolean[]> results = BatchRunner.run(pending, BATCH_SIZE, client.parallelism(),
