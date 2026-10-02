@@ -26,18 +26,23 @@ public class AiShuffleClassifier {
     public static final int MAX_TRACKS = 200;
     private static final int BATCH_SIZE = 20;
     private static final int CACHE_SIZE = 20_000;
-    private static final String DISK_PATH = "ai-classify.json";
+    private static final String DISK_PATH = "ai-classify-v2.json";
     private static final String SCHEMA_NAME = "queue_selection";
     private static final String SYSTEM_PROMPT = String.join("\n",
             "You pick songs from a music queue for a Korean user's request.",
             "The request is written in Korean and says which songs the user wants to hear, e.g. 일본 노래, 보카로 곡, 신나는 노래.",
             "For every numbered track decide whether it fits the request. Loose wording such as 위주로 still means: pick the tracks that fit.",
             TrackHints.HINT_GUIDE,
+            "- tag: the genre and vocal language already decided for this track. Your answer must agree with it:"
+                    + " a track tagged k-pop or k-ballad is a Korean song and never a Japanese song or J-pop,"
+                    + " a track tagged j-pop, j-rock, vocaloid or anime is a Japanese song and never a Korean song or K-pop,"
+                    + " and a track tagged pop or rock by a Western artist is neither.",
             "If the request does not narrow anything down, every track fits.",
             "Output JSON only: {\"r\": [{\"n\": 1, \"m\": true}, {\"n\": 2, \"m\": false}, ...]}",
             "with exactly one object per track, n = the track number, m = whether the track fits the request.");
 
     private final TranslationClient client;
+    private final AiTrackTagger tagger;
     private final DiskCache diskCache;
     private volatile boolean dirty;
     private final Map<String, Boolean> cache = Collections.synchronizedMap(
@@ -48,12 +53,13 @@ public class AiShuffleClassifier {
                 }
             });
 
-    public AiShuffleClassifier(TranslationClient client) {
-        this(client, DiskCache.defaultCache());
+    public AiShuffleClassifier(TranslationClient client, AiTrackTagger tagger) {
+        this(client, tagger, DiskCache.defaultCache());
     }
 
-    AiShuffleClassifier(TranslationClient client, DiskCache diskCache) {
+    AiShuffleClassifier(TranslationClient client, AiTrackTagger tagger, DiskCache diskCache) {
         this.client = client;
+        this.tagger = tagger;
         this.diskCache = diskCache;
         JsonNode stored = diskCache.read(DISK_PATH);
         if (stored != null) {
@@ -91,6 +97,8 @@ public class AiShuffleClassifier {
         }
         onProgress.accept(done);
         if (pending.isEmpty()) return matched;
+        tagger.tag(pending, tagged -> {
+        });
         LOGGER.info("ai shuffle classifying {} track(s), {} cached, request={}", pending.size(), done, normalized);
         int cachedCount = done;
         List<Boolean[]> results = BatchRunner.run(pending, BATCH_SIZE, client.parallelism(),
@@ -114,7 +122,7 @@ public class AiShuffleClassifier {
         StringBuilder user = new StringBuilder();
         user.append("<request>").append(PromptSafe.data(request)).append("</request>\n<tracks>\n");
         for (int i = 0; i < batch.size(); i++) {
-            user.append(i + 1).append(". ").append(TrackHints.describe(batch.get(i).getInfo())).append('\n');
+            user.append(i + 1).append(". ").append(TrackHints.describe(batch.get(i).getInfo(), tagger.cached(batch.get(i)))).append('\n');
         }
         user.append("</tracks>\n");
         JsonNode result = client.requestJson(SYSTEM_PROMPT, user.toString(), SCHEMA_NAME, schema(batch.size()),
