@@ -70,6 +70,18 @@ public final class LyricsLanguage {
         return names.isEmpty() ? "no words" : String.join(" and ", names);
     }
 
+    public static boolean isLatinOnly(String text) {
+        if (text == null) return false;
+        boolean latin = false;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) latin = true;
+            else if ((c >= 0x3040 && c <= 0x30FF) || (c >= 0x4E00 && c <= 0x9FFF) || (c >= 0x0400 && c <= 0x04FF)
+                    || (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0x1100 && c <= 0x11FF) || (c >= 0x3130 && c <= 0x318F)) return false;
+        }
+        return latin;
+    }
+
     public static boolean needsTranslation(String text) {
         if (text == null || text.isBlank()) return false;
         for (int i = 0; i < text.length(); i++) {
