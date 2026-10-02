@@ -39,6 +39,27 @@ class TranslationAcceptanceTest {
     }
 
     @Test
+    void keepsOnlyLatinLinesReturnedUnchanged() {
+        assertTrue(TranslationClient.isKeptOriginal("Oh, woo yeah", "Oh, woo yeah"));
+        assertTrue(TranslationClient.isKeptOriginal(":-D ;-b hey", " :-D ;-b hey "));
+        assertTrue(TranslationClient.isKeptOriginal(":-D ;-b hey", ":-D; ;-b hey"));
+        assertFalse(TranslationClient.isKeptOriginal("Oh baby, don't go", "Oh baby, 가지 마"));
+        assertFalse(TranslationClient.isKeptOriginal("Mwah!", " "));
+        assertFalse(TranslationClient.isKeptOriginal("Oh, woo yeah", "오, 우 예"));
+        assertFalse(TranslationClient.isKeptOriginal("消えない", "消えない"));
+        assertFalse(TranslationClient.isKeptOriginal("まじでSTOP", "まじでSTOP"));
+        assertFalse(TranslationClient.isKeptOriginal("Mwah!", null));
+    }
+
+    @Test
+    void detectsLatinOnlyLines() {
+        assertTrue(LyricsLanguage.isLatinOnly("Mwah!"));
+        assertFalse(LyricsLanguage.isLatinOnly("まじでSTOP"));
+        assertFalse(LyricsLanguage.isLatinOnly("Oh 사랑해"));
+        assertFalse(LyricsLanguage.isLatinOnly("♪ ..."));
+    }
+
+    @Test
     void rejectsLeftoverKana() {
         assertFalse(TranslationClient.isAcceptable("消えない", "消えない"));
     }

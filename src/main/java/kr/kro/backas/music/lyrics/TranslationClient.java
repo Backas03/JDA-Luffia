@@ -51,6 +51,7 @@ public class TranslationClient {
     private static final int TRANSLATION_GROWTH_SLACK = 30;
     private static final int ALIGN_WINDOW = 3;
     private static final int TOKENS_PER_LINE = 25;
+    private static final int TRANSLATION_VERSION = 2;
     private static final long ENDPOINT_RECHECK_SECONDS = 30;
     private static final java.util.regex.Pattern MARKUP_TAG = java.util.regex.Pattern.compile("</?[A-Za-z][A-Za-z0-9-]*(\\s[^<>]*)?/?>");
     private static final java.util.regex.Pattern ALIGNMENT_NOISE = java.util.regex.Pattern.compile(
@@ -64,15 +65,36 @@ public class TranslationClient {
             "- Keep one consistent speaker voice and way of addressing the listener (for example 나/너) across all lines.",
             "- Keep lines short and rhythmic like singable lyrics. Do not add meaning that is not in the original.",
             "- Translate each input line into exactly one Korean line, in the same order.",
-            "- Keep repetitions as repetitions (e.g. 憎い 憎い 憎い -> 미워 미워 미워).",
-            "- Keep interjections and onomatopoeia (ああ -> 아아, Oh -> 오).",
+            "- Slang, internet words and coined phrases: give the real meaning in casual Korean, not the dictionary sense of each part"
+                    + " (逆張り -> 일부러 반대로 굴기, 脈ナシ -> 가망 없음, 推し -> 최애). Translate directly from the source language, never through English.",
+            "- Keep repetitions as repetitions with the same count (憎い 憎い 憎い -> 미워 미워 미워).",
+            "- A line can mix several languages. Translate every part that is not Korean, keep the Korean parts as they are, and never drop or merge parts:"
+                    + " when the same phrase is said in several languages, write the Korean once for each of them"
+                    + " (Merci 고마워 Thank you -> 고마워 고마워 고마워, Ciao こんにちは -> 안녕 안녕).",
+            "- Keep Japanese interjections and onomatopoeia as natural Korean ones (ああ -> 아아).",
+            "- English interjections and sound words (oh, yeah, woo, la la, mwah) stay in English letters, never spelled in Hangul"
+                    + " (Oh, I miss you -> Oh, 보고 싶어).",
             "- Keep proper nouns and names. Keep tone: casual speech stays casual, no polite -습니다 unless the source is polite.",
             "- If a line is already Korean, empty, or has no words, copy it unchanged.",
-            "- Write the output in Korean Hangul only. Never leave Japanese kana, kanji, or Chinese characters in the output; translate them.",
+            "- Never leave Japanese kana, kanji, or Chinese characters in the output; translate them.",
             "- Never add explanations, notes, or romanization.",
             "Output JSON only: {\"t\": [{\"n\": 1, \"s\": \"夜明け\", \"k\": \"translation of line 1\"}, {\"n\": 2, \"s\": \"君の声\", \"k\": \"translation of line 2\"}, ...]}",
             "with exactly one object per input line, n = the input line number, s = the first three characters of that input line copied exactly, k = the Korean translation of that line only.",
             "Never merge or split lines, even when a sentence continues on the next line: every numbered line gets its own translation.",
+            PromptSafe.DATA_RULE);
+    private static final String RETRY_INSTRUCTION = "These lines were not translated into Korean before."
+            + " Do not copy the original text: translate the meaning of every line into Korean, English lines too (Hold my hand -> 내 손을 잡아).";
+    private static final int MAX_SOUND_CANDIDATES = 80;
+    private static final String SOUND_PROMPT = String.join("\n",
+            "You sort lines of song lyrics into two kinds.",
+            "sound: the line is nothing but interjections, sound effects, scat syllables, humming or emoticons, with no sentence meaning"
+                    + " (Oh yeah, La la la, Na na na hey, Mwah!, Bang bang, Woo-hoo).",
+            "A line built around emoticons such as :-D ;-b :-) is always sound, even when letters or a word are stuck to the emoticons"
+                    + " (:-P ;-P girl, :-Dance :-D). A normal sentence that only ends with one emoticon is still words (I love you :)).",
+            "words: every other line. It has real words that say something, even if it is short or also contains an interjection"
+                    + " (Hold my hand, Stay, No more lies, Oh baby don't go, Yeah I know).",
+            "When unsure, answer words.",
+            "Output JSON only: {\"c\": [{\"n\": 1, \"k\": \"sound\"}, {\"n\": 2, \"k\": \"words\"}, ...]} with exactly one object per input line.",
             PromptSafe.DATA_RULE);
     private static final String CALIBRATION_PROMPT = "Write the numbers from 1 to 60 separated by single spaces and nothing else.";
 
@@ -281,7 +303,7 @@ public class TranslationClient {
     private Map<Integer, String> loadTranslations(String trackKey) {
         Map<Integer, String> lines = new ConcurrentHashMap<>();
         JsonNode stored = diskCache.read(translationPath(trackKey));
-        if (stored != null) {
+        if (stored != null && stored.path("v").asInt(1) == TRANSLATION_VERSION) {
             stored.path("lines").fields().forEachRemaining(entry -> {
                 try {
                     String text = entry.getValue().asText("");
@@ -299,6 +321,7 @@ public class TranslationClient {
         if (lines == null || lines.isEmpty()) return;
         ObjectNode stored = MAPPER.createObjectNode();
         stored.put("model", getModelName());
+        stored.put("v", TRANSLATION_VERSION);
         ObjectNode translated = stored.putObject("lines");
         lines.forEach((index, text) -> {
             if (text != null && !text.isBlank()) translated.put(String.valueOf(index), text);
@@ -514,7 +537,7 @@ public class TranslationClient {
         }
         user.append("</lyrics>\n");
         if (retry) {
-            user.append("These lines were not translated into Korean before. Do not copy the original text: translate the meaning of every line into Korean Hangul.\nLanguages:");
+            user.append(RETRY_INSTRUCTION).append("\nLanguages:");
             for (int i = 0; i < lines.size(); i++) {
                 user.append(" line ").append(i + 1).append(": ").append(LyricsLanguage.describe(lines.get(i)))
                         .append(i + 1 < lines.size() ? "," : ".\n");
@@ -615,11 +638,18 @@ public class TranslationClient {
         }
         List<String> result = new ArrayList<>();
         List<Integer> missing = new ArrayList<>();
+        List<String> untranslatedLatin = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
             String source = lines.get(i) == null ? "" : lines.get(i);
             String translated = byNumber.get(i + 1);
             if (source.isBlank() || !LyricsLanguage.needsTranslation(source)) {
                 result.add(source);
+            } else if (isKeptOriginal(source, translated)) {
+                result.add(source);
+                if (depth == 0) {
+                    missing.add(i);
+                    if (!untranslatedLatin.contains(source)) untranslatedLatin.add(source);
+                }
             } else if (!isAcceptable(source, translated)) {
                 result.add(source);
                 missing.add(i);
@@ -629,15 +659,27 @@ public class TranslationClient {
         }
         if (missing.isEmpty() || lines.size() == 1) return result;
         if (cancellation != null && cancellation.isRequested()) throw new IOException("translation cancelled");
+        if (!untranslatedLatin.isEmpty()) {
+            Set<String> soundOnly = soundOnlyLines(lease, untranslatedLatin);
+            missing.removeIf(index -> soundOnly.contains(lines.get(index)));
+            if (missing.isEmpty()) return result;
+            if (cancellation != null && cancellation.isRequested()) throw new IOException("translation cancelled");
+        }
         boolean progressed = missing.size() < lines.size();
         if (missing.size() > 1 && depth < MAX_BATCH_RETRY_DEPTH && (progressed || depth == 0)) {
             List<String> sources = new ArrayList<>(missing.size());
-            for (int index : missing) sources.add(lines.get(index));
-            LOGGER.info("retrying {} of {} lines as one batch (pass {})", missing.size(), lines.size(), depth + 2);
+            for (int index : missing) {
+                if (!sources.contains(lines.get(index))) sources.add(lines.get(index));
+            }
+            LOGGER.info("retrying {} of {} lines as one batch of {} (pass {})", missing.size(), lines.size(), sources.size(), depth + 2);
             List<String> retried = translateWithLlm(lease, sources,
-                    onLine == null ? null : (offset, text) -> onLine.accept(missing.get(offset), text),
+                    onLine == null ? null : (offset, text) -> {
+                        for (int index : missing) {
+                            if (sources.get(offset).equals(lines.get(index))) onLine.accept(index, text);
+                        }
+                    },
                     cancellation, songContext, depth + 1);
-            for (int j = 0; j < missing.size(); j++) result.set(missing.get(j), retried.get(j));
+            for (int index : missing) result.set(index, retried.get(sources.indexOf(lines.get(index))));
             return result;
         }
         int retries = 0;
@@ -682,7 +724,7 @@ public class TranslationClient {
                 continue;
             }
             if (line != n) LOGGER.info("translator line {} realigned to line {} by its source prefix", n, line);
-            byNumber.put(line, cleanTranslation(entry.path("k").asText("")));
+            byNumber.put(line, LyricsRepetition.match(lines.get(line - 1), cleanTranslation(entry.path("k").asText(""))));
             filled.add(line);
         }
         return filled;
@@ -711,6 +753,61 @@ public class TranslationClient {
         if (text == null) return "";
         String normalized = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFKC);
         return ALIGNMENT_NOISE.matcher(normalized).replaceAll("").toLowerCase(java.util.Locale.ROOT);
+    }
+
+    static boolean isKeptOriginal(String source, @Nullable String translated) {
+        return translated != null && !translated.isBlank() && LyricsLanguage.isLatinOnly(source) && !containsHangul(translated);
+    }
+
+    private static boolean containsHangul(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if ((c >= 0xAC00 && c <= 0xD7A3) || (c >= 0x1100 && c <= 0x11FF) || (c >= 0x3130 && c <= 0x318F)) return true;
+        }
+        return false;
+    }
+
+    private Set<String> soundOnlyLines(LlmLease lease, List<String> candidates) {
+        List<String> lines = candidates.subList(0, Math.min(candidates.size(), MAX_SOUND_CANDIDATES));
+        StringBuilder user = new StringBuilder("<lyrics>\n");
+        for (int i = 0; i < lines.size(); i++) {
+            user.append(i + 1).append(". ").append(PromptSafe.lyricLine(lines.get(i))).append('\n');
+        }
+        user.append("</lyrics>\n");
+        ObjectNode schema = MAPPER.createObjectNode();
+        schema.put("type", "object");
+        ObjectNode items = schema.putObject("properties").putObject("c");
+        items.put("type", "array");
+        items.put("minItems", lines.size());
+        items.put("maxItems", lines.size());
+        ObjectNode item = items.putObject("items");
+        item.put("type", "object");
+        ObjectNode itemProperties = item.putObject("properties");
+        ObjectNode number = itemProperties.putObject("n");
+        number.put("type", "integer");
+        number.put("minimum", 1);
+        number.put("maximum", lines.size());
+        ObjectNode kind = itemProperties.putObject("k");
+        kind.put("type", "string");
+        kind.putArray("enum").add("sound").add("words");
+        item.putArray("required").add("n").add("k");
+        schema.putArray("required").add("c");
+        Set<String> soundOnly = new HashSet<>();
+        try {
+            long startedAt = System.currentTimeMillis();
+            JsonNode node = postJson(lease.endpoint(), "/v1/chat/completions",
+                    chatRequest(lease, SOUND_PROMPT, user.toString(), 0.0, 16 * lines.size() + 64, "lyric_line_kinds", schema),
+                    Duration.ofSeconds(120));
+            lease.complete(node.path("usage").path("completion_tokens").asLong(0), System.currentTimeMillis() - startedAt);
+            JsonNode kinds = MAPPER.readTree(node.path("choices").path(0).path("message").path("content").asText("")).path("c");
+            for (JsonNode entry : kinds) {
+                int n = entry.path("n").asInt(-1);
+                if (n >= 1 && n <= lines.size() && "sound".equals(entry.path("k").asText(""))) soundOnly.add(lines.get(n - 1));
+            }
+        } catch (IOException | RuntimeException e) {
+            LOGGER.debug("sound-only line check failed, retrying those lines as translations", e);
+        }
+        return soundOnly;
     }
 
     static boolean isAcceptable(String source, @Nullable String translated) {
@@ -818,7 +915,8 @@ public class TranslationClient {
                     for (int n : collectAligned(List.of(entry), byNumber, lines)) {
                         String source = lines.get(n - 1);
                         String translated = byNumber.get(n);
-                        if (LyricsLanguage.needsTranslation(source) && isAcceptable(source, translated)) {
+                        if (LyricsLanguage.needsTranslation(source) && !isKeptOriginal(source, translated)
+                                && isAcceptable(source, translated)) {
                             onLine.accept(n - 1, translated);
                         }
                     }

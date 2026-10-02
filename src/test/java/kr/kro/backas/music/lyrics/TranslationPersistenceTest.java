@@ -34,6 +34,17 @@ class TranslationPersistenceTest {
     }
 
     @Test
+    void translationsFromAnOlderPromptVersionAreIgnored() {
+        String key = TranslationJobs.cacheKey("synced", List.of("夜明け前の街を"));
+        DiskCache cache = new DiskCache(directory);
+        cache.write("translations/" + DiskCache.safeName(key) + ".json",
+                Map.of("model", "luffia", "lines", Map.of("0", "옛 번역")));
+
+        TranslationClient client = new TranslationClient(null, cache);
+        assertTrue(client.cacheFor(key).isEmpty());
+    }
+
+    @Test
     void cacheKeysAreStableFileSafeAndContentSensitive() {
         String key = TranslationJobs.cacheKey("synced", List.of("a", "b"));
         assertEquals(key, TranslationJobs.cacheKey("synced", List.of("a", "b")));
