@@ -7,14 +7,17 @@ import kr.kro.backas.secret.BotSecret;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.audio.AudioModuleConfig;
+import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.ChunkingFilter;
 import net.dv8tion.jda.api.utils.MemberCachePolicy;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
+import net.dv8tion.jda.api.utils.messages.MessageRequest;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.EnumSet;
 import java.util.Scanner;
 
 public class Main {
@@ -40,6 +43,8 @@ public class Main {
                 LoggerFactory.getLogger("Luffia").debug("await shutdown failed", e);
             }
         }));
+        MessageRequest.setDefaultMentions(EnumSet.noneOf(Message.MentionType.class));
+        MessageRequest.setDefaultMentionRepliedUser(false);
         JDABuilder builder = JDABuilder
                 .createDefault(SharedConstant.ON_DEV ? BotSecret.DEV_TOKEN : BotSecret.TOKEN)
                 .setChunkingFilter(ChunkingFilter.ALL) // enable member chunking for all guilds

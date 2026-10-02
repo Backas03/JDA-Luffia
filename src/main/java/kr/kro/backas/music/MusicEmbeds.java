@@ -7,6 +7,7 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import kr.kro.backas.SharedConstant;
 import kr.kro.backas.music.service.youtube.YoutubeService;
+import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.DurationUtil;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
@@ -21,6 +22,7 @@ public final class MusicEmbeds {
     public static final Color PRIMARY = Color.decode("#5e71ef");
     public static final Color ERROR = Color.decode("#f1554a");
     public static final Color SUCCESS = Color.decode("#57f287");
+    private static final int MAX_PREVIEW_TITLE = 100;
 
     private MusicEmbeds() {
     }
@@ -68,7 +70,8 @@ public final class MusicEmbeds {
                 .addField("재생 시간", durationOf(info), true)
                 .addField("출처", sourceLabel(track), true);
         if (selection != null) {
-            builder.setFooter(MemberUtil.getName(selection.getRequestedMember()));
+            String requester = MemberUtil.getName(selection.getRequestedMember());
+            builder.setFooter(selection.isAiRecommended() ? "AI 추천 · " + requester : requester);
         }
         return builder;
     }
@@ -138,6 +141,20 @@ public final class MusicEmbeds {
             builder.addField("사유", reason.length() > 1000 ? reason.substring(0, 1000) : reason, false);
         }
         return builder;
+    }
+
+    public static String queuePreview(List<AudioTrack> queue, int rows) {
+        StringBuilder preview = new StringBuilder();
+        int shown = Math.min(queue.size(), rows);
+        for (int i = 0; i < shown; i++) {
+            AudioTrackInfo info = queue.get(i).getInfo();
+            String title = DiscordSafe.escaped(info.title, MAX_PREVIEW_TITLE).replace('[', '(').replace(']', ')');
+            preview.append(i + 1).append(". [").append(title).append("](").append(info.uri).append(")\n");
+        }
+        if (queue.size() > shown) {
+            preview.append("... 외 ").append(queue.size() - shown).append("곡");
+        }
+        return preview.toString();
     }
 
     public static EmbedBuilder error(@Nullable Member member, String title, @Nullable String description) {

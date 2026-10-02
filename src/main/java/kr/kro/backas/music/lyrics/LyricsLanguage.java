@@ -1,5 +1,6 @@
 package kr.kro.backas.music.lyrics;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public final class LyricsLanguage {
@@ -42,6 +43,31 @@ public final class LyricsLanguage {
         if (best == han) return CHINESE;
         if (best == cyrillic) return RUSSIAN;
         return ENGLISH;
+    }
+
+    public static String describe(String text) {
+        boolean hangul = false;
+        boolean kana = false;
+        boolean han = false;
+        boolean latin = false;
+        boolean cyrillic = false;
+        if (text != null) {
+            for (int i = 0; i < text.length(); i++) {
+                char c = text.charAt(i);
+                if ((c >= 0xAC00 && c <= 0xD7A3) || (c >= 0x1100 && c <= 0x11FF) || (c >= 0x3130 && c <= 0x318F)) hangul = true;
+                else if (c >= 0x3040 && c <= 0x30FF) kana = true;
+                else if (c >= 0x4E00 && c <= 0x9FFF) han = true;
+                else if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) latin = true;
+                else if (c >= 0x0400 && c <= 0x04FF) cyrillic = true;
+            }
+        }
+        List<String> names = new ArrayList<>();
+        if (kana) names.add("Japanese");
+        else if (han) names.add("Chinese characters");
+        if (cyrillic) names.add("Russian");
+        if (latin) names.add("Latin letters");
+        if (hangul) names.add("Korean");
+        return names.isEmpty() ? "no words" : String.join(" and ", names);
     }
 
     public static boolean needsTranslation(String text) {

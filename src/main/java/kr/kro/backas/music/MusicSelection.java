@@ -10,11 +10,18 @@ public class MusicSelection {
     private final Member requestedMember;
     private final SlashCommandInteractionEvent slashCommandInteractionEvent;
     private final AudioTrack selectedTrack;
+    private final boolean aiRecommended;
 
     public MusicSelection(Member requestedMember, SlashCommandInteractionEvent slashCommandInteractionEvent, AudioTrack selectedTrack) {
+        this(requestedMember, slashCommandInteractionEvent, selectedTrack, false);
+    }
+
+    public MusicSelection(Member requestedMember, SlashCommandInteractionEvent slashCommandInteractionEvent, AudioTrack selectedTrack,
+                          boolean aiRecommended) {
         this.requestedMember = requestedMember;
         this.slashCommandInteractionEvent = slashCommandInteractionEvent;
         this.selectedTrack = selectedTrack;
+        this.aiRecommended = aiRecommended;
     }
 
     public MusicSelection(MusicSearchQueryInfo queryInfo, AudioTrack selectedTrack) {
@@ -31,5 +38,9 @@ public class MusicSelection {
 
     public AudioTrack getSelectedTrack() {
         return selectedTrack;
+    }
+
+    public boolean isAiRecommended() {
+        return aiRecommended;
     }
 }

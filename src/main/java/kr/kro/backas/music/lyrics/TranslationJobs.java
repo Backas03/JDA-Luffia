@@ -1,11 +1,17 @@
 package kr.kro.backas.music.lyrics;
 
+import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
+import kr.kro.backas.music.llm.LlmPriority;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -21,7 +27,7 @@ public final class TranslationJobs {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TranslationJobs.class);
     private static final int CHUNK = 400;
-    private static final long PRIORITY_POLL_MS = 250;
+    private static final int MAX_SONG_CONTEXT = 150;
     private static final Map<String, Job> JOBS = new ConcurrentHashMap<>();
     private static final AtomicInteger THREAD_COUNTER = new AtomicInteger();
     public static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(runnable -> {
@@ -33,16 +39,35 @@ public final class TranslationJobs {
     private TranslationJobs() {
     }
 
+    public static String songContext(AudioTrack track) {
+        String context = track.getInfo().title + " - " + track.getInfo().author;
+        return context.length() > MAX_SONG_CONTEXT ? context.substring(0, MAX_SONG_CONTEXT) : context;
+    }
+
     public static String cacheKey(String prefix, List<String> lines) {
         StringBuilder joined = new StringBuilder();
         for (String line : lines) joined.append(line == null ? "" : line).append('\n');
-        return prefix + ":" + lines.size() + ":" + Integer.toHexString(joined.toString().hashCode());
+        return prefix + "-" + lines.size() + "-" + sha256(joined.toString());
+    }
+
+    static String sha256(String text) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(text.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     public static Job submit(TranslationClient translator, String key, List<String> lines, boolean priority,
                              @Nullable BiConsumer<Integer, String> onLine) {
+        return submit(translator, key, lines, priority, onLine, null);
+    }
+
+    public static Job submit(TranslationClient translator, String key, List<String> lines, boolean priority,
+                             @Nullable BiConsumer<Integer, String> onLine, @Nullable String songContext) {
         Job job = JOBS.compute(key, (k, existing) ->
-                existing != null && !existing.done.isDone() ? existing : new Job(translator, k, lines));
+                existing != null && !existing.done.isDone() ? existing : new Job(translator, k, lines, songContext));
         if (onLine != null) job.listeners.add(onLine);
         boolean fresh = job.started.compareAndSet(false, true);
         if (priority) job.promote();
@@ -50,30 +75,24 @@ public final class TranslationJobs {
         return job;
     }
 
-    private static boolean priorityActive(Job self) {
-        for (Job job : JOBS.values()) {
-            if (job != self && job.priority && !job.cancelled && !job.done.isDone()) return true;
-        }
-        return false;
-    }
-
     public static final class Job {
         private final TranslationClient translator;
         private final String key;
         private final List<String> lines;
+        private final String songContext;
         private final Map<Integer, String> cache;
         private final CompletableFuture<Void> done = new CompletableFuture<>();
         private final List<BiConsumer<Integer, String>> listeners = new CopyOnWriteArrayList<>();
         private final AtomicBoolean started = new AtomicBoolean(false);
         private volatile boolean priority;
         private volatile boolean cancelled;
-        private volatile boolean preempted;
         private volatile TranslationClient.Cancellation inFlight;
 
-        private Job(TranslationClient translator, String key, List<String> lines) {
+        private Job(TranslationClient translator, String key, List<String> lines, @Nullable String songContext) {
             this.translator = translator;
             this.key = key;
             this.lines = List.copyOf(lines);
+            this.songContext = songContext;
             this.cache = translator.cacheFor(key);
         }
 
@@ -104,9 +123,7 @@ public final class TranslationJobs {
         public void promote() {
             if (priority) return;
             priority = true;
-            for (Job other : JOBS.values()) {
-                if (other != this && !other.priority) other.preempt();
-            }
+            translator.wakeScheduler();
         }
 
         public void demote() {
@@ -115,17 +132,12 @@ public final class TranslationJobs {
 
         public void cancel() {
             cancelled = true;
-            abort();
-        }
-
-        private void preempt() {
-            preempted = true;
-            abort();
-        }
-
-        private void abort() {
             TranslationClient.Cancellation current = inFlight;
             if (current != null) current.cancel();
+        }
+
+        private LlmPriority schedulingPriority() {
+            return priority ? LlmPriority.INTERACTIVE : LlmPriority.BACKGROUND;
         }
 
         private List<Integer> pending() {
@@ -150,19 +162,8 @@ public final class TranslationJobs {
         }
 
         private void run() {
-            boolean waiting = false;
             try {
                 while (!cancelled) {
-                    if (!priority && priorityActive(this)) {
-                        if (!waiting) {
-                            waiting = true;
-                            LOGGER.info("translation job {} waiting for the current song", key);
-                        }
-                        sleep(PRIORITY_POLL_MS);
-                        continue;
-                    }
-                    waiting = false;
-                    preempted = false;
                     List<Integer> pending = pending();
                     if (pending.isEmpty()) {
                         LOGGER.info("translation job {} has nothing left to translate", key);
@@ -177,7 +178,8 @@ public final class TranslationJobs {
                     try {
                         if (cancelled) return;
                         List<String> translated = translator.translate("auto", sources,
-                                (offset, text) -> deliver(indices.get(offset), sources.get(offset), text), cancellation);
+                                (offset, text) -> deliver(indices.get(offset), sources.get(offset), text), cancellation,
+                                songContext, this::schedulingPriority);
                         int untranslated = 0;
                         for (int i = 0; i < indices.size(); i++) {
                             deliver(indices.get(i), sources.get(i), translated.get(i));
@@ -192,8 +194,8 @@ public final class TranslationJobs {
                             LOGGER.info("translation job {} cancelled with {} lines cached", key, cache.size());
                             return;
                         }
-                        if (preempted) {
-                            LOGGER.info("lyrics translation for {} preempted, resuming later", key);
+                        if (cancellation.wasPreempted()) {
+                            LOGGER.info("lyrics translation for {} gave its gpu to a user request, resuming", key);
                             continue;
                         }
                         LOGGER.warn("lyrics translation failed for {} ({} lines)", key, indices.size(), e);
@@ -204,15 +206,8 @@ public final class TranslationJobs {
                 }
             } finally {
                 JOBS.remove(key, this);
+                translator.persist(key);
                 done.complete(null);
-            }
-        }
-
-        private static void sleep(long millis) {
-            try {
-                Thread.sleep(millis);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
             }
         }
     }
