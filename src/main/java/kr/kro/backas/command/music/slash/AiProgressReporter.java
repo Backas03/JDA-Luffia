@@ -1,8 +1,10 @@
 package kr.kro.backas.command.music.slash;
 
+import kr.kro.backas.Main;
 import kr.kro.backas.music.ai.AiAgent;
 import kr.kro.backas.music.lyrics.TranslationClient;
 import net.dv8tion.jda.api.entities.MessageEmbed;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,15 +64,17 @@ final class AiProgressReporter implements AiAgent.StatusListener {
     }
 
     private String computeLine() {
-        StringBuilder line = new StringBuilder(translator.computeSummary()).append(" | ");
-        int currentDone = done;
-        int currentTotal = total;
-        if (currentTotal > 0) {
-            line.append(new DecimalFormat("0.00").format(100.0 * currentDone / currentTotal))
-                    .append("% (").append(currentDone).append("/").append(currentTotal).append(")");
-        } else {
-            line.append((System.currentTimeMillis() - startedAt) / 1000).append("초 경과");
+        return computeLine(Main.getLuffia().getMusicPlayerController().getAiGuard().isDebug() ? translator.computeSummary() : null,
+                done, total, (System.currentTimeMillis() - startedAt) / 1000);
+    }
+
+    static String computeLine(@Nullable String summary, int done, int total, long elapsedSeconds) {
+        StringBuilder line = new StringBuilder();
+        if (summary != null && !summary.isBlank()) line.append(summary).append(" | ");
+        if (total > 0) {
+            line.append(new DecimalFormat("0.00").format(100.0 * done / total))
+                    .append("% (").append(done).append("/").append(total).append(") · ");
         }
-        return line.toString();
+        return line.append(elapsedSeconds).append("초 경과").toString();
     }
 }

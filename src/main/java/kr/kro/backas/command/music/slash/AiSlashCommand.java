@@ -172,7 +172,7 @@ public class AiSlashCommand implements SlashCommandSource {
                 .setTitle("AI 가 요청을 처리하고 있습니다")
                 .setDescription(DiscordSafe.escaped(message, MAX_STATUS_LENGTH))
                 .addField("요청", DiscordSafe.escaped(request, MAX_REQUEST_LENGTH), false);
-        if (compute != null) builder.addField(EmbedBuilder.ZERO_WIDTH_SPACE, "-# " + compute, false);
+        if (compute != null) builder.addField(EmbedBuilder.ZERO_WIDTH_SPACE, "-# " + compute.replace("\n", "\n-# "), false);
         return builder.setFooter(SharedConstant.RELEASE_VERSION);
     }
 

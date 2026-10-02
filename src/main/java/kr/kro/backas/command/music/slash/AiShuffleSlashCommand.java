@@ -151,7 +151,7 @@ public class AiShuffleSlashCommand implements SlashCommandSource {
                 .setAuthor(MemberUtil.getName(member))
                 .setTitle("AI 가 대기열을 섞고 있습니다")
                 .setDescription(message);
-        if (compute != null) builder.addField(EmbedBuilder.ZERO_WIDTH_SPACE, "-# " + compute, false);
+        if (compute != null) builder.addField(EmbedBuilder.ZERO_WIDTH_SPACE, "-# " + compute.replace("\n", "\n-# "), false);
         return builder.setFooter(SharedConstant.RELEASE_VERSION);
     }
 
