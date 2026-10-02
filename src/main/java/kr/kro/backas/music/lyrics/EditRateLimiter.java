@@ -15,16 +15,32 @@ public final class EditRateLimiter {
     private EditRateLimiter() {
     }
 
+    private static final long[] NOTHING_UPCOMING = new long[0];
+
     public static boolean tryAcquire(long channelId) {
-        return tryAcquire(channelId, 0);
+        return tryAcquire(channelId, NOTHING_UPCOMING);
     }
 
-    public static boolean tryAcquire(long channelId, int reserve) {
+    public static boolean tryAcquire(long channelId, long[] upcomingEditsAt) {
+        return tryAcquire(channelId, System.currentTimeMillis(), upcomingEditsAt);
+    }
+
+    static boolean tryAcquire(long channelId, long now, long[] upcomingEditsAt) {
         Deque<Long> stamps = HISTORY.computeIfAbsent(channelId, id -> new ArrayDeque<>());
         synchronized (stamps) {
-            long now = System.currentTimeMillis();
             while (!stamps.isEmpty() && now - stamps.peekFirst() >= WINDOW_MS) stamps.pollFirst();
-            if (stamps.size() >= MAX_EDITS_PER_WINDOW - reserve) return false;
+            if (stamps.size() >= MAX_EDITS_PER_WINDOW) return false;
+            for (int k = 0; k < upcomingEditsAt.length; k++) {
+                long windowStart = upcomingEditsAt[k] - WINDOW_MS;
+                int used = now > windowStart ? 1 : 0;
+                for (long stamp : stamps) {
+                    if (stamp > windowStart) used++;
+                }
+                for (int i = 0; i < k; i++) {
+                    if (upcomingEditsAt[i] > windowStart) used++;
+                }
+                if (used >= MAX_EDITS_PER_WINDOW) return false;
+            }
             stamps.addLast(now);
             return true;
         }

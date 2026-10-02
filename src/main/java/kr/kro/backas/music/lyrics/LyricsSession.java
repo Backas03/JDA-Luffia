@@ -29,9 +29,8 @@ public class LyricsSession {
     private static final Logger LOGGER = LoggerFactory.getLogger(LyricsSession.class);
     public static final long TICK_MS = 200;
     public static final long MIN_EDIT_INTERVAL_MS = 1200;
-    private static final long CLOCK_EDIT_INTERVAL_MS = 1000;
-    private static final long CLOCK_EDIT_GUARD_MS = 300;
-    private static final int CLOCK_EDIT_RESERVE = 1;
+    private static final long CLOCK_EDIT_INTERVAL_MS = 800;
+    private static final long POST_EDIT_GAP_MS = 500;
     public static final long DEFAULT_OFFSET_MS = 600;
     public static final String TRANSLATING_NOTE = "번역 중...";
     private static final String BLANK = "​";
@@ -59,6 +58,7 @@ public class LyricsSession {
     private boolean shownPending;
     private String shownClock = "";
     private long lastEditAt;
+    private long lastContentEditAt;
     private final AtomicBoolean editInFlight = new AtomicBoolean(false);
     private final AtomicBoolean stopped = new AtomicBoolean(false);
 
@@ -201,9 +201,17 @@ public class LyricsSession {
             String clock = playbackClock(client, track);
             if (clockOnly && (clock.equals(shownClock) || !hasRoomBeforeNextLine(index, position))) return;
             long now = System.currentTimeMillis();
-            if (now - lastEditAt < (clockOnly ? CLOCK_EDIT_INTERVAL_MS : MIN_EDIT_INTERVAL_MS)) return;
+            if (clockOnly) {
+                if (now - lastEditAt < CLOCK_EDIT_INTERVAL_MS) return;
+            } else if (now - lastContentEditAt < MIN_EDIT_INTERVAL_MS || now - lastEditAt < POST_EDIT_GAP_MS) {
+                return;
+            }
             if (!editInFlight.compareAndSet(false, true)) return;
-            if (!EditRateLimiter.tryAcquire(message.getChannel().getIdLong(), clockOnly ? CLOCK_EDIT_RESERVE : 0)) {
+            long channelId = message.getChannel().getIdLong();
+            boolean acquired = clockOnly
+                    ? EditRateLimiter.tryAcquire(channelId, upcomingLineEdits(index, position, now))
+                    : EditRateLimiter.tryAcquire(channelId);
+            if (!acquired) {
                 editInFlight.set(false);
                 return;
             }
@@ -212,6 +220,7 @@ public class LyricsSession {
             shownPending = pending;
             shownClock = clock;
             lastEditAt = now;
+            if (!clockOnly) lastContentEditAt = now;
             message.editMessageComponents(buildView(client, track, lyrics, index, translation, null, translator, pending))
                     .useComponentsV2(true)
                     .queue(
@@ -230,7 +239,20 @@ public class LyricsSession {
         List<LyricLine> lines = lyrics.synced();
         if (index + 1 >= lines.size()) return true;
         double speed = Math.max(0.1, client.getCurrentPlaySpeed());
-        return (lines.get(index + 1).timeMs() - positionMs) / speed > MIN_EDIT_INTERVAL_MS + CLOCK_EDIT_GUARD_MS;
+        return (lines.get(index + 1).timeMs() - positionMs) / speed > POST_EDIT_GAP_MS + TICK_MS;
+    }
+
+    private long[] upcomingLineEdits(int index, long positionMs, long now) {
+        List<LyricLine> lines = lyrics.synced();
+        double speed = Math.max(0.1, client.getCurrentPlaySpeed());
+        long[] upcoming = new long[EditRateLimiter.MAX_EDITS_PER_WINDOW];
+        int count = 0;
+        for (int i = index + 1; i < lines.size() && count < upcoming.length; i++) {
+            long wait = (long) ((lines.get(i).timeMs() - positionMs) / speed);
+            if (wait > EditRateLimiter.WINDOW_MS) break;
+            upcoming[count++] = now + Math.max(0, wait);
+        }
+        return java.util.Arrays.copyOf(upcoming, count);
     }
 
     private int indexAt(long positionMs) {
@@ -267,8 +289,8 @@ public class LyricsSession {
         text.append(next.isBlank() ? BLANK : "*" + next + "*").append('\n');
         text.append("-# ").append(WIDTH_FILLER).append('\n');
         text.append("-# ").append(song);
-        if (footer != null) text.append(" · ").append(footer);
-        else if (client != null) text.append(" | ").append(playbackClock(client, track));
+        if (footer != null) text.append("\n-# ").append(footer);
+        else if (client != null) text.append("\n-# ").append(playbackClock(client, track));
         if ((translation != null && !translation.isBlank()) || pendingTranslation) {
             String note = LyricsPresenter.translationStatus(client, translator);
             if (!note.isBlank()) {

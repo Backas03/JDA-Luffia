@@ -45,7 +45,7 @@ public final class LyricsPresenter {
     private static final int MAX_AUTHOR_LENGTH = 250;
     private static final int MESSAGE_TEXT_BUDGET = 5800;
     private static final String TRUNCATED_NOTE = "… (이하 생략)";
-    private static final long CLOCK_INTERVAL_MS = 1000;
+    private static final long CLOCK_INTERVAL_MS = 900;
 
     public static String translationStatus(@Nullable MusicPlayerClient client, @Nullable TranslationClient translator) {
         if (translator == null || !isDebugDisplay()) return "";
@@ -349,6 +349,7 @@ public final class LyricsPresenter {
     private static final class ProgressiveEditor {
         private static final long MIN_INTERVAL_MS = 2000;
         private static final long IN_FLIGHT_RETRY_MS = 250;
+        private static final long LIMIT_RETRY_MS = 100;
         private final long channelId;
         private final long minIntervalMs;
         private final Supplier<CompletableFuture<?>> edit;
@@ -386,7 +387,7 @@ public final class LyricsPresenter {
                     return;
                 }
                 if (!EditRateLimiter.tryAcquire(channelId)) {
-                    long retry = Math.max(500, EditRateLimiter.millisUntilNext(channelId));
+                    long retry = Math.max(LIMIT_RETRY_MS, EditRateLimiter.millisUntilNext(channelId));
                     pending = scheduler.schedule(this::run, retry, TimeUnit.MILLISECONDS);
                     return;
                 }
