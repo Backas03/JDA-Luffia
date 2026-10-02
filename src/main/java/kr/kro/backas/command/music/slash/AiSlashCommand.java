@@ -38,7 +38,7 @@ public class AiSlashCommand implements SlashCommandSource {
     public static final String REQUEST_ARGUMENT = "요청";
     private static final int MAX_REQUEST_LENGTH = 200;
     private static final int MAX_PREVIEW_ROWS = 5;
-    private static final int MAX_REPLY_LENGTH = 500;
+    private static final int MAX_REPLY_LENGTH = 1800;
     private static final int MAX_ACTION_LENGTH = 150;
     private static final int MAX_STATUS_LENGTH = 200;
     private static final int MAX_REASON_DEPTH = 4;

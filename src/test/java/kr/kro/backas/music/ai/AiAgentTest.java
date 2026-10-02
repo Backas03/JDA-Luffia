@@ -58,7 +58,7 @@ class AiAgentTest {
                 assertTrue(parameters.path("properties").has(required.asText()), name + " requires unknown " + required.asText());
             }
         }
-        assertEquals(16, names.size());
-        assertTrue(names.containsAll(Set.of("remove_from_queue", "keep_only_in_queue", "play_chart", "add_songs", "set_autoplay", "skip")));
+        assertEquals(17, names.size());
+        assertTrue(names.containsAll(Set.of("remove_from_queue", "keep_only_in_queue", "play_chart", "add_songs", "set_autoplay", "skip", "get_song_info")));
     }
 }
