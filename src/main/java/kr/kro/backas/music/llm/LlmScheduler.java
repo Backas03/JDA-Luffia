@@ -254,9 +254,12 @@ public final class LlmScheduler {
             String label = last != null ? last.label() : endpoints.isEmpty() ? "" : endpoints.get(0).label();
             return (label.isBlank() ? "" : label + " | ") + "0 token/s";
         }
-        long total = Math.round(busy.stream().mapToDouble(EndpointStatus::currentTokensPerSecond).sum());
-        if (busy.size() == 1) return busy.get(0).label() + " | " + total + " token/s";
-        return "GPU " + busy.size() + "대 | 합계 " + total + " token/s";
+        StringBuilder lines = new StringBuilder();
+        for (EndpointStatus status : busy) {
+            if (!lines.isEmpty()) lines.append('\n');
+            lines.append(status.label()).append(" | ").append(Math.round(status.currentTokensPerSecond())).append(" token/s");
+        }
+        return lines.toString();
     }
 
     public LlmEndpoint lastUsed() {

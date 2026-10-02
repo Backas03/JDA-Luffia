@@ -115,7 +115,7 @@ class LlmSchedulerTest {
     }
 
     @Test
-    void summaryNamesTheGpuOrCountsSeveral() throws IOException {
+    void summaryListsEachBusyGpuOnItsOwnLine() throws IOException {
         LlmEndpoint rtx = gpu("NVIDIA GeForce RTX 5080", 3, 85, 60, 45);
         LlmEndpoint radeon = gpu("AMD Radeon RX 7800 XT", 2, 60, 45);
         LlmScheduler scheduler = scheduler(rtx, radeon);
@@ -124,6 +124,6 @@ class LlmSchedulerTest {
         assertEquals("NVIDIA GeForce RTX 5080 | 80 token/s", scheduler.summary());
         LlmLease second = take(scheduler, LlmPriority.INTERACTIVE);
         second.reportLiveSpeed(58);
-        assertEquals("GPU 2대 | 합계 138 token/s", scheduler.summary());
+        assertEquals("NVIDIA GeForce RTX 5080 | 80 token/s\nAMD Radeon RX 7800 XT | 58 token/s", scheduler.summary());
     }
 }
