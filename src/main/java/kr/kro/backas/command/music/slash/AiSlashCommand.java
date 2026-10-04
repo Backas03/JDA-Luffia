@@ -1,10 +1,7 @@
 package kr.kro.backas.command.music.slash;
 
-import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import kr.kro.backas.Main;
-import kr.kro.backas.SharedConstant;
 import kr.kro.backas.command.api.SlashCommandSource;
-import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
 import kr.kro.backas.music.ai.AiAgent;
@@ -12,7 +9,8 @@ import kr.kro.backas.music.lyrics.TranslationJobs;
 import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.MemberUtil;
 import kr.kro.backas.util.OwnerUtil;
-import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.container.Container;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
@@ -22,13 +20,11 @@ import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
-import net.dv8tion.jda.api.entities.MessageEmbed;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -36,13 +32,9 @@ public class AiSlashCommand implements SlashCommandSource {
     private static final Logger LOGGER = LoggerFactory.getLogger(AiSlashCommand.class);
     public static final String COMMAND_NAME = "ai";
     public static final String REQUEST_ARGUMENT = "요청";
-    private static final int MAX_REQUEST_LENGTH = 200;
-    private static final int MAX_PREVIEW_ROWS = 5;
-    private static final int MAX_REPLY_LENGTH = 1800;
-    private static final int MAX_ACTION_LENGTH = 150;
-    private static final int MAX_STATUS_LENGTH = 200;
     private static final int MAX_REASON_DEPTH = 4;
     private static final int MAX_REASON_LENGTH = 1500;
+    private static final String STATUS_TITLE = "AI 가 요청을 처리하고 있습니다";
     private static final String EXAMPLES = """
             이렇게 말해보세요.
             - 요즘 유행하는 jpop 틀어줘
@@ -58,7 +50,7 @@ public class AiSlashCommand implements SlashCommandSource {
         return Commands.slash(COMMAND_NAME, getDescription())
                 .addOptions(new OptionData(OptionType.STRING, REQUEST_ARGUMENT,
                         "하고 싶은 걸 자유롭게 적어주세요 (예: 요즘 유행하는 jpop 틀어줘, 한국 노래 다 빼줘)", true)
-                        .setMaxLength(MAX_REQUEST_LENGTH));
+                        .setMaxLength(AiCards.MAX_REQUEST_LENGTH));
     }
 
     @Override
@@ -66,47 +58,43 @@ public class AiSlashCommand implements SlashCommandSource {
         Member member = event.getMember();
         VoiceChannel voiceChannel = MemberUtil.getJoinedVoiceChannel(member);
         if (voiceChannel == null) {
-            event.replyEmbeds(MusicEmbeds.error(member,
-                    "AI 기능을 사용할 수 없습니다.",
-                    "AI 기능을 사용하려면 음성채팅방에 먼저 참여해주세요.").build()).queue();
+            reject(event, member, "AI 기능을 사용하려면 음성채팅방에 먼저 참여해주세요.", false);
             return;
         }
         MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
         MusicPlayerClient client = controller.findAvailableClient(voiceChannel);
         if (client == null) {
-            event.replyEmbeds(MusicEmbeds.error(member,
-                    "AI 기능을 사용할 수 없습니다.",
-                    "이 서버의 모든 노래봇이 다른 음성채팅방에서 재생 중입니다. 나중에 다시 시도해주세요.").build()).queue();
+            reject(event, member, "이 서버의 모든 노래봇이 다른 음성채팅방에서 재생 중입니다. 나중에 다시 시도해주세요.", false);
             return;
         }
         if (!controller.getTranslationClient().isEnabled()) {
-            event.replyEmbeds(MusicEmbeds.error(member,
-                    "AI 기능을 사용할 수 없습니다.",
-                    "AI 서버가 설정되지 않았습니다. TRANSLATOR_URL 에 LLM 서버를 설정해주세요.").build()).queue();
+            reject(event, member, "AI 서버가 설정되지 않았습니다. TRANSLATOR_URL 에 LLM 서버를 설정해주세요.", false);
             return;
         }
         OptionMapping option = event.getOption(REQUEST_ARGUMENT);
         String request = option == null ? "" : option.getAsString().strip();
         if (request.isEmpty()) {
-            event.replyEmbeds(MusicEmbeds.error(member, "요청을 입력해주세요.", EXAMPLES).build()).queue();
+            event.replyComponents(AiCards.error(member, "요청을 입력해주세요.", EXAMPLES)).useComponentsV2(true).queue();
             return;
         }
         String denied = controller.getAiGuard().tryAcquire(member.getIdLong(), voiceChannel.getGuild().getIdLong(),
                 OwnerUtil.isOwner(member));
         if (denied != null) {
-            event.replyEmbeds(MusicEmbeds.error(member, "AI 기능을 사용할 수 없습니다.", denied).build())
-                    .setEphemeral(true).queue();
+            reject(event, member, denied, true);
             return;
         }
         if (!RUNNING.add(client)) {
-            event.replyEmbeds(MusicEmbeds.error(member,
-                    "AI 기능을 사용할 수 없습니다.",
-                    "이미 AI 가 다른 요청을 처리하고 있습니다. 잠시 후 다시 시도해주세요.").build()).queue();
+            reject(event, member, "이미 AI 가 다른 요청을 처리하고 있습니다. 잠시 후 다시 시도해주세요.", false);
             return;
         }
-        event.replyEmbeds(status(member, request, "요청을 이해하고 있습니다...").build()).queue(
+        event.replyComponents(status(member, request, "요청을 이해하고 있습니다...", null)).useComponentsV2(true).queue(
                 hook -> TranslationJobs.EXECUTOR.execute(() -> handle(event, hook, member, voiceChannel, request, client, controller)),
                 error -> RUNNING.remove(client));
+    }
+
+    private static void reject(SlashCommandInteractionEvent event, Member member, String reason, boolean ephemeral) {
+        event.replyComponents(AiCards.error(member, "AI 기능을 사용할 수 없습니다.", reason))
+                .useComponentsV2(true).setEphemeral(ephemeral).queue();
     }
 
     private void handle(SlashCommandInteractionEvent event, InteractionHook hook, Member member, VoiceChannel voiceChannel,
@@ -114,30 +102,26 @@ public class AiSlashCommand implements SlashCommandSource {
         long startedAt = System.currentTimeMillis();
         SequentialHookEditor editor = new SequentialHookEditor(hook);
         AiProgressReporter reporter = new AiProgressReporter(editor, controller.getTranslationClient(), controller.getScheduler(),
-                "요청을 이해하고 있습니다...", (message, compute) -> status(member, request, message, compute).build());
+                "요청을 이해하고 있습니다...", (message, compute) -> status(member, request, message, compute));
         try {
             AiAgent agent = new AiAgent(controller, client, member, event, voiceChannel, reporter);
             AiAgent.Result result = agent.run(request);
-            MessageEmbed embed = result(member, request, client, result).build();
-            if (result.pendingRemoval() != null) {
-                editor.finish(embed, controller.getAiRemovalConfirmations()
-                        .register(member.getIdLong(), client, result.pendingRemoval().tracks()));
-            } else {
-                editor.finish(embed);
-            }
+            ActionRow buttons = result.pendingRemoval() == null ? null
+                    : controller.getAiRemovalConfirmations().register(member.getIdLong(), client, result.pendingRemoval().tracks());
+            editor.finish(AiCards.result(member, request, client, resultBody(result), !result.actions().isEmpty(), buttons));
             LOGGER.info("ai request user={} guild={} request='{}' actions={} took={}ms", member.getId(),
                     voiceChannel.getGuild().getId(), request, result.actions(), System.currentTimeMillis() - startedAt);
         } catch (IOException e) {
             LOGGER.warn("ai request failed: {}", request, e);
-            editor.finish(MusicEmbeds.error(member,
+            editor.finish(AiCards.error(member,
                     "AI 서버에 연결할 수 없습니다.",
-                    "AI 서버가 꺼져 있거나 응답이 올바르지 않습니다. 잠시 후 다시 시도해주세요.").build());
+                    "AI 서버가 꺼져 있거나 응답이 올바르지 않습니다. 잠시 후 다시 시도해주세요."));
             sendReasonToOwner(hook, member, e);
         } catch (RuntimeException e) {
             LOGGER.warn("ai request failed: {}", request, e);
-            editor.finish(MusicEmbeds.error(member,
+            editor.finish(AiCards.error(member,
                     "AI 요청을 처리하지 못했습니다.",
-                    "처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.").build());
+                    "처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."));
             sendReasonToOwner(hook, member, e);
         } finally {
             reporter.stop();
@@ -161,48 +145,18 @@ public class AiSlashCommand implements SlashCommandSource {
                 .queue(null, e -> LOGGER.debug("failed to send failure reason", e));
     }
 
-    private static EmbedBuilder status(Member member, String request, String message) {
-        return status(member, request, message, null);
+    private static Container status(Member member, String request, String message, @Nullable String compute) {
+        return AiCards.status(member, STATUS_TITLE, request, message, compute);
     }
 
-    private static EmbedBuilder status(Member member, String request, String message, @Nullable String compute) {
-        EmbedBuilder builder = new EmbedBuilder()
-                .setColor(MusicEmbeds.PRIMARY)
-                .setAuthor(MemberUtil.getName(member))
-                .setTitle("AI 가 요청을 처리하고 있습니다")
-                .setDescription(DiscordSafe.escaped(message, MAX_STATUS_LENGTH))
-                .addField("요청", DiscordSafe.escaped(request, MAX_REQUEST_LENGTH), false);
-        if (compute != null) builder.addField(EmbedBuilder.ZERO_WIDTH_SPACE, "-# " + compute.replace("\n", "\n-# "), false);
-        return builder.setFooter(SharedConstant.RELEASE_VERSION);
-    }
-
-    private static EmbedBuilder result(Member member, String request, MusicPlayerClient client, AiAgent.Result result) {
-        String reply = DiscordSafe.escaped(result.reply(), MAX_REPLY_LENGTH);
-        StringBuilder description = new StringBuilder(reply.isBlank()
+    static String resultBody(AiAgent.Result result) {
+        String reply = DiscordSafe.escaped(result.reply(), AiCards.MAX_REPLY_LENGTH);
+        StringBuilder body = new StringBuilder(reply.isBlank()
                 ? (result.actions().isEmpty() ? "요청을 처리하지 못했습니다.\n\n" + EXAMPLES : "요청을 처리했습니다.")
                 : reply);
-        if (!result.actions().isEmpty()) {
-            description.append("\n\n**한 일**");
-            for (String action : result.actions()) {
-                description.append("\n- ").append(DiscordSafe.escaped(action, MAX_ACTION_LENGTH));
-            }
-        }
-        AudioTrack current = client.getCurrentPlaying();
-        if (current != null) {
-            description.append("\n\n**지금 재생**\n").append(DiscordSafe.escaped(current.getInfo().title, 100));
-        }
-        List<AudioTrack> queue = client.getTrackQueue();
-        if (!queue.isEmpty()) {
-            description.append("\n\n**다음 곡**\n").append(MusicEmbeds.queuePreview(queue, MAX_PREVIEW_ROWS));
-        }
-        return new EmbedBuilder()
-                .setColor(result.actions().isEmpty() ? MusicEmbeds.PRIMARY : MusicEmbeds.SUCCESS)
-                .setAuthor(MemberUtil.getName(member))
-                .setTitle("AI 요청 결과")
-                .setDescription(description)
-                .addField("요청", DiscordSafe.escaped(request, MAX_REQUEST_LENGTH), false)
-                .addField("노래 봇", MusicEmbeds.botName(client.getGuild()), true)
-                .setFooter(SharedConstant.RELEASE_VERSION);
+        String actions = AiCards.bullets("한 일", result.actions(), AiCards.MAX_ACTION_LENGTH);
+        if (!actions.isEmpty()) body.append("\n\n").append(actions);
+        return body.toString();
     }
 
     @Override

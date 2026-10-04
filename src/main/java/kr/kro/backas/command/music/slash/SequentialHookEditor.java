@@ -1,7 +1,6 @@
 package kr.kro.backas.command.music.slash;
 
-import net.dv8tion.jda.api.components.actionrow.ActionRow;
-import net.dv8tion.jda.api.entities.MessageEmbed;
+import net.dv8tion.jda.api.components.MessageTopLevelComponent;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,21 +20,15 @@ final class SequentialHookEditor {
         this.hook = hook;
     }
 
-    synchronized void edit(MessageEmbed embed) {
+    synchronized void edit(MessageTopLevelComponent view) {
         if (finished) return;
-        enqueue(() -> hook.editOriginalEmbeds(embed).submit());
+        enqueue(() -> hook.editOriginalComponents(view).useComponentsV2(true).submit());
     }
 
-    synchronized void finish(MessageEmbed embed) {
+    synchronized void finish(MessageTopLevelComponent view) {
         if (finished) return;
         finished = true;
-        enqueue(() -> hook.editOriginalEmbeds(embed).setComponents().submit());
-    }
-
-    synchronized void finish(MessageEmbed embed, ActionRow row) {
-        if (finished) return;
-        finished = true;
-        enqueue(() -> hook.editOriginalEmbeds(embed).setComponents(row).submit());
+        enqueue(() -> hook.editOriginalComponents(view).useComponentsV2(true).submit());
     }
 
     private void enqueue(Supplier<CompletableFuture<?>> request) {
