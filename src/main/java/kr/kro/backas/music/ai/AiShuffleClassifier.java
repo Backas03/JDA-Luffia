@@ -5,7 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import kr.kro.backas.music.cache.DiskCache;
+import kr.kro.backas.music.llm.LlmEndpoint;
+import kr.kro.backas.music.llm.LlmPriority;
 import kr.kro.backas.music.lyrics.TranslationClient;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,7 +26,6 @@ public class AiShuffleClassifier {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AiShuffleClassifier.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    public static final int MAX_TRACKS = 200;
     private static final int BATCH_SIZE = 20;
     private static final int CACHE_SIZE = 20_000;
     private static final String DISK_PATH = "ai-classify-v2.json";
@@ -111,8 +113,8 @@ public class AiShuffleClassifier {
         onProgress.accept(done);
         LOGGER.info("ai shuffle classifying {} track(s), {} cached, request={}", pending.size(), done, normalized);
         int cachedCount = done;
-        List<Boolean[]> results = BatchRunner.run(pending, BATCH_SIZE, client.parallelism(),
-                batch -> requestBatch(normalized, batch), finished -> onProgress.accept(cachedCount + finished));
+        List<Boolean[]> results = BatchRunner.run(pending, BATCH_SIZE, BatchRunner.lanes(client),
+                (gpu, batch) -> requestBatch(normalized, gpu, batch), finished -> onProgress.accept(cachedCount + finished));
         for (int batchIndex = 0; batchIndex < results.size(); batchIndex++) {
             Boolean[] fits = results.get(batchIndex);
             int offset = batchIndex * BATCH_SIZE;
@@ -128,7 +130,7 @@ public class AiShuffleClassifier {
         return matched;
     }
 
-    private Boolean[] requestBatch(String request, List<AudioTrack> batch) throws IOException {
+    private Boolean[] requestBatch(String request, @Nullable LlmEndpoint gpu, List<AudioTrack> batch) throws IOException {
         StringBuilder user = new StringBuilder();
         user.append("<request>").append(PromptSafe.data(request)).append("</request>\n<tracks>\n");
         for (int i = 0; i < batch.size(); i++) {
@@ -136,7 +138,7 @@ public class AiShuffleClassifier {
         }
         user.append("</tracks>\n");
         JsonNode result = client.requestJson(SYSTEM_PROMPT, user.toString(), SCHEMA_NAME, schema(batch.size()),
-                20 * batch.size() + 32);
+                20 * batch.size() + 32, LlmPriority.INTERACTIVE, gpu);
         Boolean[] fits = new Boolean[batch.size()];
         for (JsonNode entry : result.path("r")) {
             int n = entry.path("n").asInt(-1);

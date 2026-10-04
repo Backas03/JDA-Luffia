@@ -53,6 +53,7 @@ public class TranslationClient {
     private static final int TOKENS_PER_LINE = 25;
     private static final int TRANSLATION_VERSION = 2;
     private static final long ENDPOINT_RECHECK_SECONDS = 30;
+    private static final String SPEEDS_PATH = "llm/speeds.json";
     private static final java.util.regex.Pattern MARKUP_TAG = java.util.regex.Pattern.compile("</?[A-Za-z][A-Za-z0-9-]*(\\s[^<>]*)?/?>");
     private static final java.util.regex.Pattern ALIGNMENT_NOISE = java.util.regex.Pattern.compile(
             "[\\s\\p{Punct}「」『』【】〈〉《》、。・…〜～♪☆★‘’“”]");
@@ -105,6 +106,7 @@ public class TranslationClient {
     private final List<LlmEndpoint> endpoints;
     private final LlmScheduler scheduler;
     private final DiskCache diskCache;
+    private String savedSpeeds;
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
     private final Map<String, Map<Integer, String>> cache = Collections.synchronizedMap(
             new LinkedHashMap<>(64, 0.75f, true) {
@@ -122,6 +124,7 @@ public class TranslationClient {
         this.diskCache = diskCache;
         this.endpoints = LlmEndpoints.parse(urls);
         this.scheduler = new LlmScheduler(endpoints);
+        restoreSpeeds();
         for (LlmEndpoint endpoint : endpoints) {
             TranslationJobs.EXECUTOR.execute(() -> {
                 try {
@@ -227,6 +230,45 @@ public class TranslationClient {
         } catch (IOException | RuntimeException e) {
             LOGGER.warn("failed to calibrate {}: {}", endpoint.label(), e.toString());
         }
+        persistSpeeds();
+    }
+
+    private void restoreSpeeds() {
+        JsonNode stored = diskCache.read(SPEEDS_PATH);
+        if (stored == null) return;
+        for (LlmEndpoint endpoint : endpoints) {
+            JsonNode entry = stored.path(endpoint.baseUrl());
+            String model = entry.path("model").asText("");
+            if (!endpoint.preferredModel().isBlank() && !model.isBlank() && !model.equals(endpoint.preferredModel())) continue;
+            entry.path("speeds").fields().forEachRemaining(speed -> {
+                try {
+                    endpoint.speed().restore(Integer.parseInt(speed.getKey()), speed.getValue().asDouble(0));
+                } catch (NumberFormatException ignored) {
+                }
+            });
+            if (endpoint.speed().isMeasured(1)) {
+                LOGGER.info("{} starts from its saved speed of about {} token/s", endpoint.label(), Math.round(endpoint.speed().estimate(1)));
+            }
+        }
+    }
+
+    synchronized void persistSpeeds() {
+        ObjectNode stored = MAPPER.createObjectNode();
+        for (LlmEndpoint endpoint : endpoints) {
+            double[] learned = endpoint.speed().learned();
+            ObjectNode speeds = MAPPER.createObjectNode();
+            for (int level = 1; level < learned.length; level++) {
+                if (learned[level] > 0) speeds.put(String.valueOf(level), Math.round(learned[level] * 10) / 10.0);
+            }
+            if (speeds.isEmpty()) continue;
+            ObjectNode entry = stored.putObject(endpoint.baseUrl());
+            entry.put("model", endpoint.modelId().isBlank() ? endpoint.preferredModel() : endpoint.modelId());
+            entry.set("speeds", speeds);
+        }
+        String serialized = stored.toString();
+        if (stored.isEmpty() || serialized.equals(savedSpeeds)) return;
+        savedSpeeds = serialized;
+        diskCache.write(SPEEDS_PATH, stored);
     }
 
     private void measureCalibration(LlmEndpoint endpoint, Set<LlmEndpoint> others) throws IOException {
@@ -245,8 +287,12 @@ public class TranslationClient {
 
     private <T> T withLease(Supplier<LlmPriority> priority, int estimatedTokens, boolean llmOnly, LeaseCall<T> call)
             throws IOException {
+        return withLease(priority, estimatedTokens, llmOnly, new HashSet<>(), call);
+    }
+
+    private <T> T withLease(Supplier<LlmPriority> priority, int estimatedTokens, boolean llmOnly, Set<LlmEndpoint> excluded,
+                            LeaseCall<T> call) throws IOException {
         if (endpoints.isEmpty()) throw new IOException("translator disabled");
-        Set<LlmEndpoint> excluded = new HashSet<>();
         IOException last = null;
         for (int attempt = 0; attempt < endpoints.size(); attempt++) {
             LlmLease lease = scheduler.acquire(priority, estimatedTokens, excluded);
@@ -336,7 +382,10 @@ public class TranslationClient {
     public void startEndpointMonitor(java.util.concurrent.ScheduledExecutorService executor) {
         if (endpoints.isEmpty()) return;
         executor.scheduleWithFixedDelay(
-                () -> TranslationJobs.EXECUTOR.execute(this::recheckFailedEndpoints),
+                () -> TranslationJobs.EXECUTOR.execute(() -> {
+                    recheckFailedEndpoints();
+                    persistSpeeds();
+                }),
                 ENDPOINT_RECHECK_SECONDS, ENDPOINT_RECHECK_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
     }
 
@@ -350,9 +399,7 @@ public class TranslationClient {
             }
             LOGGER.info("translator endpoint {} is reachable again", endpoint.baseUrl());
             scheduler.wake();
-            if (endpoint.mode() == LlmEndpoint.Mode.LLM && !endpoint.isFallback() && !endpoint.speed().isMeasured(1)) {
-                calibrate(endpoint);
-            }
+            if (endpoint.mode() == LlmEndpoint.Mode.LLM && !endpoint.isFallback()) calibrate(endpoint);
         }
     }
 
@@ -613,14 +660,38 @@ public class TranslationClient {
 
     public JsonNode requestJson(String systemPrompt, String userPrompt, String schemaName, ObjectNode schema,
                                 int maxTokens, LlmPriority priority) throws IOException {
-        return withLease(() -> priority, maxTokens, true, lease -> {
+        return requestJson(systemPrompt, userPrompt, schemaName, schema, maxTokens, priority, null);
+    }
+
+    public JsonNode requestJson(String systemPrompt, String userPrompt, String schemaName, ObjectNode schema,
+                                int maxTokens, LlmPriority priority, @Nullable LlmEndpoint target) throws IOException {
+        LeaseCall<JsonNode> call = lease -> {
             long startedAt = System.currentTimeMillis();
             JsonNode node = postJson(lease.endpoint(), "/v1/chat/completions",
                     chatRequest(lease, systemPrompt, userPrompt, 0.0, maxTokens, schemaName, schema),
                     Duration.ofSeconds(120));
             lease.complete(node.path("usage").path("completion_tokens").asLong(0), System.currentTimeMillis() - startedAt);
             return MAPPER.readTree(node.path("choices").path(0).path("message").path("content").asText(""));
-        });
+        };
+        if (target != null) {
+            Set<LlmEndpoint> others = new HashSet<>(endpoints);
+            others.remove(target);
+            try {
+                return withLease(() -> priority, maxTokens, true, others, call);
+            } catch (IOException e) {
+                if (!target.isFailed()) throw e;
+                LOGGER.info("{} went down, sending its request to another ai server", target.label());
+            }
+        }
+        return withLease(() -> priority, maxTokens, true, call);
+    }
+
+    public List<LlmEndpoint> liveGpus() {
+        List<LlmEndpoint> gpus = new ArrayList<>();
+        for (LlmEndpoint endpoint : endpoints) {
+            if (!endpoint.isFallback() && !endpoint.isFailed() && endpoint.mode() != LlmEndpoint.Mode.NLLB) gpus.add(endpoint);
+        }
+        return gpus;
     }
 
     private static final int MAX_BATCH_RETRY_DEPTH = 2;

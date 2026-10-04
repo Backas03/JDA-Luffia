@@ -69,7 +69,9 @@ public class AiAdminSlashCommand implements SlashCommandSource {
                 .setColor(guard.isEnabled() ? MusicEmbeds.SUCCESS : MusicEmbeds.ERROR)
                 .setTitle("AI 기능: " + (guard.isEnabled() ? "켜짐" : "꺼짐"))
                 .addField("사용 제한", "사용자별 " + AiGuard.USER_COOLDOWN_MS / 1000 + "초, 서버별 시간당 "
-                        + AiGuard.GUILD_HOURLY_LIMIT + "회, 대기열 " + AiGuard.MAX_QUEUE + "곡", false)
+                        + AiGuard.GUILD_HOURLY_LIMIT + "회, 대기열 " + AiGuard.MAX_QUEUE + "곡, AI 셔플 GPU당 "
+                        + AiGuard.SHUFFLE_TRACKS_PER_GPU + "곡 (지금 최대 "
+                        + AiGuard.maxShuffleTracks(translator.liveGpus().size()) + "곡)", false)
                 .addField("지금", translator.computeSummary(), false);
         for (LlmScheduler.EndpointStatus status : translator.scheduler().snapshot()) {
             builder.addField(status.label() + (status.fallback() ? " (CPU 예비)" : ""), describe(status), false);
