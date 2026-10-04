@@ -13,6 +13,7 @@ public class AiGuard {
     public static final long USER_COOLDOWN_MS = 20_000;
     public static final int GUILD_HOURLY_LIMIT = 60;
     public static final int MAX_QUEUE = 200;
+    public static final int SHUFFLE_TRACKS_PER_GPU = 300;
     private static final long HOUR_MS = 3_600_000;
 
     private final LongSupplier clock;
@@ -27,6 +28,10 @@ public class AiGuard {
 
     AiGuard(LongSupplier clock) {
         this.clock = clock;
+    }
+
+    public static int maxShuffleTracks(int gpus) {
+        return SHUFFLE_TRACKS_PER_GPU * Math.max(1, gpus);
     }
 
     public boolean isEnabled() {

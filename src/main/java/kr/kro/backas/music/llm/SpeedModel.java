@@ -39,6 +39,20 @@ public final class SpeedModel {
         return samples[clamp(concurrency)] > 0;
     }
 
+    public synchronized void restore(int concurrency, double tokensPerSecond) {
+        if (concurrency < 1 || concurrency > MAX_LEVEL) return;
+        if (!(tokensPerSecond > 0) || Double.isInfinite(tokensPerSecond)) return;
+        if (samples[concurrency] > 0) return;
+        measured[concurrency] = tokensPerSecond;
+        samples[concurrency] = 1;
+    }
+
+    public synchronized double[] learned() {
+        double[] values = new double[MAX_LEVEL + 1];
+        for (int level = 1; level <= MAX_LEVEL; level++) values[level] = samples[level] > 0 ? measured[level] : 0;
+        return values;
+    }
+
     private static int clamp(int concurrency) {
         return Math.max(1, Math.min(MAX_LEVEL, concurrency));
     }

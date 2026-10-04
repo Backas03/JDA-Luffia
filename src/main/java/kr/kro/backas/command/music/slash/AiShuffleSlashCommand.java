@@ -8,6 +8,7 @@ import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
 import kr.kro.backas.music.ai.AiFlowShuffle;
+import kr.kro.backas.music.ai.AiGuard;
 import kr.kro.backas.music.ai.AiTrackTagger;
 import kr.kro.backas.music.lyrics.TranslationJobs;
 import kr.kro.backas.util.MemberUtil;
@@ -96,7 +97,8 @@ public class AiShuffleSlashCommand implements SlashCommandSource {
         long startedAt = System.currentTimeMillis();
         try {
             List<AudioTrack> queue = client.getTrackQueue();
-            List<AudioTrack> targets = queue.subList(0, Math.min(queue.size(), AiTrackTagger.MAX_TRACKS));
+            List<AudioTrack> targets = queue.subList(0, Math.min(queue.size(),
+                    AiGuard.maxShuffleTracks(controller.getTranslationClient().liveGpus().size())));
             Map<AudioTrack, AiTrackTagger.Tag> tags = controller.getAiTrackTagger().tag(targets, done ->
                     reporter.progress("대기열을 분석하고 있습니다", done, targets.size()));
             LOGGER.info("ai shuffle tagged {} track(s) in {}ms", targets.size(), System.currentTimeMillis() - startedAt);

@@ -6,6 +6,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -64,5 +66,43 @@ class BatchRunnerTest {
         }, finished -> {
         }));
         assertEquals("server down", error.getMessage());
+    }
+
+    @Test
+    void dealsBatchesEvenlyAcrossLanesAndKeepsBatchOrder() throws IOException {
+        Map<String, AtomicInteger> itemsPerLane = new ConcurrentHashMap<>();
+        List<BatchRunner.Lane<String>> lanes = List.of(new BatchRunner.Lane<>("a", 4), new BatchRunner.Lane<>("b", 4));
+        List<Integer> sums = BatchRunner.run(numbers(130), 20, lanes, (lane, batch) -> {
+            itemsPerLane.computeIfAbsent(lane, key -> new AtomicInteger()).addAndGet(batch.size());
+            return batch.stream().mapToInt(Integer::intValue).sum();
+        }, finished -> {
+        });
+        assertEquals(7, sums.size());
+        assertEquals(190, sums.get(0));
+        assertEquals(1245, sums.get(6));
+        assertEquals(70, itemsPerLane.get("a").get());
+        assertEquals(60, itemsPerLane.get("b").get());
+    }
+
+    @Test
+    void eachLaneKeepsItsOwnParallelism() throws IOException {
+        Map<String, AtomicInteger> running = new ConcurrentHashMap<>();
+        Map<String, AtomicInteger> peak = new ConcurrentHashMap<>();
+        List<BatchRunner.Lane<String>> lanes = List.of(new BatchRunner.Lane<>("wide", 3), new BatchRunner.Lane<>("narrow", 1));
+        BatchRunner.run(numbers(120), 10, lanes, (lane, batch) -> {
+            int now = running.computeIfAbsent(lane, key -> new AtomicInteger()).incrementAndGet();
+            peak.computeIfAbsent(lane, key -> new AtomicInteger()).accumulateAndGet(now, Math::max);
+            try {
+                Thread.sleep(30);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            running.get(lane).decrementAndGet();
+            return batch.size();
+        }, finished -> {
+        });
+        assertEquals(1, peak.get("narrow").get());
+        assertTrue(peak.get("wide").get() <= 3);
+        assertTrue(peak.get("wide").get() >= 2);
     }
 }

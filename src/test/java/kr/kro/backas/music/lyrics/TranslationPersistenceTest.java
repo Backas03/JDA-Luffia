@@ -1,6 +1,7 @@
 package kr.kro.backas.music.lyrics;
 
 import kr.kro.backas.music.cache.DiskCache;
+import kr.kro.backas.music.llm.SpeedModel;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -50,5 +51,31 @@ class TranslationPersistenceTest {
         assertEquals(key, TranslationJobs.cacheKey("synced", List.of("a", "b")));
         assertNotEquals(key, TranslationJobs.cacheKey("synced", List.of("a", "c")));
         assertTrue(key.matches("[A-Za-z0-9-]+"));
+    }
+
+    @Test
+    void learnedGpuSpeedsSurviveARestartAndKeepTuning() {
+        String urls = "http://127.0.0.1:1|gpu|test-model|2";
+        TranslationClient first = new TranslationClient(urls, new DiskCache(directory));
+        SpeedModel learned = first.scheduler().endpoints().get(0).speed();
+        learned.record(1, 70);
+        learned.record(2, 50);
+        first.persistSpeeds();
+
+        SpeedModel restarted = new TranslationClient(urls, new DiskCache(directory)).scheduler().endpoints().get(0).speed();
+        assertEquals(70, restarted.estimate(1), 0.001);
+        assertEquals(50, restarted.estimate(2), 0.001);
+        restarted.record(1, 90);
+        assertEquals(76, restarted.estimate(1), 0.001);
+    }
+
+    @Test
+    void savedSpeedsOfAnotherModelAreNotReused() {
+        TranslationClient first = new TranslationClient("http://127.0.0.1:1|gpu|test-model", new DiskCache(directory));
+        first.scheduler().endpoints().get(0).speed().record(1, 70);
+        first.persistSpeeds();
+
+        TranslationClient other = new TranslationClient("http://127.0.0.1:1|gpu|other-model", new DiskCache(directory));
+        assertFalse(other.scheduler().endpoints().get(0).speed().isMeasured(1));
     }
 }
