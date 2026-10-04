@@ -34,8 +34,7 @@ public final class TrackCard {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TrackCard.class);
     static final String LOOKING_UP = "가사를 찾고 있습니다";
-    static final String PLAYING_NOTE = "음악을 재생합니다";
-    static final String PLAYED_NOTE = "재생 완료";
+    static final String PLAYED_NOTE = "재생 완료됨";
     private static final int MAX_AUTHOR_LENGTH = 80;
     private static final long RECOLLAPSE_SECONDS = 3;
 
@@ -45,6 +44,7 @@ public final class TrackCard {
     private final CompletableFuture<Message> message;
     private final AtomicBoolean closed = new AtomicBoolean();
     private volatile List<? extends ContainerChildComponent> lastBody = List.of();
+    private volatile long finishedAt;
 
     private TrackCard(MusicPlayerClient client, AudioTrack track, long channelId, CompletableFuture<Message> message) {
         this.client = client;
@@ -54,7 +54,7 @@ public final class TrackCard {
     }
 
     public static TrackCard send(MusicPlayerClient client, AudioTrack track, MessageChannel channel, @Nullable InteractionHook hook) {
-        Container initial = frame(client, track, List.of(TextDisplay.of("-# " + LOOKING_UP)));
+        Container initial = frame(client, track, List.of(TextDisplay.of("-# " + LOOKING_UP)), 0);
         CompletableFuture<Message> sent = hook != null
                 ? hook.editOriginalComponents(initial).useComponentsV2(true).submit()
                 : channel.sendMessageComponents(initial).useComponentsV2(true).submit();
@@ -84,7 +84,7 @@ public final class TrackCard {
 
     public Container frame(List<? extends ContainerChildComponent> body) {
         lastBody = body;
-        return frame(client, track, body);
+        return frame(client, track, body, finishedAt);
     }
 
     public CompletableFuture<?> edit(Container view, long deadlineAt) {
@@ -103,6 +103,7 @@ public final class TrackCard {
 
     public boolean close() {
         if (!closed.compareAndSet(false, true)) return false;
+        finishedAt = System.currentTimeMillis();
         collapse();
         scheduler().schedule(this::collapse, RECOLLAPSE_SECONDS, TimeUnit.SECONDS);
         return true;
@@ -129,7 +130,7 @@ public final class TrackCard {
         return Main.getLuffia().getMusicPlayerController().getScheduler();
     }
 
-    public static Container frame(MusicPlayerClient client, AudioTrack track, List<? extends ContainerChildComponent> body) {
+    public static Container frame(MusicPlayerClient client, AudioTrack track, List<? extends ContainerChildComponent> body, long finishedAt) {
         boolean playing = !body.isEmpty();
         List<ContainerChildComponent> children = new ArrayList<>();
         children.add(header(client, track, playing));
@@ -138,7 +139,7 @@ public final class TrackCard {
             children.addAll(body);
         }
         children.add(Separator.createDivider(Separator.Spacing.SMALL));
-        children.add(TextDisplay.of("-# " + MusicEmbeds.botName(client.getGuild()) + " · " + SharedConstant.RELEASE_VERSION));
+        children.add(TextDisplay.of(footerText(MusicEmbeds.botName(client.getGuild()), playing ? 0 : finishedAt)));
         return Container.of(children).withAccentColor(MusicEmbeds.PRIMARY);
     }
 
@@ -150,14 +151,18 @@ public final class TrackCard {
     }
 
     static String headerText(AudioTrackInfo info, String source, @Nullable String settings) {
-        StringBuilder text = new StringBuilder(settings != null ? PLAYING_NOTE : PLAYED_NOTE).append('\n');
-        text.append("### ").append(MusicEmbeds.titleLink(info)).append("\n\n");
+        StringBuilder text = new StringBuilder("### ").append(MusicEmbeds.titleLink(info)).append('\n');
         if (info.author != null && !info.author.isBlank()) {
             text.append("-# ").append(DiscordSafe.escaped(info.author, MAX_AUTHOR_LENGTH)).append('\n');
         }
         text.append("-# ").append(info.isStream ? "라이브" : DurationUtil.formatClock(info.length / 1000)).append(" · ").append(source);
         if (settings != null) text.append("\n-# ").append(settings);
         return text.toString();
+    }
+
+    static String footerText(String botName, long finishedAt) {
+        String first = finishedAt > 0 ? botName + " <t:" + finishedAt / 1000 + ":t> " + PLAYED_NOTE : botName;
+        return "-# " + first + "\n-# " + SharedConstant.RELEASE_VERSION;
     }
 
     public static String settingsLine(MusicPlayerClient client) {
