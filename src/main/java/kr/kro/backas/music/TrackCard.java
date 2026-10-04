@@ -42,24 +42,32 @@ public final class TrackCard {
     private final AudioTrack track;
     private final long channelId;
     private final CompletableFuture<Message> message;
+    private final boolean ephemeral;
     private final AtomicBoolean closed = new AtomicBoolean();
     private volatile List<? extends ContainerChildComponent> lastBody = List.of();
     private volatile long finishedAt;
 
-    private TrackCard(MusicPlayerClient client, AudioTrack track, long channelId, CompletableFuture<Message> message) {
+    private TrackCard(MusicPlayerClient client, AudioTrack track, long channelId, CompletableFuture<Message> message, boolean ephemeral) {
         this.client = client;
         this.track = track;
         this.channelId = channelId;
         this.message = message;
+        this.ephemeral = ephemeral;
     }
 
     public static TrackCard send(MusicPlayerClient client, AudioTrack track, MessageChannel channel, @Nullable InteractionHook hook) {
-        Container initial = frame(client, track, List.of(TextDisplay.of("-# " + LOOKING_UP)), 0);
+        return send(client, track, channel, hook, false, LOOKING_UP);
+    }
+
+    public static TrackCard send(MusicPlayerClient client, AudioTrack track, MessageChannel channel, @Nullable InteractionHook hook,
+                                 boolean ephemeral, String note) {
+        List<TextDisplay> body = List.of(TextDisplay.of("-# " + note));
+        Container initial = frame(client, track, body, 0);
         CompletableFuture<Message> sent = hook != null
                 ? hook.editOriginalComponents(initial).useComponentsV2(true).submit()
                 : channel.sendMessageComponents(initial).useComponentsV2(true).submit();
-        TrackCard card = new TrackCard(client, track, channel.getIdLong(), sent);
-        card.lastBody = List.of(TextDisplay.of("-# " + LOOKING_UP));
+        TrackCard card = new TrackCard(client, track, channel.getIdLong(), sent, ephemeral);
+        card.lastBody = body;
         sent.whenComplete((message, error) -> {
             if (error != null) {
                 LOGGER.warn("failed to send track card for {}", track.getInfo().title, error);
@@ -109,14 +117,26 @@ public final class TrackCard {
                 });
     }
 
+    public boolean isEphemeral() {
+        return ephemeral;
+    }
+
     public void delete() {
         closed.set(true);
+        remove();
+    }
+
+    private void remove() {
         message.thenAccept(current -> current.delete().queue(null,
                 error -> LOGGER.debug("failed to delete track card for {}", track.getInfo().title, error)));
     }
 
     public boolean close() {
         if (!closed.compareAndSet(false, true)) return false;
+        if (ephemeral) {
+            remove();
+            return true;
+        }
         finishedAt = System.currentTimeMillis();
         collapse();
         scheduler().schedule(this::collapse, RECOLLAPSE_SECONDS, TimeUnit.SECONDS);
