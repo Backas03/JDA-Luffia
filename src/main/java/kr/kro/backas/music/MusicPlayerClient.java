@@ -65,6 +65,7 @@ public class MusicPlayerClient {
     private volatile long connectRequestedAt;
     private volatile TrackCard trackCard;
     private volatile TrackCard homeCard;
+    private volatile MessageChannel sessionHomeChannel;
 
     public MusicPlayerClient(JDA musicBot, Guild guild, AudioPlayerManager sharedAudioPlayerManager) {
         this.musicBot = musicBot;
@@ -260,7 +261,14 @@ public class MusicPlayerClient {
     private MessageChannel homeChannelFor(AudioTrack track) {
         MusicSelection selection = track.getUserData(MusicSelection.class);
         if (selection == null || selection.getSlashCommandInteractionEvent() == null) return null;
+        MessageChannel session = sessionHomeChannel;
+        if (selection.isAiRecommended() && session != null) return session;
         return selection.getSlashCommandInteractionEvent().getMessageChannel();
+    }
+
+    private void rememberSessionHome(MusicSelection selection) {
+        if (sessionHomeChannel != null || selection.getSlashCommandInteractionEvent() == null) return;
+        sessionHomeChannel = selection.getSlashCommandInteractionEvent().getMessageChannel();
     }
 
     private static String mirrorNote(MessageChannel channel) {
@@ -359,6 +367,7 @@ public class MusicPlayerClient {
         }
         AudioTrack track = selection.getSelectedTrack();
         track.setUserData(selection);
+        rememberSessionHome(selection);
         boolean enqueued;
         if (selection.isAutoplay()) {
             enqueued = musicTrack.enqueueAutoOrPlay(track);
@@ -512,6 +521,7 @@ public class MusicPlayerClient {
         connectRequestedAt = 0;
         trackCard = null;
         homeCard = null;
+        sessionHomeChannel = null;
         autoplay.reset();
         musicTrack.reset();
         resetLyricsPreferences();
