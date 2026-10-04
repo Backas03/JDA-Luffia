@@ -63,6 +63,7 @@ public class MusicPlayerClient {
     private volatile MessageChannel lyricsChannel;
     private volatile long lyricsOffsetMs = LyricsSession.DEFAULT_OFFSET_MS;
     private volatile long connectRequestedAt;
+    private volatile TrackCard trackCard;
 
     public MusicPlayerClient(JDA musicBot, Guild guild, AudioPlayerManager sharedAudioPlayerManager) {
         this.musicBot = musicBot;
@@ -268,7 +269,15 @@ public class MusicPlayerClient {
                     .queue(null, e -> LOGGER.debug("failed to answer the play request", e));
         }
         TrackCard card = TrackCard.send(this, track, channel, hookInChannel ? hook : null);
+        trackCard = card;
         LyricsPresenter.presentOnCard(this, track, card, lyricsOffsetMs);
+    }
+
+    @Nullable
+    public TrackCard getTrackCard(AudioTrack track) {
+        TrackCard card = trackCard;
+        if (card == null || card.isClosed() || !isCurrentTrack(track)) return null;
+        return card.track().getIdentifier().equals(track.getIdentifier()) ? card : null;
     }
 
     public int getVolume() {
@@ -464,6 +473,7 @@ public class MusicPlayerClient {
 
     public void resetSession() {
         connectRequestedAt = 0;
+        trackCard = null;
         autoplay.reset();
         musicTrack.reset();
         resetLyricsPreferences();
