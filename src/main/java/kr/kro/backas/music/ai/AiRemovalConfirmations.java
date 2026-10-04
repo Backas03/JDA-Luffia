@@ -2,16 +2,22 @@ package kr.kro.backas.music.ai;
 
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import kr.kro.backas.music.MusicPlayerClient;
-import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.components.Component;
+import net.dv8tion.jda.api.components.MessageTopLevelComponent;
+import net.dv8tion.jda.api.components.MessageTopLevelComponentUnion;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
-import net.dv8tion.jda.api.entities.MessageEmbed;
+import net.dv8tion.jda.api.components.container.Container;
+import net.dv8tion.jda.api.components.container.ContainerChildComponent;
+import net.dv8tion.jda.api.components.container.ContainerChildComponentUnion;
+import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -48,7 +54,7 @@ public class AiRemovalConfirmations extends ListenerAdapter {
         Pending entry = pending.get(parts[0]);
         if (entry == null || System.currentTimeMillis() - entry.createdAt() > EXPIRE_MS) {
             pending.remove(parts[0]);
-            event.editMessageEmbeds(withNote(event, "확인 시간이 지나서 제거하지 않았습니다.")).setComponents().queue();
+            settle(event, "확인 시간이 지나서 제거하지 않았습니다.");
             return;
         }
         if (event.getUser().getIdLong() != entry.requesterId()) {
@@ -59,17 +65,33 @@ public class AiRemovalConfirmations extends ListenerAdapter {
         if ("yes".equals(parts[1])) {
             int removed = entry.client().removeFromQueue(entry.tracks());
             LOGGER.info("ai removal confirmed by {}: {} track(s)", event.getUser().getId(), removed);
-            event.editMessageEmbeds(withNote(event, removed + "곡을 대기열에서 제거했습니다.")).setComponents().queue();
+            settle(event, removed + "곡을 대기열에서 제거했습니다.");
         } else {
-            event.editMessageEmbeds(withNote(event, "제거를 취소했습니다.")).setComponents().queue();
+            settle(event, "제거를 취소했습니다.");
         }
     }
 
-    private static List<MessageEmbed> withNote(ButtonInteractionEvent event, String note) {
-        List<MessageEmbed> embeds = event.getMessage().getEmbeds();
-        if (embeds.isEmpty()) return List.of(new EmbedBuilder().setDescription(note).build());
-        EmbedBuilder builder = new EmbedBuilder(embeds.get(0));
-        builder.appendDescription("\n\n**→ " + note + "**");
-        return List.of(builder.build());
+    private static void settle(ButtonInteractionEvent event, String note) {
+        event.editComponents(withNote(event.getMessage().getComponents(), note)).useComponentsV2(true).queue();
+    }
+
+    static List<MessageTopLevelComponent> withNote(List<MessageTopLevelComponentUnion> components, String note) {
+        List<MessageTopLevelComponent> out = new ArrayList<>();
+        for (MessageTopLevelComponentUnion top : components) {
+            if (top.getType() == Component.Type.ACTION_ROW) continue;
+            if (top.getType() != Component.Type.CONTAINER) {
+                out.add(top);
+                continue;
+            }
+            Container container = top.asContainer();
+            List<ContainerChildComponent> children = new ArrayList<>();
+            for (ContainerChildComponentUnion child : container.getComponents()) {
+                if (child.getType() != Component.Type.ACTION_ROW) children.add(child);
+            }
+            children.add(TextDisplay.of("**→ " + note + "**"));
+            out.add(Container.of(children).withAccentColor(container.getAccentColorRaw()));
+        }
+        if (out.isEmpty()) out.add(TextDisplay.of(note));
+        return out;
     }
 }

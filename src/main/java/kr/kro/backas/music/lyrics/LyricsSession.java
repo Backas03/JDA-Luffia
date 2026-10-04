@@ -1,6 +1,7 @@
 package kr.kro.backas.music.lyrics;
 
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
+import kr.kro.backas.music.ArtworkColors;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.util.DiscordSafe;
@@ -35,7 +36,7 @@ public class LyricsSession {
     public static final long DEFAULT_OFFSET_MS = 600;
     public static final String TRANSLATING_NOTE = "번역 중...";
     private static final String BLANK = "​";
-    private static final String WIDTH_FILLER = "⠀".repeat(48);
+    private static final String WIDTH_FILLER = "⠀".repeat(120);
     private static final String CLOCK_SEPARATOR = " — ";
     public static final String REST = "♪";
     private static final String FAILED_TRANSLATION = "-";
@@ -43,7 +44,7 @@ public class LyricsSession {
     private final MusicPlayerClient client;
     private final AudioTrack track;
     private final Lyrics lyrics;
-    private final Message message;
+    private final LyricsSurface surface;
     private final ScheduledExecutorService scheduler;
     private final TranslationClient translator;
     private final Map<Integer, String> translations;
@@ -66,14 +67,14 @@ public class LyricsSession {
     public LyricsSession(MusicPlayerClient client,
                          AudioTrack track,
                          Lyrics lyrics,
-                         Message message,
+                         LyricsSurface surface,
                          ScheduledExecutorService scheduler,
                          @Nullable TranslationClient translator,
                          long offsetMs) {
         this.client = client;
         this.track = track;
         this.lyrics = lyrics;
-        this.message = message;
+        this.surface = surface;
         this.scheduler = scheduler;
         this.translator = translator == null || !translator.isEnabled() ? null : translator;
         this.sources = new ArrayList<>(lyrics.synced().size());
@@ -109,9 +110,11 @@ public class LyricsSession {
     public void stop(String reason) {
         if (!halt()) return;
         try {
-            message.editMessageComponents(buildView(client, track, lyrics, shownIndex, translationFor(shownIndex), reason, translator, false))
-                    .useComponentsV2(true)
-                    .queue(null, e -> {});
+            surface.edit(view(shownIndex, translationFor(shownIndex), reason, false),
+                            System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS)
+                    .whenComplete((result, error) -> {
+                        if (error != null) LOGGER.debug("failed to finalize lyrics message", error);
+                    });
         } catch (RuntimeException e) {
             LOGGER.debug("failed to finalize lyrics message", e);
         }
@@ -119,7 +122,11 @@ public class LyricsSession {
 
     public void dismiss() {
         if (!halt()) return;
-        deleteMessage(message);
+        surface.dismiss();
+    }
+
+    public void detach() {
+        halt();
     }
 
     static void deleteMessage(Message message) {
@@ -185,6 +192,10 @@ public class LyricsSession {
         return LyricsLanguage.needsTranslation(text);
     }
 
+    private Container view(int index, @Nullable String translation, @Nullable String footer, boolean pending) {
+        return surface.frame(body(client, track, lyrics, index, translation, footer, translator, pending, surface.showsSong()));
+    }
+
     private void tick() {
         try {
             if (stopped.get()) return;
@@ -203,7 +214,7 @@ public class LyricsSession {
             String clock = playbackClock(client, track);
             if (clockOnly && (clock.equals(shownClock) || !hasRoomBeforeNextLine(index, position))) return;
             long now = System.currentTimeMillis();
-            long channelId = message.getChannel().getIdLong();
+            long channelId = surface.channelId();
             if (clockOnly) {
                 if (now - lastEditAt < CLOCK_EDIT_INTERVAL_MS || !EditRateLimiter.extrasAllowed(channelId)) return;
             } else if (now - lastContentEditAt < MIN_EDIT_INTERVAL_MS || now - lastEditAt < POST_EDIT_GAP_MS) {
@@ -225,16 +236,13 @@ public class LyricsSession {
             shownClock = clock;
             lastEditAt = now;
             if (!clockOnly) lastContentEditAt = now;
-            message.editMessageComponents(buildView(client, track, lyrics, index, translation, null, translator, pending))
-                    .useComponentsV2(true)
-                    .deadline(now + EditRateLimiter.EDIT_DEADLINE_MS)
-                    .queue(
-                            m -> editInFlightSince.compareAndSet(now, 0),
-                            e -> {
-                                editInFlightSince.compareAndSet(now, 0);
-                                if (EditRateLimiter.isHeldBack(e)) EditRateLimiter.reportHeldBack(channelId, e.getClass().getSimpleName());
-                                else LOGGER.debug("lyrics edit failed", e);
-                            });
+            surface.edit(view(index, translation, null, pending), now + EditRateLimiter.EDIT_DEADLINE_MS)
+                    .whenComplete((result, error) -> {
+                        editInFlightSince.compareAndSet(now, 0);
+                        if (error == null) return;
+                        if (EditRateLimiter.isHeldBack(error)) EditRateLimiter.reportHeldBack(channelId, error.getClass().getSimpleName());
+                        else LOGGER.debug("lyrics edit failed", error);
+                    });
         } catch (RuntimeException e) {
             LOGGER.warn("lyrics tick failed", e);
             stop("가사 표시 중 오류가 발생했습니다");
@@ -272,17 +280,24 @@ public class LyricsSession {
     }
 
     public static Container buildView(AudioTrack track, Lyrics lyrics, int index, @Nullable String translation, @Nullable String footer) {
-        return buildView(null, track, lyrics, index, translation, footer, null, false);
+        return hookFrame(track, body(null, track, lyrics, index, translation, footer, null, false, true));
     }
 
-    public static Container buildView(@Nullable MusicPlayerClient client, AudioTrack track, Lyrics lyrics, int index,
-                                      @Nullable String translation,
-                                      @Nullable String footer, @Nullable TranslationClient translator, boolean pendingTranslation) {
+    static Container hookFrame(AudioTrack track, TextDisplay body) {
+        String artwork = MusicEmbeds.thumbnailOf(track);
+        Container container = artwork == null
+                ? Container.of(body)
+                : Container.of(Section.of(Thumbnail.fromUrl(artwork), body));
+        return container.withAccentColor(ArtworkColors.of(artwork));
+    }
+
+    static TextDisplay body(@Nullable MusicPlayerClient client, AudioTrack track, Lyrics lyrics, int index,
+                            @Nullable String translation, @Nullable String footer, @Nullable TranslationClient translator,
+                            boolean pendingTranslation, boolean withSong) {
         List<LyricLine> lines = lyrics.synced();
         String previous = lineText(lines, index - 1);
         String current = lineText(lines, index);
         String next = lineText(lines, index + 1);
-        String song = DiscordSafe.text(track.getInfo().author + " - " + track.getInfo().title, MAX_SONG_LENGTH);
         translation = translation == null ? null : DiscordSafe.text(translation, MAX_LINE_LENGTH);
         StringBuilder text = new StringBuilder();
         text.append(previous.isBlank() ? BLANK : "*" + previous + "*").append('\n');
@@ -293,8 +308,10 @@ public class LyricsSession {
             text.append("-# ").append(TRANSLATING_NOTE).append('\n').append(BLANK).append('\n');
         }
         text.append(next.isBlank() ? BLANK : "*" + next + "*").append('\n');
-        text.append("-# ").append(WIDTH_FILLER).append('\n');
-        text.append("-# ").append(song);
+        text.append("-# ").append(WIDTH_FILLER);
+        if (withSong) {
+            text.append("\n-# ").append(DiscordSafe.text(track.getInfo().author + " - " + track.getInfo().title, MAX_SONG_LENGTH));
+        }
         if (footer != null) text.append("\n-# ").append(footer);
         else if (client != null) text.append("\n-# ").append(playbackClock(client, track));
         if ((translation != null && !translation.isBlank()) || pendingTranslation) {
@@ -306,12 +323,7 @@ public class LyricsSession {
                 }
             }
         }
-        TextDisplay body = TextDisplay.of(text.toString());
-        String artwork = MusicEmbeds.thumbnailOf(track);
-        Container container = artwork == null
-                ? Container.of(body)
-                : Container.of(Section.of(Thumbnail.fromUrl(artwork), body));
-        return container.withAccentColor(MusicEmbeds.PRIMARY);
+        return TextDisplay.of(text.toString());
     }
 
     static String playbackClock(MusicPlayerClient client, AudioTrack track) {

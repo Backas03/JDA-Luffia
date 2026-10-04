@@ -23,6 +23,7 @@ public final class MusicEmbeds {
     public static final Color ERROR = Color.decode("#f1554a");
     public static final Color SUCCESS = Color.decode("#57f287");
     private static final int MAX_PREVIEW_TITLE = 100;
+    private static final int MAX_LINK_TITLE = 80;
 
     private MusicEmbeds() {
     }
@@ -54,6 +55,12 @@ public final class MusicEmbeds {
 
     public static String botName(@Nullable Guild guild) {
         return guild == null ? "노래봇" : MemberUtil.getName(guild.getSelfMember());
+    }
+
+    public static String titleLink(AudioTrackInfo info) {
+        String title = DiscordSafe.escaped(info.title, MAX_LINK_TITLE).replace('[', '(').replace(']', ')');
+        if (info.uri == null || info.uri.isBlank()) return title;
+        return "[" + title + "](" + info.uri + ")";
     }
 
     private static EmbedBuilder trackBase(AudioTrack track, Guild guild) {

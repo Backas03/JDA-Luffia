@@ -5,10 +5,12 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import kr.kro.backas.Main;
 import kr.kro.backas.SharedConstant;
 import kr.kro.backas.command.api.SlashCommandSource;
+import kr.kro.backas.music.ArtworkColors;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
 import kr.kro.backas.music.MusicSelection;
+import kr.kro.backas.music.TrackCard;
 import kr.kro.backas.music.ai.AiAutoplay;
 import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.DurationUtil;
@@ -40,7 +42,6 @@ public class QueueSlashCommand implements SlashCommandSource {
     static final int MAX_VIEW_ROWS = 10;
     static final int MAX_THUMBNAIL_ROWS = 5;
     static final int MAX_AUTO_ROWS = AiAutoplay.AUTO_QUEUE_SIZE;
-    static final int PROGRESS_WIDTH = 14;
     private static final int MAX_TITLE_LENGTH = 80;
     private static final int MAX_NAME_LENGTH = 40;
 
@@ -97,7 +98,7 @@ public class QueueSlashCommand implements SlashCommandSource {
 
         List<ContainerChildComponent> children = new ArrayList<>();
         children.add(artwork == null ? nowPlaying : Section.of(Thumbnail.fromUrl(artwork), nowPlaying));
-        children.add(TextDisplay.of("-# " + String.join(" · ", settings(client))));
+        children.add(TextDisplay.of("-# " + TrackCard.settingsLine(client)));
         children.add(Separator.createDivider(Separator.Spacing.SMALL));
 
         List<AudioTrack> queue = client.getTrackQueue();
@@ -110,7 +111,7 @@ public class QueueSlashCommand implements SlashCommandSource {
         }
         children.add(Separator.createDivider(Separator.Spacing.SMALL));
         children.add(TextDisplay.of("-# " + MusicEmbeds.botName(client.getGuild()) + " · " + SharedConstant.RELEASE_VERSION));
-        return Container.of(children).withAccentColor(MusicEmbeds.PRIMARY);
+        return Container.of(children).withAccentColor(ArtworkColors.of(artwork));
     }
 
     private static void addList(List<ContainerChildComponent> children, String title, @Nullable String note,
@@ -120,8 +121,7 @@ public class QueueSlashCommand implements SlashCommandSource {
         List<AudioTrack> visible = tracks.subList(0, shown);
         Set<String> requesters = requesters(visible);
         String single = requesters.size() == 1 && !tracks.isEmpty() ? requesters.iterator().next() : null;
-        children.add(TextDisplay.of(heading(title, tracks.size(), totalLength(tracks), single)
-                + (note == null ? "" : "\n-# " + note)));
+        children.add(TextDisplay.of(heading(title, tracks.size(), totalLength(tracks), single, note)));
         if (tracks.isEmpty()) return;
 
         StringBuilder text = new StringBuilder();
@@ -160,12 +160,14 @@ public class QueueSlashCommand implements SlashCommandSource {
         return names;
     }
 
-    static String heading(String title, int count, @Nullable String length, @Nullable String requester) {
-        if (count == 0) return "**" + title + "** · 비어 있음";
-        StringBuilder text = new StringBuilder("**").append(title).append("** · ").append(count).append("곡");
-        if (length != null) text.append(" · ").append(length);
-        if (requester != null && !requester.isEmpty()) text.append(" · 요청 ").append(requester);
-        return text.toString();
+    static String heading(String title, int count, @Nullable String length, @Nullable String requester, @Nullable String note) {
+        if (count == 0) return "**" + title + "**\n-# 비어 있음";
+        List<String> small = new ArrayList<>();
+        if (length != null) small.add(length);
+        if (requester != null && !requester.isEmpty()) small.add("요청 " + requester);
+        if (note != null && !note.isBlank()) small.add(note);
+        String text = "**" + title + "** | " + count + "곡";
+        return small.isEmpty() ? text : text + "\n-# " + String.join(" · ", small);
     }
 
     static String rowText(int number, String link, List<String> details) {
@@ -174,14 +176,6 @@ public class QueueSlashCommand implements SlashCommandSource {
 
     static String overflow(int total, int shown) {
         return total > shown ? "-# 외 " + (total - shown) + "곡" : "";
-    }
-
-    static String progressBar(long positionMs, long lengthMs, int width) {
-        long bounded = Math.max(0, Math.min(positionMs, lengthMs));
-        int marker = lengthMs <= 0 ? 0 : (int) Math.round((double) bounded / lengthMs * (width - 1));
-        StringBuilder bar = new StringBuilder(width);
-        for (int i = 0; i < width; i++) bar.append(i < marker ? '━' : i == marker ? '●' : '─');
-        return bar.toString();
     }
 
     @Nullable
@@ -204,25 +198,12 @@ public class QueueSlashCommand implements SlashCommandSource {
     private static String progress(MusicPlayerClient client, AudioTrackInfo info) {
         long position = Math.max(0, (long) client.getRealPositionMs());
         if (info.isStream || info.length <= 0) return DurationUtil.formatClock(position / 1000) + " · 라이브";
-        return progressBar(position, info.length, PROGRESS_WIDTH) + " " + DurationUtil.formatClock(Math.min(position, info.length) / 1000)
+        return DurationUtil.formatClock(Math.min(position, info.length) / 1000)
                 + " / " + DurationUtil.formatClock(info.length / 1000);
     }
 
-    private static List<String> settings(MusicPlayerClient client) {
-        List<String> settings = new ArrayList<>();
-        settings.add("볼륨 " + client.getVolume() + "%");
-        settings.add(client.getRepeatModeName());
-        if (Math.abs(client.getCurrentPlaySpeed() - 1.0) > 0.001) settings.add(client.getCurrentPlaySpeed() + "배속");
-        if (client.getKaraokeMode().isActive()) settings.add("노래방 " + client.getKaraokeMode().getName());
-        if (!client.getCurrentEqualizer().isFlat()) settings.add("이퀄라이저 " + client.getCurrentEqualizer().getName());
-        settings.add("AI 추천 " + autoplayStatus(client));
-        return settings;
-    }
-
     private static String link(AudioTrackInfo info) {
-        String title = DiscordSafe.escaped(info.title, MAX_TITLE_LENGTH).replace('[', '(').replace(']', ')');
-        if (info.uri == null || info.uri.isBlank()) return title;
-        return "[" + title + "](" + info.uri + ")";
+        return MusicEmbeds.titleLink(info);
     }
 
     private static String requesterOf(MusicSelection selection) {
@@ -255,7 +236,7 @@ public class QueueSlashCommand implements SlashCommandSource {
                 .addField("볼륨", client.getVolume() + "%", true)
                 .addField("노래방모드", client.getKaraokeMode().getName(), true)
                 .addField("이퀄라이저", client.getCurrentEqualizer().getName(), true)
-                .addField("AI 추천", autoplayStatus(client), true);
+                .addField("AI 추천", TrackCard.autoplayStatus(client), true);
         List<AudioTrack> queue = client.getTrackQueue();
         if (!queue.isEmpty()) {
             builder.addField("", "아래는 대기열 목록입니다 (" + queue.size() + "곡)", false);
@@ -279,15 +260,6 @@ public class QueueSlashCommand implements SlashCommandSource {
             builder.addField("다음 추천 (" + autoQueue.size() + "곡)", MusicEmbeds.queuePreview(autoQueue, MAX_QUEUE_ROWS), false);
         }
         return builder;
-    }
-
-    private static String autoplayStatus(MusicPlayerClient client) {
-        AiAutoplay autoplay = client.getAutoplay();
-        if (!autoplay.isEnabled()) return "꺼짐";
-        if (!Main.getLuffia().getMusicPlayerController().getTranslationClient().isAvailable()) return "켜짐 (AI 서버 연결 안 됨)";
-        String criteria = autoplay.getCriteria();
-        if (!criteria.isBlank()) return "켜짐 (" + criteria + ")";
-        return autoplay.isExplicit() ? "켜짐" : "켜짐 (기본)";
     }
 
     @Override
