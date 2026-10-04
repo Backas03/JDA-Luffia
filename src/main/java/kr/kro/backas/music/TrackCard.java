@@ -170,9 +170,9 @@ public final class TrackCard {
     public static Container frame(MusicPlayerClient client, AudioTrack track, List<? extends ContainerChildComponent> body, long finishedAt) {
         boolean playing = !body.isEmpty();
         List<ContainerChildComponent> children = new ArrayList<>();
-        String artwork = MusicEmbeds.thumbnailOf(track);
-        if (artwork != null && ArtworkColors.isWide(artwork)) {
-            children.add(MediaGallery.of(MediaGalleryItem.fromUrl(artwork)));
+        String banner = MusicEmbeds.bannerOf(track);
+        if (banner != null && ArtworkColors.isWide(banner)) {
+            children.add(MediaGallery.of(MediaGalleryItem.fromUrl(banner)));
             children.add(headerText(client, track, playing));
         } else {
             children.add(header(client, track, playing));

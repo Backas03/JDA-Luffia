@@ -18,6 +18,13 @@ public class YoutubeService {
     }
 
     @Nullable
+    public static String getBannerURL(@Nullable String url) {
+        String videoId = extractVideoId(url);
+        if (videoId == null || videoId.isBlank()) return null;
+        return "https://img.youtube.com/vi/" + videoId + "/maxresdefault.jpg";
+    }
+
+    @Nullable
     public static String extractVideoId(@Nullable String url) {
         if (url == null) return null;
         Matcher matcher = VIDEO_ID_PATTERN.matcher(url);
