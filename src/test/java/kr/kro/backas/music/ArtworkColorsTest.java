@@ -6,6 +6,7 @@ import java.awt.Color;
 import java.awt.image.BufferedImage;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ArtworkColorsTest {
@@ -55,5 +56,24 @@ class ArtworkColorsTest {
         Color edge = new Color(decoded.getRGB(5, ArtworkColors.BANNER_HEIGHT / 2));
         assertTrue(centre.getRed() > 150, centre.toString());
         assertTrue(edge.getRed() < centre.getRed(), edge + " vs " + centre);
+    }
+
+    @Test
+    void letterboxedYoutubeThumbnailsAreDetectedAndCroppedToTheCover() {
+        BufferedImage padded = image(960, 540, new Color(60, 20, 20));
+        java.util.Random random = new java.util.Random(7);
+        for (int y = 0; y < 540; y++) {
+            for (int x = 210; x < 750; x++) padded.setRGB(x, y, new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256)).getRGB());
+        }
+        assertTrue(ArtworkColors.hasFlatSides(padded));
+        BufferedImage cropped = ArtworkColors.cropCenterSquare(padded);
+        assertEquals(540, cropped.getWidth());
+        assertEquals(540, cropped.getHeight());
+
+        BufferedImage photo = image(960, 540, Color.BLACK);
+        for (int y = 0; y < 540; y++) {
+            for (int x = 0; x < 960; x++) photo.setRGB(x, y, new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256)).getRGB());
+        }
+        assertFalse(ArtworkColors.hasFlatSides(photo));
     }
 }

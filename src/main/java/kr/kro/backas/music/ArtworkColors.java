@@ -44,6 +44,8 @@ public final class ArtworkColors {
     private static final float DISPLAY_MIN_BRIGHTNESS = 0.45f;
     private static final float DISPLAY_MIN_SATURATION = 0.35f;
     private static final double WIDE_RATIO = 1.4;
+    private static final double SIDE_BAND = 0.15;
+    private static final double FLAT_SIDE_DEVIATION = 14;
     static final int BANNER_WIDTH = 960;
     static final int BANNER_HEIGHT = 540;
     private static final int BLUR_SIZE = 24;
@@ -140,7 +142,40 @@ public final class ArtworkColors {
         BufferedImage image = ImageIO.read(new ByteArrayInputStream(response.body()));
         if (image == null) throw new IOException("unsupported artwork format");
         boolean wide = image.getHeight() > 0 && (double) image.getWidth() / image.getHeight() >= WIDE_RATIO;
+        if (wide && hasFlatSides(image)) {
+            image = cropCenterSquare(image);
+            wide = false;
+        }
         return new Artwork(dominant(image), true, wide ? null : composeBanner(image));
+    }
+
+    static boolean hasFlatSides(BufferedImage image) {
+        int band = Math.max(1, (int) (image.getWidth() * SIDE_BAND));
+        return isFlat(image, 0, band) && isFlat(image, image.getWidth() - band, image.getWidth());
+    }
+
+    private static boolean isFlat(BufferedImage image, int fromX, int toX) {
+        int step = Math.max(1, image.getHeight() / SAMPLE_SIZE);
+        double sum = 0;
+        double squares = 0;
+        int count = 0;
+        for (int y = 0; y < image.getHeight(); y += step) {
+            for (int x = fromX; x < toX; x += step) {
+                int rgb = image.getRGB(x, y);
+                double luma = 0.299 * ((rgb >> 16) & 0xFF) + 0.587 * ((rgb >> 8) & 0xFF) + 0.114 * (rgb & 0xFF);
+                sum += luma;
+                squares += luma * luma;
+                count++;
+            }
+        }
+        if (count == 0) return false;
+        double mean = sum / count;
+        return Math.sqrt(Math.max(0, squares / count - mean * mean)) < FLAT_SIDE_DEVIATION;
+    }
+
+    static BufferedImage cropCenterSquare(BufferedImage image) {
+        int side = Math.min(image.getWidth(), image.getHeight());
+        return image.getSubimage((image.getWidth() - side) / 2, (image.getHeight() - side) / 2, side, side);
     }
 
     static byte[] composeBanner(BufferedImage image) throws IOException {
