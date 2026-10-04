@@ -275,9 +275,12 @@ public class MusicPlayerController extends ListenerAdapter {
         return null;
     }
 
+    private static String clientKey(JDA bot, Guild guild) {
+        return bot.getSelfUser().getId() + ":" + guild.getId();
+    }
+
     private MusicPlayerClient clientFor(JDA bot, Guild guild) {
-        String key = bot.getSelfUser().getId() + ":" + guild.getId();
-        return clients.computeIfAbsent(key, k -> {
+        return clients.computeIfAbsent(clientKey(bot, guild), k -> {
             LOGGER.info("music client created for {} in {} ({})", bot.getSelfUser().getName(), guild.getName(), guild.getId());
             return new MusicPlayerClient(bot, guild, sourceRegistry.getAudioPlayerManager());
         });
@@ -302,6 +305,12 @@ public class MusicPlayerController extends ListenerAdapter {
         public void onGuildVoiceUpdate(@NotNull GuildVoiceUpdateEvent event) {
             if (event.getMember().getIdLong() != event.getJDA().getSelfUser().getIdLong()) return;
             updatePresence(event.getJDA());
+            if (event.getChannelLeft() == null || event.getChannelJoined() != null) return;
+            MusicPlayerClient client = clients.get(clientKey(event.getJDA(), event.getGuild()));
+            if (client == null) return;
+            LOGGER.info("music bot {} left {} in {} ({}), resetting session", event.getJDA().getSelfUser().getName(),
+                    event.getChannelLeft().getName(), event.getGuild().getName(), event.getGuild().getId());
+            client.onLeftVoiceChannel();
         }
     }
 
