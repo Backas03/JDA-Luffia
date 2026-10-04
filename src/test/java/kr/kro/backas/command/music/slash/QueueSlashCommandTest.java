@@ -31,15 +31,6 @@ class QueueSlashCommandTest {
     }
 
     @Test
-    void progressBarMovesTheMarkerFromStartToEnd() {
-        assertEquals("●─────────", QueueSlashCommand.progressBar(0, 100, 10));
-        assertEquals("━━━━━●────", QueueSlashCommand.progressBar(50, 100, 10));
-        assertEquals("━━━━━━━━━●", QueueSlashCommand.progressBar(100, 100, 10));
-        assertEquals("━━━━━━━━━●", QueueSlashCommand.progressBar(250, 100, 10));
-        assertEquals("●─────────", QueueSlashCommand.progressBar(10, 0, 10));
-    }
-
-    @Test
     void totalLengthReadsNaturally() {
         assertEquals("45초", QueueSlashCommand.totalLength(45_000));
         assertEquals("7분", QueueSlashCommand.totalLength(7 * 60_000 + 20_000));

@@ -40,7 +40,6 @@ public class QueueSlashCommand implements SlashCommandSource {
     static final int MAX_VIEW_ROWS = 10;
     static final int MAX_THUMBNAIL_ROWS = 5;
     static final int MAX_AUTO_ROWS = AiAutoplay.AUTO_QUEUE_SIZE;
-    static final int PROGRESS_WIDTH = 14;
     private static final int MAX_TITLE_LENGTH = 80;
     private static final int MAX_NAME_LENGTH = 40;
 
@@ -176,14 +175,6 @@ public class QueueSlashCommand implements SlashCommandSource {
         return total > shown ? "-# 외 " + (total - shown) + "곡" : "";
     }
 
-    static String progressBar(long positionMs, long lengthMs, int width) {
-        long bounded = Math.max(0, Math.min(positionMs, lengthMs));
-        int marker = lengthMs <= 0 ? 0 : (int) Math.round((double) bounded / lengthMs * (width - 1));
-        StringBuilder bar = new StringBuilder(width);
-        for (int i = 0; i < width; i++) bar.append(i < marker ? '━' : i == marker ? '●' : '─');
-        return bar.toString();
-    }
-
     @Nullable
     static String totalLength(List<AudioTrack> tracks) {
         long total = 0;
@@ -204,7 +195,7 @@ public class QueueSlashCommand implements SlashCommandSource {
     private static String progress(MusicPlayerClient client, AudioTrackInfo info) {
         long position = Math.max(0, (long) client.getRealPositionMs());
         if (info.isStream || info.length <= 0) return DurationUtil.formatClock(position / 1000) + " · 라이브";
-        return progressBar(position, info.length, PROGRESS_WIDTH) + " " + DurationUtil.formatClock(Math.min(position, info.length) / 1000)
+        return DurationUtil.formatClock(Math.min(position, info.length) / 1000)
                 + " / " + DurationUtil.formatClock(info.length / 1000);
     }
 
