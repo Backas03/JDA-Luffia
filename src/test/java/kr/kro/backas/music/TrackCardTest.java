@@ -12,16 +12,15 @@ class TrackCardTest {
     }
 
     @Test
-    void headerLooksLikeTheOldPlayEmbedWhilePlaying() {
-        assertEquals("**DECO*27**\n## [DECO*27 - Monitoring](https://youtu.be/id)\n음악을 재생합니다\n"
-                        + "**노래 봇** 김노래#6163 · **재생 시간** 3분 2초 · **출처** YouTube",
-                TrackCard.headerText(info("DECO*27 - Monitoring", "DECO*27", 182_000, false), "김노래#6163", "YouTube", true));
+    void headerFollowsTheQueueViewStyleWithAPlayingNoteOnTop() {
+        assertEquals("-# 음악을 재생합니다\n### [DECO*27 - ヴァンパイア](https://youtu.be/id)\nDECO*27\n-# 3:00 · YouTube · AI 추천 · 박카스 · 노래 봇 김노래#6163",
+                TrackCard.headerText(info("DECO*27 - ヴァンパイア", "DECO*27", 180_000, false), "김노래#6163", "YouTube", "AI 추천 · 박카스", true));
     }
 
     @Test
-    void collapsedHeaderDropsThePlayingNoteAndMissingArtist() {
-        assertEquals("## [Radio](https://youtu.be/id)\n**노래 봇** 김노래 · **재생 시간** 실시간 스트리밍 · **출처** YouTube",
-                TrackCard.headerText(info("Radio", "", 0, true), "김노래", "YouTube", false));
+    void finishedHeaderSaysPlayedAndSkipsMissingArtistOrRequester() {
+        assertEquals("-# 재생 완료\n### [Radio](https://youtu.be/id)\n-# 라이브 · YouTube · 노래 봇 김노래",
+                TrackCard.headerText(info("Radio", "", 0, true), "김노래", "YouTube", null, false));
     }
 
     @Test

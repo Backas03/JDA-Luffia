@@ -97,6 +97,7 @@ public class AiAutoplay {
         this.enabled = true;
         this.explicit = true;
         LOGGER.info("ai autoplay started in guild {} with criteria '{}', diverse artists {}", client.getGuildId(), this.criteria, diverse);
+        client.refreshTrackCard();
         requestRefill();
     }
 
@@ -105,6 +106,7 @@ public class AiAutoplay {
         enabled = false;
         explicit = false;
         client.clearAutoQueue();
+        client.refreshTrackCard();
         return wasEnabled;
     }
 

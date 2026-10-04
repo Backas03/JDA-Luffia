@@ -9,6 +9,7 @@ import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
 import kr.kro.backas.music.MusicSelection;
+import kr.kro.backas.music.TrackCard;
 import kr.kro.backas.music.ai.AiAutoplay;
 import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.DurationUtil;
@@ -96,7 +97,7 @@ public class QueueSlashCommand implements SlashCommandSource {
 
         List<ContainerChildComponent> children = new ArrayList<>();
         children.add(artwork == null ? nowPlaying : Section.of(Thumbnail.fromUrl(artwork), nowPlaying));
-        children.add(TextDisplay.of("-# " + String.join(" · ", settings(client))));
+        children.add(TextDisplay.of("-# " + TrackCard.settingsLine(client)));
         children.add(Separator.createDivider(Separator.Spacing.SMALL));
 
         List<AudioTrack> queue = client.getTrackQueue();
@@ -200,17 +201,6 @@ public class QueueSlashCommand implements SlashCommandSource {
                 + " / " + DurationUtil.formatClock(info.length / 1000);
     }
 
-    private static List<String> settings(MusicPlayerClient client) {
-        List<String> settings = new ArrayList<>();
-        settings.add("볼륨 " + client.getVolume() + "%");
-        settings.add(client.getRepeatModeName());
-        if (Math.abs(client.getCurrentPlaySpeed() - 1.0) > 0.001) settings.add(client.getCurrentPlaySpeed() + "배속");
-        if (client.getKaraokeMode().isActive()) settings.add("노래방 " + client.getKaraokeMode().getName());
-        if (!client.getCurrentEqualizer().isFlat()) settings.add("이퀄라이저 " + client.getCurrentEqualizer().getName());
-        settings.add("AI 추천 " + autoplayStatus(client));
-        return settings;
-    }
-
     private static String link(AudioTrackInfo info) {
         return MusicEmbeds.titleLink(info);
     }
@@ -245,7 +235,7 @@ public class QueueSlashCommand implements SlashCommandSource {
                 .addField("볼륨", client.getVolume() + "%", true)
                 .addField("노래방모드", client.getKaraokeMode().getName(), true)
                 .addField("이퀄라이저", client.getCurrentEqualizer().getName(), true)
-                .addField("AI 추천", autoplayStatus(client), true);
+                .addField("AI 추천", TrackCard.autoplayStatus(client), true);
         List<AudioTrack> queue = client.getTrackQueue();
         if (!queue.isEmpty()) {
             builder.addField("", "아래는 대기열 목록입니다 (" + queue.size() + "곡)", false);
@@ -269,15 +259,6 @@ public class QueueSlashCommand implements SlashCommandSource {
             builder.addField("다음 추천 (" + autoQueue.size() + "곡)", MusicEmbeds.queuePreview(autoQueue, MAX_QUEUE_ROWS), false);
         }
         return builder;
-    }
-
-    private static String autoplayStatus(MusicPlayerClient client) {
-        AiAutoplay autoplay = client.getAutoplay();
-        if (!autoplay.isEnabled()) return "꺼짐";
-        if (!Main.getLuffia().getMusicPlayerController().getTranslationClient().isAvailable()) return "켜짐 (AI 서버 연결 안 됨)";
-        String criteria = autoplay.getCriteria();
-        if (!criteria.isBlank()) return "켜짐 (" + criteria + ")";
-        return autoplay.isExplicit() ? "켜짐" : "켜짐 (기본)";
     }
 
     @Override
