@@ -192,7 +192,7 @@ public final class TrackCard {
         boolean playing = !body.isEmpty();
         List<ContainerChildComponent> children = new ArrayList<>();
         String banner = MusicEmbeds.bannerOf(track);
-        if (banner != null && ArtworkColors.isWide(banner)) {
+        if (banner != null && ArtworkColors.isAvailable(banner)) {
             children.add(MediaGallery.of(MediaGalleryItem.fromUrl(banner)));
             children.add(headerText(client, track, playing));
         } else {
