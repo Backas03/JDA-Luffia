@@ -5,10 +5,19 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.MemoryCacheImageOutputStream;
+import java.awt.AlphaComposite;
 import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.Image;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -17,6 +26,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -25,7 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class ArtworkColors {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ArtworkColors.class);
-    private static final int CACHE_SIZE = 500;
+    private static final int CACHE_SIZE = 120;
     private static final int MAX_BYTES = 5 * 1024 * 1024;
     private static final int SAMPLE_SIZE = 64;
     private static final float MIN_SATURATION = 0.18f;
@@ -33,11 +43,24 @@ public final class ArtworkColors {
     private static final float MAX_BRIGHTNESS = 0.97f;
     private static final float DISPLAY_MIN_BRIGHTNESS = 0.45f;
     private static final float DISPLAY_MIN_SATURATION = 0.35f;
+    private static final double WIDE_RATIO = 1.4;
+    static final int BANNER_WIDTH = 960;
+    static final int BANNER_HEIGHT = 540;
+    private static final int BLUR_SIZE = 24;
+    private static final float BACKDROP_SHADE = 0.55f;
+    private static final float JPEG_QUALITY = 0.85f;
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
-    record Artwork(Color color, boolean available) {
+
+    record Artwork(Color color, boolean available, @Nullable byte[] banner) {
     }
 
-    private static final Artwork FALLBACK = new Artwork(MusicEmbeds.PRIMARY, false);
+    public record Banner(@Nullable String url, @Nullable byte[] data) {
+        public boolean isFile() {
+            return data != null;
+        }
+    }
+
+    private static final Artwork FALLBACK = new Artwork(MusicEmbeds.PRIMARY, false, null);
     private static final Map<String, Artwork> CACHE = Collections.synchronizedMap(new LinkedHashMap<>(64, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, Artwork> eldest) {
@@ -64,13 +87,25 @@ public final class ArtworkColors {
         return cached != null && cached.available();
     }
 
+    @Nullable
+    public static Banner bannerFor(@Nullable String url) {
+        if (url == null || url.isBlank()) return null;
+        Artwork cached = CACHE.get(url);
+        if (cached == null) {
+            warm(url);
+            return null;
+        }
+        if (!cached.available()) return null;
+        return cached.banner() == null ? new Banner(url, null) : new Banner(null, cached.banner());
+    }
+
     public static void warm(@Nullable String url) {
         if (url == null || url.isBlank() || CACHE.containsKey(url) || !LOADING.add(url)) return;
         TranslationJobs.EXECUTOR.execute(() -> {
             try {
                 CACHE.put(url, fetch(url));
             } catch (IOException | RuntimeException e) {
-                LOGGER.debug("artwork color lookup failed for {}: {}", url, e.toString());
+                LOGGER.debug("artwork lookup failed for {}: {}", url, e.toString());
                 CACHE.put(url, FALLBACK);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -88,7 +123,49 @@ public final class ArtworkColors {
         }
         BufferedImage image = ImageIO.read(new ByteArrayInputStream(response.body()));
         if (image == null) throw new IOException("unsupported artwork format");
-        return new Artwork(dominant(image), true);
+        boolean wide = image.getHeight() > 0 && (double) image.getWidth() / image.getHeight() >= WIDE_RATIO;
+        return new Artwork(dominant(image), true, wide ? null : composeBanner(image));
+    }
+
+    static byte[] composeBanner(BufferedImage image) throws IOException {
+        BufferedImage canvas = new BufferedImage(BANNER_WIDTH, BANNER_HEIGHT, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = canvas.createGraphics();
+        try {
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            double cover = Math.max((double) BANNER_WIDTH / image.getWidth(), (double) BANNER_HEIGHT / image.getHeight());
+            int coverWidth = (int) Math.ceil(image.getWidth() * cover);
+            int coverHeight = (int) Math.ceil(image.getHeight() * cover);
+            int blurHeight = Math.max(1, BLUR_SIZE * image.getHeight() / Math.max(1, image.getWidth()));
+            Image blurred = image.getScaledInstance(BLUR_SIZE, blurHeight, Image.SCALE_AREA_AVERAGING);
+            graphics.drawImage(blurred, (BANNER_WIDTH - coverWidth) / 2, (BANNER_HEIGHT - coverHeight) / 2, coverWidth, coverHeight, null);
+            graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, BACKDROP_SHADE));
+            graphics.setColor(Color.BLACK);
+            graphics.fillRect(0, 0, BANNER_WIDTH, BANNER_HEIGHT);
+            graphics.setComposite(AlphaComposite.SrcOver);
+            int fitWidth = Math.max(1, image.getWidth() * BANNER_HEIGHT / Math.max(1, image.getHeight()));
+            graphics.drawImage(image, (BANNER_WIDTH - fitWidth) / 2, 0, fitWidth, BANNER_HEIGHT, null);
+        } finally {
+            graphics.dispose();
+        }
+        return jpeg(canvas);
+    }
+
+    private static byte[] jpeg(BufferedImage image) throws IOException {
+        Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("jpg");
+        if (!writers.hasNext()) throw new IOException("no jpeg writer");
+        ImageWriter writer = writers.next();
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (MemoryCacheImageOutputStream output = new MemoryCacheImageOutputStream(bytes)) {
+            ImageWriteParam params = writer.getDefaultWriteParam();
+            params.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+            params.setCompressionQuality(JPEG_QUALITY);
+            writer.setOutput(output);
+            writer.write(null, new IIOImage(image, null, null), params);
+        } finally {
+            writer.dispose();
+        }
+        return bytes.toByteArray();
     }
 
     static Color dominant(BufferedImage image) {

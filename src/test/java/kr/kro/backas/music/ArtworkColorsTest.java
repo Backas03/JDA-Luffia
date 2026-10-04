@@ -44,4 +44,16 @@ class ArtworkColorsTest {
         assertTrue(hsb[2] >= 0.45f, color.toString());
         assertEquals(MusicEmbeds.PRIMARY, ArtworkColors.of(null));
     }
+
+    @Test
+    void squareArtworkBecomesASixteenByNineBannerWithTheArtCentred() throws Exception {
+        byte[] banner = ArtworkColors.composeBanner(image(100, 100, new Color(200, 30, 40)));
+        BufferedImage decoded = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(banner));
+        assertEquals(ArtworkColors.BANNER_WIDTH, decoded.getWidth());
+        assertEquals(ArtworkColors.BANNER_HEIGHT, decoded.getHeight());
+        Color centre = new Color(decoded.getRGB(ArtworkColors.BANNER_WIDTH / 2, ArtworkColors.BANNER_HEIGHT / 2));
+        Color edge = new Color(decoded.getRGB(5, ArtworkColors.BANNER_HEIGHT / 2));
+        assertTrue(centre.getRed() > 150, centre.toString());
+        assertTrue(edge.getRed() < centre.getRed(), edge + " vs " + centre);
+    }
 }

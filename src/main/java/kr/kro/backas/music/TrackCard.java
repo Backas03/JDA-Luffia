@@ -21,6 +21,9 @@ import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.exceptions.ErrorResponseException;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.requests.ErrorResponse;
+import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
+import net.dv8tion.jda.api.requests.restaction.WebhookMessageEditAction;
+import net.dv8tion.jda.api.utils.FileUpload;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +42,7 @@ public final class TrackCard {
     private static final Logger LOGGER = LoggerFactory.getLogger(TrackCard.class);
     static final String LOOKING_UP = "가사를 찾고 있습니다";
     static final String PLAYED_NOTE = "재생 완료됨";
+    private static final String BANNER_FILE = "banner.jpg";
     private static final int MAX_AUTHOR_LENGTH = 80;
     private static final long RECOLLAPSE_SECONDS = 3;
 
@@ -47,17 +51,19 @@ public final class TrackCard {
     private final long channelId;
     private final CompletableFuture<Message> message;
     private final MessageChannel recordChannel;
+    private final boolean bannerAttached;
     private final AtomicBoolean closed = new AtomicBoolean();
     private volatile List<? extends ContainerChildComponent> lastBody = List.of();
     private volatile long finishedAt;
 
     private TrackCard(MusicPlayerClient client, AudioTrack track, long channelId, CompletableFuture<Message> message,
-                      @Nullable MessageChannel recordChannel) {
+                      @Nullable MessageChannel recordChannel, boolean bannerAttached) {
         this.client = client;
         this.track = track;
         this.channelId = channelId;
         this.message = message;
         this.recordChannel = recordChannel;
+        this.bannerAttached = bannerAttached;
     }
 
     public static TrackCard send(MusicPlayerClient client, AudioTrack track, MessageChannel channel, @Nullable InteractionHook hook) {
@@ -72,11 +78,20 @@ public final class TrackCard {
     private static TrackCard send(MusicPlayerClient client, AudioTrack track, MessageChannel channel, @Nullable InteractionHook hook,
                                   @Nullable MessageChannel recordChannel) {
         List<TextDisplay> body = List.of(TextDisplay.of("-# " + LOOKING_UP));
-        Container initial = frame(client, track, body, 0);
-        CompletableFuture<Message> sent = hook != null
-                ? hook.editOriginalComponents(initial).useComponentsV2(true).submit()
-                : channel.sendMessageComponents(initial).useComponentsV2(true).submit();
-        TrackCard card = new TrackCard(client, track, channel.getIdLong(), sent, recordChannel);
+        ArtworkColors.Banner banner = ArtworkColors.bannerFor(MusicEmbeds.bannerOf(track));
+        boolean attach = banner != null && banner.isFile();
+        Container initial = frame(client, track, body, 0, attach);
+        CompletableFuture<Message> sent;
+        if (hook != null) {
+            WebhookMessageEditAction<Message> action = hook.editOriginalComponents(initial).useComponentsV2(true);
+            if (attach) action = action.setFiles(bannerFile(banner));
+            sent = action.submit();
+        } else {
+            MessageCreateAction action = channel.sendMessageComponents(initial).useComponentsV2(true);
+            if (attach) action = action.addFiles(bannerFile(banner));
+            sent = action.submit();
+        }
+        TrackCard card = new TrackCard(client, track, channel.getIdLong(), sent, recordChannel, attach);
         card.lastBody = body;
         sent.whenComplete((message, error) -> {
             if (error != null) {
@@ -102,7 +117,11 @@ public final class TrackCard {
 
     public Container frame(List<? extends ContainerChildComponent> body) {
         lastBody = body;
-        return frame(client, track, body, finishedAt);
+        return frame(client, track, body, finishedAt, bannerAttached);
+    }
+
+    private static FileUpload bannerFile(ArtworkColors.Banner banner) {
+        return FileUpload.fromData(banner.data(), BANNER_FILE);
     }
 
     public CompletableFuture<?> edit(Container view, long deadlineAt) {
@@ -158,8 +177,12 @@ public final class TrackCard {
         finishedAt = System.currentTimeMillis();
         if (recordChannel != null) {
             remove();
-            recordChannel.sendMessageComponents(frame(client, track, List.of(), finishedAt)).useComponentsV2(true)
-                    .queue(null, error -> LOGGER.debug("failed to leave a play record for {}", track.getInfo().title, error));
+            ArtworkColors.Banner banner = ArtworkColors.bannerFor(MusicEmbeds.bannerOf(track));
+            boolean attach = banner != null && banner.isFile();
+            MessageCreateAction record = recordChannel.sendMessageComponents(frame(client, track, List.of(), finishedAt, attach))
+                    .useComponentsV2(true);
+            if (attach) record = record.addFiles(bannerFile(banner));
+            record.queue(null, error -> LOGGER.debug("failed to leave a play record for {}", track.getInfo().title, error));
             return true;
         }
         collapse();
@@ -188,12 +211,14 @@ public final class TrackCard {
         return Main.getLuffia().getMusicPlayerController().getScheduler();
     }
 
-    public static Container frame(MusicPlayerClient client, AudioTrack track, List<? extends ContainerChildComponent> body, long finishedAt) {
+    public static Container frame(MusicPlayerClient client, AudioTrack track, List<? extends ContainerChildComponent> body, long finishedAt,
+                                  boolean bannerAttached) {
         boolean playing = !body.isEmpty();
         List<ContainerChildComponent> children = new ArrayList<>();
-        String banner = MusicEmbeds.bannerOf(track);
-        if (banner != null && ArtworkColors.isAvailable(banner)) {
-            children.add(MediaGallery.of(MediaGalleryItem.fromUrl(banner)));
+        ArtworkColors.Banner banner = ArtworkColors.bannerFor(MusicEmbeds.bannerOf(track));
+        String bannerUrl = banner == null ? null : banner.url() != null ? banner.url() : bannerAttached ? "attachment://" + BANNER_FILE : null;
+        if (bannerUrl != null) {
+            children.add(MediaGallery.of(MediaGalleryItem.fromUrl(bannerUrl)));
             children.add(headerText(client, track, playing));
         } else {
             children.add(header(client, track, playing));
