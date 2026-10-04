@@ -10,7 +10,9 @@ import kr.kro.backas.music.TrackCard;
 import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.container.Container;
+import net.dv8tion.jda.api.components.container.ContainerChildComponent;
 import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
@@ -51,6 +53,7 @@ public final class LyricsPresenter {
     private static final int MAX_AUTHOR_LENGTH = 250;
     private static final int MESSAGE_TEXT_BUDGET = 5800;
     static final int CARD_TEXT_BUDGET = 3500;
+    static final int FULL_PREVIEW_LINES = 6;
     private static final String TRUNCATED_NOTE = "… (이하 생략)";
     private static final String FULL_LYRICS_NOTE = "타임스탬프 가사가 없어 전체 가사로 표시합니다";
     private static final long CLOCK_INTERVAL_MS = 900;
@@ -201,7 +204,8 @@ public final class LyricsPresenter {
                 startSession(client, track, lyrics, LyricsSurface.ofCard(card), offsetMs);
                 return;
             }
-            showFull(client, track, lyrics, null, true, new CardFullView(card), translator);
+            showFull(client, track, lyrics, null, true,
+                    new CardFullView(card, Main.getLuffia().getMusicPlayerController().getLyricsExpansions()), translator);
         });
     }
 
@@ -289,19 +293,56 @@ public final class LyricsPresenter {
         }
     }
 
-    private static final class CardFullView implements FullView {
+    private static final class CardFullView implements FullView, LyricsExpansions.Expandable {
         private final TrackCard card;
+        private final LyricsExpansions expansions;
+        private final String token;
+        private volatile boolean expanded;
+        private volatile List<String> lines = List.of();
+        private volatile Map<Integer, String> translations;
+        private volatile String footer = "";
+        private volatile String note;
 
-        private CardFullView(TrackCard card) {
+        private CardFullView(TrackCard card, LyricsExpansions expansions) {
             this.card = card;
+            this.expansions = expansions;
+            this.token = expansions.register(this);
+        }
+
+        @Override
+        public boolean isExpanded() {
+            return expanded;
+        }
+
+        @Override
+        public void setExpanded(boolean expanded) {
+            this.expanded = expanded;
+        }
+
+        @Override
+        public Container render() {
+            List<String> all = lines;
+            boolean foldable = all.size() > FULL_PREVIEW_LINES;
+            List<String> shown = foldable && !expanded ? all.subList(0, FULL_PREVIEW_LINES) : all;
+            String hint = foldable && !expanded ? "\n-# 외 " + (all.size() - FULL_PREVIEW_LINES) + "줄" : "";
+            List<ContainerChildComponent> body = new ArrayList<>();
+            body.add(TextDisplay.of(fullBody(shown, translations, footer, note, CARD_TEXT_BUDGET, hint)));
+            if (foldable) body.add(ActionRow.of(LyricsExpansions.button(token, expanded)));
+            return card.frame(body);
         }
 
         @Override
         public CompletableFuture<?> show(AudioTrack track, List<String> lines, @Nullable Map<Integer, String> translations,
                                          String footer, @Nullable String note, long deadlineAt) {
-            if (card.isClosed()) return CompletableFuture.completedFuture(null);
-            TextDisplay body = TextDisplay.of(fullBody(lines, translations, footer, note, CARD_TEXT_BUDGET));
-            return card.edit(card.frame(List.of(body)), deadlineAt);
+            if (card.isClosed()) {
+                expansions.release(token);
+                return CompletableFuture.completedFuture(null);
+            }
+            this.lines = lines;
+            this.translations = translations;
+            this.footer = footer;
+            this.note = note;
+            return card.edit(render(), deadlineAt);
         }
 
         @Override
@@ -683,7 +724,14 @@ public final class LyricsPresenter {
     }
 
     static String fullBody(List<String> lines, @Nullable Map<Integer, String> translations, String footer, @Nullable String note, int budget) {
-        StringBuilder tail = new StringBuilder("-# ").append(footer);
+        return fullBody(lines, translations, footer, note, budget, "");
+    }
+
+    static String fullBody(List<String> lines, @Nullable Map<Integer, String> translations, String footer, @Nullable String note,
+                           int budget, String hint) {
+        StringBuilder tail = new StringBuilder();
+        if (!hint.isEmpty()) tail.append(hint.startsWith("\n") ? hint.substring(1) : hint).append('\n');
+        tail.append("-# ").append(footer);
         if (note != null && !note.isBlank()) {
             for (String noteLine : note.split("\n")) {
                 tail.append('\n');
