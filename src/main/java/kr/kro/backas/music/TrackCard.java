@@ -10,6 +10,8 @@ import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.DurationUtil;
 import net.dv8tion.jda.api.components.container.Container;
 import net.dv8tion.jda.api.components.container.ContainerChildComponent;
+import net.dv8tion.jda.api.components.mediagallery.MediaGallery;
+import net.dv8tion.jda.api.components.mediagallery.MediaGalleryItem;
 import net.dv8tion.jda.api.components.section.Section;
 import net.dv8tion.jda.api.components.separator.Separator;
 import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
@@ -168,7 +170,13 @@ public final class TrackCard {
     public static Container frame(MusicPlayerClient client, AudioTrack track, List<? extends ContainerChildComponent> body, long finishedAt) {
         boolean playing = !body.isEmpty();
         List<ContainerChildComponent> children = new ArrayList<>();
-        children.add(header(client, track, playing));
+        String artwork = MusicEmbeds.thumbnailOf(track);
+        if (artwork != null && ArtworkColors.isWide(artwork)) {
+            children.add(MediaGallery.of(MediaGalleryItem.fromUrl(artwork)));
+            children.add(headerText(client, track, playing));
+        } else {
+            children.add(header(client, track, playing));
+        }
         if (playing) {
             children.add(Separator.createDivider(Separator.Spacing.SMALL));
             children.addAll(body);
@@ -179,10 +187,13 @@ public final class TrackCard {
     }
 
     public static ContainerChildComponent header(MusicPlayerClient client, AudioTrack track, boolean playing) {
-        TextDisplay text = TextDisplay.of(headerText(track.getInfo(), MusicEmbeds.sourceLabel(track),
-                playing ? settingsLine(client) : null));
+        TextDisplay text = headerText(client, track, playing);
         String artwork = MusicEmbeds.thumbnailOf(track);
         return artwork == null ? text : Section.of(Thumbnail.fromUrl(artwork), text);
+    }
+
+    private static TextDisplay headerText(MusicPlayerClient client, AudioTrack track, boolean playing) {
+        return TextDisplay.of(headerText(track.getInfo(), MusicEmbeds.sourceLabel(track), playing ? settingsLine(client) : null));
     }
 
     static String headerText(AudioTrackInfo info, String source, @Nullable String settings) {

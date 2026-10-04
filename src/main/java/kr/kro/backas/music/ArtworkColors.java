@@ -34,9 +34,14 @@ public final class ArtworkColors {
     private static final float DISPLAY_MIN_BRIGHTNESS = 0.45f;
     private static final float DISPLAY_MIN_SATURATION = 0.35f;
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
-    private static final Map<String, Color> CACHE = Collections.synchronizedMap(new LinkedHashMap<>(64, 0.75f, true) {
+    record Artwork(Color color, boolean wide) {
+    }
+
+    private static final Artwork FALLBACK = new Artwork(MusicEmbeds.PRIMARY, false);
+    private static final double WIDE_RATIO = 1.4;
+    private static final Map<String, Artwork> CACHE = Collections.synchronizedMap(new LinkedHashMap<>(64, 0.75f, true) {
         @Override
-        protected boolean removeEldestEntry(Map.Entry<String, Color> eldest) {
+        protected boolean removeEldestEntry(Map.Entry<String, Artwork> eldest) {
             return size() > CACHE_SIZE;
         }
     });
@@ -47,10 +52,17 @@ public final class ArtworkColors {
 
     public static Color of(@Nullable String url) {
         if (url == null || url.isBlank()) return MusicEmbeds.PRIMARY;
-        Color cached = CACHE.get(url);
-        if (cached != null) return cached;
+        Artwork cached = CACHE.get(url);
+        if (cached != null) return cached.color();
         warm(url);
         return MusicEmbeds.PRIMARY;
+    }
+
+    public static boolean isWide(@Nullable String url) {
+        if (url == null || url.isBlank()) return false;
+        Artwork cached = CACHE.get(url);
+        if (cached == null) warm(url);
+        return cached != null && cached.wide();
     }
 
     public static void warm(@Nullable String url) {
@@ -60,7 +72,7 @@ public final class ArtworkColors {
                 CACHE.put(url, fetch(url));
             } catch (IOException | RuntimeException e) {
                 LOGGER.debug("artwork color lookup failed for {}: {}", url, e.toString());
-                CACHE.put(url, MusicEmbeds.PRIMARY);
+                CACHE.put(url, FALLBACK);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } finally {
@@ -69,7 +81,7 @@ public final class ArtworkColors {
         });
     }
 
-    private static Color fetch(String url) throws IOException, InterruptedException {
+    private static Artwork fetch(String url) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(5)).GET().build();
         HttpResponse<byte[]> response = HTTP.send(request, HttpResponse.BodyHandlers.ofByteArray());
         if (response.statusCode() != 200 || response.body().length == 0 || response.body().length > MAX_BYTES) {
@@ -77,7 +89,7 @@ public final class ArtworkColors {
         }
         BufferedImage image = ImageIO.read(new ByteArrayInputStream(response.body()));
         if (image == null) throw new IOException("unsupported artwork format");
-        return dominant(image);
+        return new Artwork(dominant(image), image.getHeight() > 0 && (double) image.getWidth() / image.getHeight() >= WIDE_RATIO);
     }
 
     static Color dominant(BufferedImage image) {
