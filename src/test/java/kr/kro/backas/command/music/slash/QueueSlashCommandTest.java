@@ -19,9 +19,11 @@ class QueueSlashCommandTest {
 
     @Test
     void headingSummarisesCountLengthAndSingleRequester() {
-        assertEquals("**대기열** · 비어 있음", QueueSlashCommand.heading("대기열", 0, null, null));
-        assertEquals("**대기열** · 437곡 · 25시간 12분 · 요청 박카스", QueueSlashCommand.heading("대기열", 437, "25시간 12분", "박카스"));
-        assertEquals("**다음 추천** · 2곡 · 7분", QueueSlashCommand.heading("다음 추천", 2, "7분", null));
+        assertEquals("**대기열**\n-# 비어 있음", QueueSlashCommand.heading("대기열", 0, null, null, null));
+        assertEquals("**대기열** | 437곡\n-# 25시간 12분 · 요청 박카스", QueueSlashCommand.heading("대기열", 437, "25시간 12분", "박카스", null));
+        assertEquals("**다음 추천** | 2곡\n-# 6분 · 대기열이 비면 이어서 재생합니다",
+                QueueSlashCommand.heading("다음 추천", 2, "6분", null, "대기열이 비면 이어서 재생합니다"));
+        assertEquals("**대기열** | 3곡", QueueSlashCommand.heading("대기열", 3, null, null, null));
     }
 
     @Test
