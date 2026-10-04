@@ -250,7 +250,8 @@ public final class LyricsPresenter {
                             : (cache.isEmpty() ? "번역에 실패했습니다" : translationStatus(client, translator));
                 }
                 return message.editMessageEmbeds(buildFullEmbeds(track, lines, cache,
-                        clockFooter(client, track, finalFooter, showClock), note)).submit();
+                        clockFooter(client, track, finalFooter, showClock), note))
+                        .deadline(System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS).submit();
             });
             if (showClock) {
                 startClock(client, track, editor, () -> {
@@ -311,7 +312,7 @@ public final class LyricsPresenter {
                         : translationStatus(client, translator);
                 message.editMessageEmbeds(buildFullEmbeds(track, lines, translations, finalFooter, doneNote))
                         .queue(null, e -> LOGGER.debug("failed to attach translations", e));
-            });
+            }, TranslationJobs.EXECUTOR);
         });
     }
 
@@ -326,16 +327,20 @@ public final class LyricsPresenter {
         AtomicReference<String> shown = new AtomicReference<>(LyricsSession.playbackClock(client, track));
         AtomicBoolean ended = new AtomicBoolean(false);
         ticker.set(scheduler.scheduleAtFixedRate(() -> {
-            if (!client.isCurrentTrack(track)) {
-                if (!ended.compareAndSet(false, true)) return;
-                ScheduledFuture<?> self = ticker.get();
-                if (self != null) self.cancel(false);
-                editor.cancel();
-                onEnd.run();
-                return;
+            try {
+                if (!client.isCurrentTrack(track)) {
+                    if (!ended.compareAndSet(false, true)) return;
+                    ScheduledFuture<?> self = ticker.get();
+                    if (self != null) self.cancel(false);
+                    editor.cancel();
+                    onEnd.run();
+                    return;
+                }
+                String clock = LyricsSession.playbackClock(client, track);
+                if (!clock.equals(shown.getAndSet(clock))) editor.requestExtraEdit();
+            } catch (RuntimeException e) {
+                LOGGER.warn("full lyrics clock update failed for {}", track.getInfo().title, e);
             }
-            String clock = LyricsSession.playbackClock(client, track);
-            if (!clock.equals(shown.getAndSet(clock))) editor.requestEdit();
         }, 1, 1, TimeUnit.SECONDS));
     }
 
@@ -361,7 +366,7 @@ public final class LyricsPresenter {
         private final ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getScheduler();
         private long lastEditAt;
         private ScheduledFuture<?> pending;
-        private boolean inFlight;
+        private long inFlightSince;
         private boolean cancelled;
 
         ProgressiveEditor(long channelId, long minIntervalMs, Supplier<CompletableFuture<?>> edit) {
@@ -380,24 +385,32 @@ public final class LyricsPresenter {
         synchronized void requestIdleRefresh(long idleMs) {
             if (cancelled || pending != null) return;
             if (System.currentTimeMillis() - lastEditAt < idleMs) return;
-            requestEdit();
+            requestExtraEdit();
+        }
+
+        synchronized void requestExtraEdit() {
+            if (EditRateLimiter.extrasAllowed(channelId)) requestEdit();
         }
 
         private void run() {
+            final long started = System.currentTimeMillis();
             synchronized (this) {
                 pending = null;
                 if (cancelled) return;
-                if (inFlight) {
-                    pending = scheduler.schedule(this::run, IN_FLIGHT_RETRY_MS, TimeUnit.MILLISECONDS);
-                    return;
+                if (inFlightSince != 0) {
+                    if (started - inFlightSince < EditRateLimiter.IN_FLIGHT_TIMEOUT_MS) {
+                        pending = scheduler.schedule(this::run, IN_FLIGHT_RETRY_MS, TimeUnit.MILLISECONDS);
+                        return;
+                    }
+                    EditRateLimiter.reportHeldBack(channelId, "no response to an edit");
                 }
                 if (!EditRateLimiter.tryAcquire(channelId)) {
                     long retry = Math.max(LIMIT_RETRY_MS, EditRateLimiter.millisUntilNext(channelId));
                     pending = scheduler.schedule(this::run, retry, TimeUnit.MILLISECONDS);
                     return;
                 }
-                lastEditAt = System.currentTimeMillis();
-                inFlight = true;
+                lastEditAt = started;
+                inFlightSince = started;
             }
             CompletableFuture<?> sent;
             try {
@@ -407,9 +420,11 @@ public final class LyricsPresenter {
             }
             sent.whenComplete((result, error) -> {
                 synchronized (this) {
-                    inFlight = false;
+                    if (inFlightSince == started) inFlightSince = 0;
                 }
-                if (error != null) LOGGER.debug("progressive lyrics edit failed", error);
+                if (error == null) return;
+                if (EditRateLimiter.isHeldBack(error)) EditRateLimiter.reportHeldBack(channelId, error.getClass().getSimpleName());
+                else LOGGER.debug("progressive lyrics edit failed", error);
             });
         }
 

@@ -21,6 +21,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class LyricsSession {
     private static final int MAX_LINE_LENGTH = 300;
@@ -59,7 +60,7 @@ public class LyricsSession {
     private String shownClock = "";
     private long lastEditAt;
     private long lastContentEditAt;
-    private final AtomicBoolean editInFlight = new AtomicBoolean(false);
+    private final AtomicLong editInFlightSince = new AtomicLong();
     private final AtomicBoolean stopped = new AtomicBoolean(false);
 
     public LyricsSession(MusicPlayerClient client,
@@ -145,7 +146,8 @@ public class LyricsSession {
         }
         boolean pending = false;
         for (int i = 0; i < sources.size(); i++) {
-            if (!translations.containsKey(i) && LyricsLanguage.needsTranslation(sources.get(i))) pending = true;
+            String cached = translations.get(i);
+            if ((cached == null || cached.isBlank()) && LyricsLanguage.needsTranslation(sources.get(i))) pending = true;
         }
         if (!pending) {
             LyricsPresenter.reportSongComplete(client, track);
@@ -201,20 +203,22 @@ public class LyricsSession {
             String clock = playbackClock(client, track);
             if (clockOnly && (clock.equals(shownClock) || !hasRoomBeforeNextLine(index, position))) return;
             long now = System.currentTimeMillis();
+            long channelId = message.getChannel().getIdLong();
             if (clockOnly) {
-                if (now - lastEditAt < CLOCK_EDIT_INTERVAL_MS) return;
+                if (now - lastEditAt < CLOCK_EDIT_INTERVAL_MS || !EditRateLimiter.extrasAllowed(channelId)) return;
             } else if (now - lastContentEditAt < MIN_EDIT_INTERVAL_MS || now - lastEditAt < POST_EDIT_GAP_MS) {
                 return;
             }
-            if (!editInFlight.compareAndSet(false, true)) return;
-            long channelId = message.getChannel().getIdLong();
+            long inFlight = editInFlightSince.get();
+            if (inFlight != 0) {
+                if (now - inFlight < EditRateLimiter.IN_FLIGHT_TIMEOUT_MS) return;
+                EditRateLimiter.reportHeldBack(channelId, "no response to an edit");
+            }
             boolean acquired = clockOnly
                     ? EditRateLimiter.tryAcquire(channelId, upcomingLineEdits(index, position, now))
                     : EditRateLimiter.tryAcquire(channelId);
-            if (!acquired) {
-                editInFlight.set(false);
-                return;
-            }
+            if (!acquired) return;
+            editInFlightSince.set(now);
             shownIndex = index;
             shownTranslation = translation;
             shownPending = pending;
@@ -223,11 +227,13 @@ public class LyricsSession {
             if (!clockOnly) lastContentEditAt = now;
             message.editMessageComponents(buildView(client, track, lyrics, index, translation, null, translator, pending))
                     .useComponentsV2(true)
+                    .deadline(now + EditRateLimiter.EDIT_DEADLINE_MS)
                     .queue(
-                            m -> editInFlight.set(false),
+                            m -> editInFlightSince.compareAndSet(now, 0),
                             e -> {
-                                editInFlight.set(false);
-                                LOGGER.debug("lyrics edit failed", e);
+                                editInFlightSince.compareAndSet(now, 0);
+                                if (EditRateLimiter.isHeldBack(e)) EditRateLimiter.reportHeldBack(channelId, e.getClass().getSimpleName());
+                                else LOGGER.debug("lyrics edit failed", e);
                             });
         } catch (RuntimeException e) {
             LOGGER.warn("lyrics tick failed", e);
