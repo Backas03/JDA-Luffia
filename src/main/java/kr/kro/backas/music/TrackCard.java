@@ -6,6 +6,7 @@ import kr.kro.backas.Main;
 import kr.kro.backas.SharedConstant;
 import kr.kro.backas.music.ai.AiAutoplay;
 import kr.kro.backas.music.lyrics.EditRateLimiter;
+import kr.kro.backas.music.lyrics.TranslationJobs;
 import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.DurationUtil;
 import net.dv8tion.jda.api.components.container.Container;
@@ -46,24 +47,23 @@ public final class TrackCard {
     private static final int MAX_AUTHOR_LENGTH = 80;
     private static final long RECOLLAPSE_SECONDS = 3;
 
+    private static final long BANNER_WAIT_MS = 3000;
+
     private final MusicPlayerClient client;
     private final AudioTrack track;
     private final long channelId;
-    private final CompletableFuture<Message> message;
     private final MessageChannel recordChannel;
-    private final boolean bannerAttached;
     private final AtomicBoolean closed = new AtomicBoolean();
+    private volatile CompletableFuture<Message> message = new CompletableFuture<>();
+    private volatile boolean bannerAttached;
     private volatile List<? extends ContainerChildComponent> lastBody = List.of();
     private volatile long finishedAt;
 
-    private TrackCard(MusicPlayerClient client, AudioTrack track, long channelId, CompletableFuture<Message> message,
-                      @Nullable MessageChannel recordChannel, boolean bannerAttached) {
+    private TrackCard(MusicPlayerClient client, AudioTrack track, long channelId, @Nullable MessageChannel recordChannel) {
         this.client = client;
         this.track = track;
         this.channelId = channelId;
-        this.message = message;
         this.recordChannel = recordChannel;
-        this.bannerAttached = bannerAttached;
     }
 
     public static TrackCard send(MusicPlayerClient client, AudioTrack track, MessageChannel channel, @Nullable InteractionHook hook) {
@@ -78,21 +78,25 @@ public final class TrackCard {
     private static TrackCard send(MusicPlayerClient client, AudioTrack track, MessageChannel channel, @Nullable InteractionHook hook,
                                   @Nullable MessageChannel recordChannel) {
         List<TextDisplay> body = List.of(TextDisplay.of("-# " + LOOKING_UP));
-        ArtworkColors.Banner banner = ArtworkColors.bannerFor(MusicEmbeds.bannerOf(track));
-        boolean attach = banner != null && banner.isFile();
-        Container initial = frame(client, track, body, 0, attach);
-        CompletableFuture<Message> sent;
-        if (hook != null) {
-            WebhookMessageEditAction<Message> action = hook.editOriginalComponents(initial).useComponentsV2(true);
-            if (attach) action = action.setFiles(bannerFile(banner));
-            sent = action.submit();
-        } else {
-            MessageCreateAction action = channel.sendMessageComponents(initial).useComponentsV2(true);
-            if (attach) action = action.addFiles(bannerFile(banner));
-            sent = action.submit();
-        }
-        TrackCard card = new TrackCard(client, track, channel.getIdLong(), sent, recordChannel, attach);
+        TrackCard card = new TrackCard(client, track, channel.getIdLong(), recordChannel);
         card.lastBody = body;
+        String bannerUrl = MusicEmbeds.bannerOf(track);
+        CompletableFuture<Message> sent = CompletableFuture
+                .supplyAsync(() -> ArtworkColors.await(bannerUrl, BANNER_WAIT_MS), TranslationJobs.EXECUTOR)
+                .thenCompose(banner -> {
+                    boolean attach = banner != null && banner.isFile();
+                    card.bannerAttached = attach;
+                    Container initial = frame(client, track, body, 0, attach);
+                    if (hook != null) {
+                        WebhookMessageEditAction<Message> action = hook.editOriginalComponents(initial).useComponentsV2(true);
+                        if (attach) action = action.setFiles(bannerFile(banner));
+                        return action.submit();
+                    }
+                    MessageCreateAction action = channel.sendMessageComponents(initial).useComponentsV2(true);
+                    if (attach) action = action.addFiles(bannerFile(banner));
+                    return action.submit();
+                });
+        card.message = sent;
         sent.whenComplete((message, error) -> {
             if (error != null) {
                 LOGGER.warn("failed to send track card for {}", track.getInfo().title, error);
