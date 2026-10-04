@@ -44,13 +44,14 @@ class QueueSlashCommandTest {
     void thumbnailRowsStayWithinDiscordsComponentBudget() {
         int container = 1;
         int nowPlayingSection = 3;
+        int banner = 1;
         int settings = 1;
         int separators = 3;
         int headings = 2;
         int queueRows = QueueSlashCommand.MAX_THUMBNAIL_ROWS * 3 + 1;
         int autoRows = Math.min(QueueSlashCommand.MAX_AUTO_ROWS, QueueSlashCommand.MAX_THUMBNAIL_ROWS) * 3 + 1;
         int footer = 1;
-        assertTrue(container + nowPlayingSection + settings + separators + headings + queueRows + autoRows + footer
+        assertTrue(container + banner + nowPlayingSection + settings + separators + headings + queueRows + autoRows + footer
                 <= DISCORD_COMPONENT_LIMIT);
     }
 }

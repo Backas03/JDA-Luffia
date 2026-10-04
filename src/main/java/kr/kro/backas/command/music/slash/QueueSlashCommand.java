@@ -12,30 +12,38 @@ import kr.kro.backas.music.MusicPlayerController;
 import kr.kro.backas.music.MusicSelection;
 import kr.kro.backas.music.TrackCard;
 import kr.kro.backas.music.ai.AiAutoplay;
+import kr.kro.backas.music.lyrics.TranslationJobs;
 import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.DurationUtil;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.components.container.Container;
 import net.dv8tion.jda.api.components.container.ContainerChildComponent;
+import net.dv8tion.jda.api.components.mediagallery.MediaGallery;
 import net.dv8tion.jda.api.components.section.Section;
 import net.dv8tion.jda.api.components.separator.Separator;
 import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.components.thumbnail.Thumbnail;
 import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
+import net.dv8tion.jda.api.requests.restaction.WebhookMessageEditAction;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 public class QueueSlashCommand implements SlashCommandSource {
     public static final String COMMAND_NAME = "대기열";
+    private static final Logger LOGGER = LoggerFactory.getLogger(QueueSlashCommand.class);
     static final boolean USE_COMPONENTS_V2 = true;
     static final boolean ROW_THUMBNAILS = false;
     private static final int MAX_QUEUE_ROWS = 5;
@@ -75,13 +83,26 @@ public class QueueSlashCommand implements SlashCommandSource {
             return;
         }
         if (USE_COMPONENTS_V2) {
-            event.replyComponents(buildView(client, currentPlaying)).useComponentsV2(true).queue();
+            event.deferReply().queue();
+            CompletableFuture
+                    .supplyAsync(() -> TrackCard.awaitBanner(currentPlaying), TranslationJobs.EXECUTOR)
+                    .thenCompose(banner -> {
+                        boolean attach = banner != null && banner.isFile();
+                        WebhookMessageEditAction<Message> action = event.getHook()
+                                .editOriginalComponents(buildView(client, currentPlaying, attach))
+                                .useComponentsV2(true);
+                        if (attach) action = action.setFiles(TrackCard.bannerFile(banner));
+                        return action.submit();
+                    })
+                    .whenComplete((message, error) -> {
+                        if (error != null) LOGGER.warn("failed to send queue view", error);
+                    });
         } else {
             event.replyEmbeds(buildEmbed(client, currentPlaying).build()).queue();
         }
     }
 
-    private static Container buildView(MusicPlayerClient client, AudioTrack current) {
+    private static Container buildView(MusicPlayerClient client, AudioTrack current, boolean bannerAttached) {
         AudioTrackInfo info = current.getInfo();
         MusicSelection selection = current.getUserData(MusicSelection.class);
         StringBuilder head = new StringBuilder("### ").append(link(info)).append('\n');
@@ -97,7 +118,13 @@ public class QueueSlashCommand implements SlashCommandSource {
         String artwork = MusicEmbeds.thumbnailOf(current);
 
         List<ContainerChildComponent> children = new ArrayList<>();
-        children.add(artwork == null ? nowPlaying : Section.of(Thumbnail.fromUrl(artwork), nowPlaying));
+        MediaGallery banner = TrackCard.banner(current, bannerAttached);
+        if (banner != null) {
+            children.add(banner);
+            children.add(nowPlaying);
+        } else {
+            children.add(artwork == null ? nowPlaying : Section.of(Thumbnail.fromUrl(artwork), nowPlaying));
+        }
         children.add(TextDisplay.of("-# " + TrackCard.settingsLine(client)));
         children.add(Separator.createDivider(Separator.Spacing.SMALL));
 
