@@ -35,7 +35,7 @@ public class LyricsSession {
     public static final long DEFAULT_OFFSET_MS = 600;
     public static final String TRANSLATING_NOTE = "번역 중...";
     private static final String BLANK = "​";
-    private static final String WIDTH_FILLER = "⠀".repeat(48);
+    private static final String WIDTH_FILLER = "⠀".repeat(120);
     private static final String CLOCK_SEPARATOR = " — ";
     public static final String REST = "♪";
     private static final String FAILED_TRANSLATION = "-";
