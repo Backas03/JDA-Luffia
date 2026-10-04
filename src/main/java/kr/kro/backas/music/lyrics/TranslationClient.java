@@ -141,6 +141,10 @@ public class TranslationClient {
         return !endpoints.isEmpty();
     }
 
+    public boolean isAvailable() {
+        return isEnabled() && scheduler.hasLiveEndpoint();
+    }
+
     public LlmScheduler scheduler() {
         return scheduler;
     }

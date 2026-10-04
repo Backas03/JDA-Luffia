@@ -217,6 +217,13 @@ public final class LlmScheduler {
         return false;
     }
 
+    public boolean hasLiveEndpoint() {
+        for (LlmEndpoint endpoint : endpoints) {
+            if (!endpoint.isFailed()) return true;
+        }
+        return false;
+    }
+
     public int parallelism() {
         long now = clock.getAsLong();
         int slots = 0;

@@ -9,6 +9,7 @@ import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
 import kr.kro.backas.music.MusicSelection;
+import kr.kro.backas.music.ai.AiAutoplay;
 import kr.kro.backas.util.DurationUtil;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
@@ -99,9 +100,12 @@ public class QueueSlashCommand implements SlashCommandSource {
     }
 
     private static String autoplayStatus(MusicPlayerClient client) {
-        if (!client.getAutoplay().isEnabled()) return "꺼짐";
-        String criteria = client.getAutoplay().getCriteria();
-        return criteria.isBlank() ? "켜짐" : "켜짐 (" + criteria + ")";
+        AiAutoplay autoplay = client.getAutoplay();
+        if (!autoplay.isEnabled()) return "꺼짐";
+        if (!Main.getLuffia().getMusicPlayerController().getTranslationClient().isAvailable()) return "켜짐 (AI 서버 연결 안 됨)";
+        String criteria = autoplay.getCriteria();
+        if (!criteria.isBlank()) return "켜짐 (" + criteria + ")";
+        return autoplay.isExplicit() ? "켜짐" : "켜짐 (기본)";
     }
 
     @Override
