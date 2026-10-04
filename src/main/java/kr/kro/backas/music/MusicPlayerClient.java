@@ -134,6 +134,7 @@ public class MusicPlayerClient {
             this.currentPlaySpeed = speed;
         }
         updateFilter();
+        refreshTrackCard();
     }
 
     private int bufferedFrames() {
@@ -149,11 +150,13 @@ public class MusicPlayerClient {
     public void setKaraokeMode(KaraokeMode mode) {
         this.karaokeMode = mode;
         updateFilter();
+        refreshTrackCard();
     }
 
     public void setEqualizer(ConfiguredEqualizer equalizer) {
         this.currentEqualizer = equalizer;
         updateFilter();
+        refreshTrackCard();
     }
 
     public ConfiguredEqualizer getCurrentEqualizer() {
@@ -273,6 +276,14 @@ public class MusicPlayerClient {
         LyricsPresenter.presentOnCard(this, track, card, lyricsOffsetMs);
     }
 
+    public void refreshTrackCard() {
+        TrackCard card = trackCard;
+        if (card == null || card.isClosed() || !isCurrentTrack(card.track())) return;
+        LyricsSession session = lyricsSession;
+        if (session != null && session.isForTrack(card.track())) return;
+        card.refresh();
+    }
+
     @Nullable
     public TrackCard getTrackCard(AudioTrack track) {
         TrackCard card = trackCard;
@@ -286,6 +297,7 @@ public class MusicPlayerClient {
 
     public void setVolume(int volume) {
         audioPlayer.setVolume(volume);
+        refreshTrackCard();
     }
 
     public KaraokeMode getKaraokeMode() {
@@ -420,6 +432,7 @@ public class MusicPlayerClient {
 
     public void setRepeatMode(RepeatMode mode) {
         musicTrack.setRepeatMode(mode);
+        refreshTrackCard();
     }
 
     public boolean pause() {
