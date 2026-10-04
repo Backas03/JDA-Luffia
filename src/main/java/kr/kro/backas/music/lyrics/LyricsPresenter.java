@@ -462,7 +462,7 @@ public final class LyricsPresenter {
 
     private static String clockFooter(MusicPlayerClient client, AudioTrack track, String footer, boolean showClock) {
         if (!showClock || !client.isCurrentTrack(track)) return footer;
-        return LyricsSession.playbackClock(client, track) + " · " + footer;
+        return LyricsSession.playbackClock(client, track) + "\n" + footer;
     }
 
     private static void startClock(MusicPlayerClient client, AudioTrack track, ProgressiveEditor editor, Runnable onEnd) {
@@ -731,7 +731,7 @@ public final class LyricsPresenter {
                            int budget, String hint) {
         StringBuilder tail = new StringBuilder();
         if (!hint.isEmpty()) tail.append(hint.startsWith("\n") ? hint.substring(1) : hint).append('\n');
-        tail.append("-# ").append(footer);
+        tail.append("-# ").append(footer.replace("\n", "\n-# "));
         if (note != null && !note.isBlank()) {
             for (String noteLine : note.split("\n")) {
                 tail.append('\n');

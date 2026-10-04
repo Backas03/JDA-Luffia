@@ -19,6 +19,12 @@ class LyricsPresenterTest {
     }
 
     @Test
+    void multiLineFooterKeepsEveryLineSmall() {
+        String body = LyricsPresenter.fullBody(List.of("a"), null, "1:14 — 3:39\n타임스탬프 가사가 없어 전체 가사로 표시합니다", null, 4000);
+        assertEquals("a\n\n-# 1:14 — 3:39\n-# 타임스탬프 가사가 없어 전체 가사로 표시합니다", body);
+    }
+
+    @Test
     void previewHintSitsBetweenTheLinesAndTheFooter() {
         String body = LyricsPresenter.fullBody(List.of("a", "b"), null, "footer", null, 4000, "\n-# 외 12줄");
         assertEquals("a\nb\n\n-# 외 12줄\n-# footer", body);
