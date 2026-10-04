@@ -276,6 +276,14 @@ public class MusicPlayerClient {
         LyricsPresenter.presentOnCard(this, track, card, lyricsOffsetMs);
     }
 
+    public TrackCard repostTrackCard(AudioTrack track, MessageChannel channel) {
+        TrackCard previous = trackCard;
+        TrackCard card = TrackCard.send(this, track, channel, null);
+        trackCard = card;
+        if (previous != null) previous.delete();
+        return card;
+    }
+
     public void refreshTrackCard() {
         TrackCard card = trackCard;
         if (card == null || card.isClosed() || !isCurrentTrack(card.track())) return;
