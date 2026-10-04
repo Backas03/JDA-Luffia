@@ -121,8 +121,12 @@ public class AiAgent {
     private final StatusListener listener;
     private final List<String> actions = new ArrayList<>();
     private PendingRemoval pendingRemoval;
+    private AutoplayRequest pendingAutoplay;
     private int added;
     private String request = "";
+
+    private record AutoplayRequest(String criteria, boolean diverse) {
+    }
 
     public AiAgent(MusicPlayerController controller, MusicPlayerClient client, Member member,
                    SlashCommandInteractionEvent event, VoiceChannel voiceChannel, StatusListener listener) {
@@ -135,6 +139,21 @@ public class AiAgent {
     }
 
     public Result run(String request) throws IOException {
+        try {
+            return converse(request);
+        } finally {
+            applyAutoplay();
+        }
+    }
+
+    private void applyAutoplay() {
+        AutoplayRequest pending = pendingAutoplay;
+        if (pending == null) return;
+        pendingAutoplay = null;
+        client.getAutoplay().start(pending.criteria(), pending.diverse(), member, event);
+    }
+
+    private Result converse(String request) throws IOException {
         this.request = request;
         ArrayNode messages = MAPPER.createArrayNode();
         messages.addObject().put("role", "system").put("content", SYSTEM_PROMPT);
@@ -400,6 +419,7 @@ public class AiAgent {
     private String setAutoplay(JsonNode args) {
         AiAutoplay autoplay = client.getAutoplay();
         if (!args.path("enabled").asBoolean(false)) {
+            pendingAutoplay = null;
             boolean stopped = autoplay.stop();
             actions.add(stopped ? "연속 추천 끔" : "연속 추천이 이미 꺼져 있음");
             return MAPPER.createObjectNode().put("status", "ok").put("autoplay", false).toString();
@@ -409,7 +429,7 @@ public class AiAgent {
         }
         String criteria = criteria(args, "criteria");
         boolean diverse = args.path("diverse_artists").asBoolean(false);
-        autoplay.start(criteria, diverse, member, event);
+        pendingAutoplay = new AutoplayRequest(criteria, diverse);
         actions.add("연속 추천 켬" + (criteria.isBlank() ? "" : " ('" + criteria + "')") + (diverse ? " (아티스트 안 겹치게)" : ""));
         return MAPPER.createObjectNode().put("status", "ok").put("autoplay", true).toString();
     }
@@ -622,7 +642,8 @@ public class AiAgent {
         songProperties.putObject("title").put("type", "string");
         song.putArray("required").add("title");
         property(addSongs, "next", "boolean", PLAY_NEXT, false);
-        ObjectNode autoplay =tool(tools, "set_autoplay", "Turn continuous recommendations of similar songs on or off.");
+        ObjectNode autoplay = tool(tools, "set_autoplay", "Continuous recommendations of similar songs are on by default."
+                + " Use this to turn them off, turn them back on, or tell them what to recommend.");
         property(autoplay, "enabled", "boolean", null, true);
         property(autoplay, "criteria", "string", "optional Korean description of what to recommend", false);
         property(autoplay, "diverse_artists", "boolean", "true to avoid artists that already played in this session", false);

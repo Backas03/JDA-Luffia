@@ -71,7 +71,8 @@ public final class MusicEmbeds {
                 .addField("출처", sourceLabel(track), true);
         if (selection != null) {
             String requester = MemberUtil.getName(selection.getRequestedMember());
-            builder.setFooter(selection.isAiRecommended() ? "AI 추천 · " + requester : requester);
+            String prefix = selection.isAutoplay() ? "AI 자동 추천 · " : selection.isAiRecommended() ? "AI 추천 · " : "";
+            builder.setFooter(prefix + requester);
         }
         return builder;
     }
