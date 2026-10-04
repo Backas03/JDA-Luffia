@@ -7,7 +7,10 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import kr.kro.backas.music.cache.DiskCache;
+import kr.kro.backas.music.llm.LlmEndpoint;
+import kr.kro.backas.music.llm.LlmPriority;
 import kr.kro.backas.music.lyrics.TranslationClient;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,7 +29,6 @@ public class AiTrackTagger {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AiTrackTagger.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    public static final int MAX_TRACKS = 200;
     private static final int BATCH_SIZE = 20;
     private static final int CACHE_SIZE = 20_000;
     private static final String DISK_PATH = "ai-tags-v2.json";
@@ -118,7 +120,7 @@ public class AiTrackTagger {
         if (!pending.isEmpty()) {
             LOGGER.info("ai tagging {} track(s), {} cached", pending.size(), done);
             int cachedCount = done;
-            List<Tag[]> results = BatchRunner.run(pending, BATCH_SIZE, client.parallelism(), this::requestBatch,
+            List<Tag[]> results = BatchRunner.run(pending, BATCH_SIZE, BatchRunner.lanes(client), this::requestBatch,
                     finished -> onProgress.accept(cachedCount + finished));
             for (int batchIndex = 0; batchIndex < results.size(); batchIndex++) {
                 Tag[] result = results.get(batchIndex);
@@ -136,14 +138,14 @@ public class AiTrackTagger {
         return tags;
     }
 
-    private Tag[] requestBatch(List<AudioTrack> batch) throws IOException {
+    private Tag[] requestBatch(@Nullable LlmEndpoint gpu, List<AudioTrack> batch) throws IOException {
         StringBuilder user = new StringBuilder("<tracks>\n");
         for (int i = 0; i < batch.size(); i++) {
             user.append(i + 1).append(". ").append(TrackHints.describe(batch.get(i).getInfo())).append('\n');
         }
         user.append("</tracks>\n");
         JsonNode result = client.requestJson(SYSTEM_PROMPT, user.toString(), SCHEMA_NAME, schema(batch.size()),
-                32 * batch.size() + 32);
+                32 * batch.size() + 32, LlmPriority.INTERACTIVE, gpu);
         Tag[] tags = new Tag[batch.size()];
         for (JsonNode entry : result.path("r")) {
             int n = entry.path("n").asInt(-1);
