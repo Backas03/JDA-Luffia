@@ -124,8 +124,19 @@ public final class TrackCard {
         return frame(client, track, body, finishedAt, bannerAttached);
     }
 
-    private static FileUpload bannerFile(ArtworkColors.Banner banner) {
+    public static FileUpload bannerFile(ArtworkColors.Banner banner) {
         return FileUpload.fromData(banner.data(), BANNER_FILE);
+    }
+
+    public static ArtworkColors.Banner awaitBanner(AudioTrack track) {
+        return ArtworkColors.await(MusicEmbeds.bannerOf(track), BANNER_WAIT_MS);
+    }
+
+    @Nullable
+    public static MediaGallery banner(AudioTrack track, boolean bannerAttached) {
+        ArtworkColors.Banner banner = ArtworkColors.bannerFor(MusicEmbeds.bannerOf(track));
+        String bannerUrl = banner == null ? null : banner.url() != null ? banner.url() : bannerAttached ? "attachment://" + BANNER_FILE : null;
+        return bannerUrl == null ? null : MediaGallery.of(MediaGalleryItem.fromUrl(bannerUrl));
     }
 
     public CompletableFuture<?> edit(Container view, long deadlineAt) {
@@ -223,10 +234,9 @@ public final class TrackCard {
                                   boolean bannerAttached) {
         boolean playing = !body.isEmpty();
         List<ContainerChildComponent> children = new ArrayList<>();
-        ArtworkColors.Banner banner = ArtworkColors.bannerFor(MusicEmbeds.bannerOf(track));
-        String bannerUrl = banner == null ? null : banner.url() != null ? banner.url() : bannerAttached ? "attachment://" + BANNER_FILE : null;
-        if (bannerUrl != null) {
-            children.add(MediaGallery.of(MediaGalleryItem.fromUrl(bannerUrl)));
+        MediaGallery banner = banner(track, bannerAttached);
+        if (banner != null) {
+            children.add(banner);
             children.add(headerText(client, track, playing));
         } else {
             children.add(header(client, track, playing));
