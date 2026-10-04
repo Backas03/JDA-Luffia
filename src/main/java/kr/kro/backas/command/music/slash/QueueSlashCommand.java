@@ -119,8 +119,7 @@ public class QueueSlashCommand implements SlashCommandSource {
         List<AudioTrack> visible = tracks.subList(0, shown);
         Set<String> requesters = requesters(visible);
         String single = requesters.size() == 1 && !tracks.isEmpty() ? requesters.iterator().next() : null;
-        children.add(TextDisplay.of(heading(title, tracks.size(), totalLength(tracks), single)
-                + (note == null ? "" : "\n-# " + note)));
+        children.add(TextDisplay.of(heading(title, tracks.size(), totalLength(tracks), single, note)));
         if (tracks.isEmpty()) return;
 
         StringBuilder text = new StringBuilder();
@@ -159,12 +158,14 @@ public class QueueSlashCommand implements SlashCommandSource {
         return names;
     }
 
-    static String heading(String title, int count, @Nullable String length, @Nullable String requester) {
-        if (count == 0) return "**" + title + "** · 비어 있음";
-        StringBuilder text = new StringBuilder("**").append(title).append("** · ").append(count).append("곡");
-        if (length != null) text.append(" · ").append(length);
-        if (requester != null && !requester.isEmpty()) text.append(" · 요청 ").append(requester);
-        return text.toString();
+    static String heading(String title, int count, @Nullable String length, @Nullable String requester, @Nullable String note) {
+        if (count == 0) return "**" + title + "**\n-# 비어 있음";
+        List<String> small = new ArrayList<>();
+        if (length != null) small.add(length);
+        if (requester != null && !requester.isEmpty()) small.add("요청 " + requester);
+        if (note != null && !note.isBlank()) small.add(note);
+        String text = "**" + title + "** | " + count + "곡";
+        return small.isEmpty() ? text : text + "\n-# " + String.join(" · ", small);
     }
 
     static String rowText(int number, String link, List<String> details) {
