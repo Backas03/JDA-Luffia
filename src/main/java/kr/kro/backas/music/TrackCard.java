@@ -5,7 +5,6 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import kr.kro.backas.Main;
 import kr.kro.backas.music.lyrics.EditRateLimiter;
 import kr.kro.backas.util.DiscordSafe;
-import kr.kro.backas.util.DurationUtil;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.components.container.Container;
 import net.dv8tion.jda.api.components.container.ContainerChildComponent;
@@ -34,6 +33,7 @@ public final class TrackCard {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TrackCard.class);
     static final String LOOKING_UP = "가사를 찾고 있습니다";
+    static final String PLAYING_NOTE = "음악을 재생합니다";
     private static final int MAX_AUTHOR_LENGTH = 80;
     private static final int MAX_NAME_LENGTH = 40;
     private static final long RECOLLAPSE_SECONDS = 3;
@@ -117,32 +117,36 @@ public final class TrackCard {
 
     public static Container frame(AudioTrack track, @Nullable Guild guild, List<? extends ContainerChildComponent> body) {
         List<ContainerChildComponent> children = new ArrayList<>();
-        children.add(header(track, guild));
+        children.add(header(track, guild, !body.isEmpty()));
         if (!body.isEmpty()) {
             children.add(Separator.createDivider(Separator.Spacing.SMALL));
             children.addAll(body);
         }
+        String requester = requesterLabel(track.getUserData(MusicSelection.class));
+        if (requester != null) {
+            children.add(Separator.createDivider(Separator.Spacing.SMALL));
+            children.add(TextDisplay.of("-# " + requester));
+        }
         return Container.of(children).withAccentColor(MusicEmbeds.PRIMARY);
     }
 
-    public static ContainerChildComponent header(AudioTrack track, @Nullable Guild guild) {
-        TextDisplay text = TextDisplay.of(headerText(track.getInfo(), MusicEmbeds.botName(guild), MusicEmbeds.sourceLabel(track),
-                requesterLabel(track.getUserData(MusicSelection.class))));
+    public static ContainerChildComponent header(AudioTrack track, @Nullable Guild guild, boolean playing) {
+        TextDisplay text = TextDisplay.of(headerText(track.getInfo(), MusicEmbeds.botName(guild), MusicEmbeds.sourceLabel(track), playing));
         String artwork = MusicEmbeds.thumbnailOf(track);
         return artwork == null ? text : Section.of(Thumbnail.fromUrl(artwork), text);
     }
 
-    static String headerText(AudioTrackInfo info, String botName, String source, @Nullable String requester) {
-        StringBuilder text = new StringBuilder("### ").append(MusicEmbeds.titleLink(info)).append('\n');
+    static String headerText(AudioTrackInfo info, String botName, String source, boolean playing) {
+        StringBuilder text = new StringBuilder();
         if (info.author != null && !info.author.isBlank()) {
-            text.append(DiscordSafe.escaped(info.author, MAX_AUTHOR_LENGTH)).append('\n');
+            text.append("**").append(DiscordSafe.escaped(info.author, MAX_AUTHOR_LENGTH)).append("**\n");
         }
-        List<String> meta = new ArrayList<>();
-        meta.add(botName);
-        meta.add(info.isStream ? "라이브" : DurationUtil.formatClock(info.length / 1000));
-        meta.add(source);
-        if (requester != null && !requester.isBlank()) meta.add(requester);
-        return text.append("-# ").append(String.join(" · ", meta)).toString();
+        text.append("### ").append(MusicEmbeds.titleLink(info)).append('\n');
+        if (playing) text.append(PLAYING_NOTE).append('\n');
+        return text.append("**노래 봇** ").append(botName)
+                .append(" · **재생 시간** ").append(MusicEmbeds.durationOf(info))
+                .append(" · **출처** ").append(source)
+                .toString();
     }
 
     @Nullable
