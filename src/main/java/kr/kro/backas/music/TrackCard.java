@@ -130,6 +130,10 @@ public final class TrackCard {
 
     public CompletableFuture<?> edit(Container view, long deadlineAt) {
         if (closed.get()) return CompletableFuture.completedFuture(null);
+        return submitEdit(view, deadlineAt);
+    }
+
+    private CompletableFuture<?> submitEdit(Container view, long deadlineAt) {
         return message.thenCompose(current -> current.editMessageComponents(view).useComponentsV2(true).deadline(deadlineAt).submit())
                 .whenComplete((result, error) -> {
                     if (error != null && isGone(error)) onGone();
@@ -195,7 +199,7 @@ public final class TrackCard {
     }
 
     private void collapse() {
-        edit(frame(List.of()), System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS)
+        submitEdit(frame(List.of()), System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS)
                 .whenComplete((result, error) -> {
                     if (error != null) LOGGER.debug("failed to collapse track card for {}", track.getInfo().title, error);
                 });
