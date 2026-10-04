@@ -57,6 +57,8 @@ public class AiAgent {
     static final String REMOVAL_NOT_REQUESTED = "the user did not ask to remove songs, so nothing was removed. Do not remove anything."
             + " To change or replace the next song call add_songs with next set to true.";
     private static final String PLAY_NEXT ="true to put the songs at the front of the queue so they play right after the current song; default false adds them to the end";
+    private static final String QUEUE_TARGET = "listener (default) for the songs the listener queued, auto for the automatic recommendation queue."
+            + " Use auto only when the user talks about the recommended songs.";
     private static final String SYSTEM_PROMPT = String.join("\n",
             "You control a Discord music bot for Korean users by calling tools.",
             "Read the user's request inside <request> tags and call the tools needed to do it. Call get_queue first when you need to know what is playing or queued.",
@@ -66,6 +68,10 @@ public class AiAgent {
             "To change or replace the next song with a named song (다음 노래를 X로 바꿔줘, 다음 곡 X로 해줘), call add_songs with next set to true. The song that was next simply moves back one place: never remove anything for this.",
             "Remove songs only when the user clearly asks to delete, remove, clear or keep only some songs (빼줘, 지워줘, 삭제, 제거, 비워줘, 남겨줘). A request to play, add, change or replace a song is never a removal.",
             "To delete songs like X use remove_from_queue with criteria X. To keep only songs like X (delete everything else) use keep_only_in_queue with criteria X.",
+            "The listener's queue and the recommendation queue are separate: get_queue lists the listener's songs in queue and the automatic recommendations in autoplay_queue,"
+                    + " which play only after the listener's queue is empty. Queue tools act on the listener's queue."
+                    + " Only when the user clearly talks about the recommended or automatically added songs (추천곡, 추천 대기열, 자동 추천, AI 가 고른 곡)"
+                    + " set target to auto on remove_from_queue, keep_only_in_queue or remove_positions.",
             "Always write criteria as a positive description of the songs (e.g. 한국 노래, 일본 노래), never as a negation such as 한국 노래가 아닌 곡.",
             "If the user wants varied or non-overlapping artists (e.g. 아티스트 안 겹치게, 다양하게), set diverse_artists to true on play_chart, play_songs and set_autoplay.",
             "Use get_song_info when the user asks about a song itself: what it is, who made it, when it came out, what it is about or its background."
@@ -225,6 +231,10 @@ public class AiAgent {
         out.put("total_queued", queue.size());
         ArrayNode list = out.putArray("queue");
         for (int i = 0; i < Math.min(queue.size(), QUEUE_LISTING); i++) list.add(describe(queue.get(i), i + 1));
+        List<AudioTrack> autoQueue = client.getAutoQueue();
+        out.put("total_autoplay_queued", autoQueue.size());
+        ArrayNode autoList = out.putArray("autoplay_queue");
+        for (int i = 0; i < autoQueue.size(); i++) autoList.add(describe(autoQueue.get(i), i + 1));
         out.put("volume", client.getVolume());
         out.put("repeat", client.getRepeatMode().name().toLowerCase(Locale.ROOT));
         out.put("paused", client.isPaused());
@@ -272,8 +282,9 @@ public class AiAgent {
     private String removeFromQueue(JsonNode args, boolean keepOnly) throws IOException {
         String criteria = criteria(args, "criteria");
         if (!asksForRemoval(request)) return error(REMOVAL_NOT_REQUESTED);
-        List<AudioTrack> queue = client.getTrackQueue();
-        if (queue.isEmpty()) return error("the queue is empty");
+        boolean auto = targetsAutoQueue(args);
+        List<AudioTrack> queue = auto ? client.getAutoQueue() : client.getTrackQueue();
+        if (queue.isEmpty()) return error(auto ? "the recommendation queue is empty" : "the queue is empty");
         Set<AudioTrack> matched = identitySet();
         if (criteria.isBlank()) matched.addAll(queue);
         else matched.addAll(controller.getAiShuffleClassifier().classify(criteria, queue, done ->
@@ -283,18 +294,25 @@ public class AiAgent {
         for (AudioTrack track : queue) {
             if (matched.contains(track) != keepOnly) toRemove.add(track);
         }
-        String label = criteria.isBlank() ? "대기열 전체" : keepOnly ? "'" + criteria + "' 이(가) 아닌 곡" : "'" + criteria + "'";
+        String scope = auto ? "추천 대기열" : "대기열";
+        String label = criteria.isBlank() ? scope + " 전체"
+                : (auto ? scope + "의 " : "") + (keepOnly ? "'" + criteria + "' 이(가) 아닌 곡" : "'" + criteria + "'");
         return stageRemoval(toRemove, label);
     }
 
     private String removePositions(JsonNode args) {
-        List<AudioTrack> queue = client.getTrackQueue();
+        boolean auto = targetsAutoQueue(args);
+        List<AudioTrack> queue = auto ? client.getAutoQueue() : client.getTrackQueue();
         Set<AudioTrack> toRemove = identitySet();
         for (JsonNode position : args.path("positions")) {
             int index = position.asInt(0);
             if (index >= 1 && index <= queue.size()) toRemove.add(queue.get(index - 1));
         }
-        return stageRemoval(toRemove, "지정한 위치의 곡");
+        return stageRemoval(toRemove, (auto ? "추천 대기열에서 " : "") + "지정한 위치의 곡");
+    }
+
+    static boolean targetsAutoQueue(JsonNode args) {
+        return "auto".equals(args.path("target").asText("listener"));
     }
 
     private String stageRemoval(Set<AudioTrack> tracks, String label) {
@@ -608,17 +626,20 @@ public class AiAgent {
 
     private static ArrayNode buildTools() {
         ArrayNode tools = MAPPER.createArrayNode();
-        tool(tools, "get_queue", "Show the current song, player settings and the queued songs with their positions.");
+        tool(tools, "get_queue", "Show the current song, player settings, the listener's queued songs with their positions and the automatic recommendation queue.");
         ObjectNode songInfo = tool(tools, "get_song_info", "Look up details about a song: release date, album, genre, reference text about the song or artist, and its lyrics.");
         property(songInfo, "position", "integer", "queue position from get_queue, or 0 for the song playing now", false).put("minimum", 0);
         ObjectNode remove = tool(tools, "remove_from_queue", "Delete the queued songs that match a description.");
         property(remove, "criteria", "string", "positive Korean description of the songs to delete, e.g. 한국 노래. Empty means every queued song.", true);
+        property(remove, "target", "string", QUEUE_TARGET, false).putArray("enum").add("listener").add("auto");
         ObjectNode keepOnly = tool(tools, "keep_only_in_queue", "Keep only the queued songs that match a description and delete all the others.");
         property(keepOnly, "criteria", "string", "positive Korean description of the songs to keep, e.g. 일본 노래", true);
+        property(keepOnly, "target", "string", QUEUE_TARGET, false).putArray("enum").add("listener").add("auto");
         ObjectNode positions = tool(tools, "remove_positions", "Remove queued songs by their positions from get_queue.");
-        ObjectNode positionList = property(positions, "positions", "array", "1-based queue positions", true);
+        ObjectNode positionList = property(positions, "positions", "array", "1-based positions in the chosen queue", true);
         positionList.putObject("items").put("type", "integer").put("minimum", 1);
         positionList.put("maxItems", 50);
+        property(positions, "target", "string", QUEUE_TARGET, false).putArray("enum").add("listener").add("auto");
         ObjectNode prioritize = tool(tools, "prioritize_in_queue", "Move queued songs that match a description to the front, shuffled.");
         property(prioritize, "criteria", "string", "Korean description of the songs", true);
         ObjectNode shuffle = tool(tools, "shuffle_queue", "Shuffle the queue. flow groups similar songs together, random is a plain shuffle.");

@@ -26,7 +26,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashSet;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Random;
@@ -40,7 +39,7 @@ public class AiAutoplay {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AiAutoplay.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    public static final int TARGET_QUEUE_SIZE = 3;
+    public static final int AUTO_QUEUE_SIZE = 2;
     private static final int HISTORY_LIMIT = 200;
     private static final int SESSION_HISTORY = 10;
     private static final int SESSION_QUEUE = 10;
@@ -106,6 +105,7 @@ public class AiAutoplay {
         boolean wasEnabled = enabled;
         enabled = false;
         explicit = false;
+        client.clearAutoQueue();
         return wasEnabled;
     }
 
@@ -139,19 +139,11 @@ public class AiAutoplay {
         boolean hadRequest = !criteria.isBlank() || diverse;
         criteria = "";
         diverse = false;
-        int removed = client.removeFromQueue(pendingPicks());
-        if (removed > 0 || hadRequest) {
-            LOGGER.info("ai autoplay follows the listener's new songs in guild {}: dropped {} pending pick(s){}",
-                    client.getGuildId(), removed, hadRequest ? ", cleared the earlier request" : "");
+        int cleared = client.clearAutoQueue();
+        if (cleared > 0 || hadRequest) {
+            LOGGER.info("ai autoplay follows the listener's new songs in guild {}: cleared {} queued recommendation(s){}",
+                    client.getGuildId(), cleared, hadRequest ? ", cleared the earlier request" : "");
         }
-    }
-
-    private Set<AudioTrack> pendingPicks() {
-        Set<AudioTrack> picks = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (AudioTrack track : client.getTrackQueue()) {
-            if (isAutoplay(track)) picks.add(track);
-        }
-        return picks;
     }
 
     static boolean isAutoplay(AudioTrack track) {
@@ -175,6 +167,10 @@ public class AiAutoplay {
         requestRefill();
     }
 
+    public void onQueueChanged() {
+        requestRefill();
+    }
+
     public boolean onQueueEmpty() {
         if (!isActive()) return false;
         requestRefill();
@@ -191,7 +187,8 @@ public class AiAutoplay {
         return isActive()
                 && client.getRepeatMode() == RepeatMode.NO_REPEAT
                 && client.hasJoinedToVoiceChannel()
-                && client.getTrackQueue().size() < TARGET_QUEUE_SIZE;
+                && client.getTrackQueue().isEmpty()
+                && client.getAutoQueue().size() < AUTO_QUEUE_SIZE;
     }
 
     private void requestRefill() {
@@ -210,7 +207,7 @@ public class AiAutoplay {
         } finally {
             refilling.set(false);
         }
-        if (client.hasJoinedToVoiceChannel() && client.getCurrentPlaying() == null && client.getTrackQueue().isEmpty()) {
+        if (client.hasJoinedToVoiceChannel() && client.getCurrentPlaying() == null && client.getUpcomingTracks().isEmpty()) {
             LOGGER.info("ai autoplay found nothing to play, leaving voice channel");
             client.disconnectFromVoiceChannelAndResetTrack();
         }
@@ -222,16 +219,17 @@ public class AiAutoplay {
         SlashCommandInteractionEvent requestEvent = event;
         VoiceChannel channel = client.getJoinedVoiceChannel();
         if (requester == null || requestEvent == null || channel == null) return 0;
-        List<AudioTrack> queue = client.getTrackQueue();
-        int need = TARGET_QUEUE_SIZE - queue.size();
+        if (!client.getTrackQueue().isEmpty()) return 0;
+        List<AudioTrack> autoQueue = client.getAutoQueue();
+        int need = AUTO_QUEUE_SIZE - autoQueue.size();
         if (need <= 0) return 0;
         AudioTrack current = client.getCurrentPlaying();
-        List<SessionTrack> session = session(current, queue);
+        List<SessionTrack> session = session(current, autoQueue);
         if (session.isEmpty()) return 0;
 
         Set<String> seen = new HashSet<>();
         for (PlayedTrack played : history) seen.addAll(YoutubeLookup.keys(played.info()));
-        for (AudioTrack track : queue) seen.addAll(YoutubeLookup.keys(track.getInfo()));
+        for (AudioTrack track : autoQueue) seen.addAll(YoutubeLookup.keys(track.getInfo()));
         if (current != null) seen.addAll(YoutubeLookup.keys(current.getInfo()));
 
         Set<String> recentArtists = recentArtists(session);
@@ -263,7 +261,7 @@ public class AiAutoplay {
             if (!queued) announceNowPlaying(requestEvent, track);
             added++;
         }
-        LOGGER.info("ai autoplay added {} track(s) from {} candidate(s)", added, candidates.size());
+        LOGGER.info("ai autoplay queued {} recommendation(s) from {} candidate(s)", added, candidates.size());
         return added;
     }
 
