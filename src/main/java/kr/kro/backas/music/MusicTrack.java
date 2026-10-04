@@ -2,8 +2,6 @@ package kr.kro.backas.music;
 
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
-import net.dv8tion.jda.api.entities.MessageEmbed;
-import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -77,7 +75,6 @@ public class MusicTrack {
         player.stopTrack();
         if (requeueEnded && endedTrack != null) {
             if (repeatMode == RepeatMode.REPEAT_CURRENT) {
-                announce(endedTrack, MusicEmbeds.play(endedTrack, client.getGuild()).build());
                 player.playTrack(endedTrack);
                 return;
             }
@@ -91,7 +88,6 @@ public class MusicTrack {
             client.disconnectFromVoiceChannelAndResetTrack();
             return;
         }
-        announce(nextTrack, MusicEmbeds.play(nextTrack, client.getGuild()).build());
         player.playTrack(nextTrack);
     }
 
@@ -99,17 +95,6 @@ public class MusicTrack {
     private AudioTrack pollNext() {
         AudioTrack next = trackQueue.poll();
         return next != null ? next : autoQueue.poll();
-    }
-
-    private void announce(AudioTrack track, MessageEmbed embed) {
-        MusicSelection selection = track.getUserData(MusicSelection.class);
-        if (selection == null) return;
-        SlashCommandInteractionEvent event = selection.getSlashCommandInteractionEvent();
-        if (event.isAcknowledged()) {
-            event.getMessageChannel().sendMessageEmbeds(embed).queue();
-        } else {
-            event.replyEmbeds(embed).mentionRepliedUser(false).queue();
-        }
     }
 
     public synchronized int skip(int count) {

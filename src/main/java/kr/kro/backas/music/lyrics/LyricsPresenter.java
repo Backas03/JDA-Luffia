@@ -6,14 +6,15 @@ import kr.kro.backas.SharedConstant;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
+import kr.kro.backas.music.TrackCard;
 import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.components.container.Container;
+import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageEmbed;
-import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -49,7 +50,9 @@ public final class LyricsPresenter {
     private static final int MAX_LINE_LENGTH = 300;
     private static final int MAX_AUTHOR_LENGTH = 250;
     private static final int MESSAGE_TEXT_BUDGET = 5800;
+    static final int CARD_TEXT_BUDGET = 3500;
     private static final String TRUNCATED_NOTE = "… (이하 생략)";
+    private static final String FULL_LYRICS_NOTE = "타임스탬프 가사가 없어 전체 가사로 표시합니다";
     private static final long CLOCK_INTERVAL_MS = 900;
 
     public static String translationStatus(@Nullable MusicPlayerClient client, @Nullable TranslationClient translator) {
@@ -146,79 +149,175 @@ public final class LyricsPresenter {
     private LyricsPresenter() {
     }
 
+    private static CompletableFuture<Lyrics> lookup(AudioTrack track) {
+        MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return controller.getLyricsClient().find(track.getInfo());
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }, TranslationJobs.EXECUTOR);
+    }
+
+    private static boolean hasNoLyrics(@Nullable Lyrics lyrics) {
+        return lyrics == null || lyrics.instrumental() || (!lyrics.hasPlain() && !lyrics.hasSynced());
+    }
+
+    private static void replaceSession(MusicPlayerClient client, AudioTrack track) {
+        LyricsSession previous = client.getLyricsSession();
+        if (previous != null && !previous.isForTrack(track)) client.dismissLyrics();
+        else client.stopLyrics("새 가사 표시로 대체되었습니다");
+    }
+
+    private static void startSession(MusicPlayerClient client, AudioTrack track, Lyrics lyrics, LyricsSurface surface, long offsetMs) {
+        MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
+        LyricsSession session = new LyricsSession(client, track, lyrics, surface,
+                controller.getScheduler(), controller.getTranslationClient(), offsetMs);
+        client.setLyricsSession(session);
+        session.start();
+    }
+
+    public static void presentOnCard(MusicPlayerClient client, AudioTrack track, TrackCard card, long offsetMs) {
+        TranslationClient translator = Main.getLuffia().getMusicPlayerController().getTranslationClient();
+        lookup(track).whenComplete((lyrics, error) -> {
+            if (error != null) {
+                Throwable cause = error.getCause() == null ? error : error.getCause();
+                LOGGER.warn("lyrics lookup failed for {}", track.getInfo().title, cause);
+                card.close();
+                return;
+            }
+            if (hasNoLyrics(lyrics)) {
+                card.close();
+                prefetchNext(client);
+                return;
+            }
+            if (!client.isCurrentTrack(track)) {
+                card.close();
+                return;
+            }
+            if (lyrics.hasSynced()) {
+                replaceSession(client, track);
+                startSession(client, track, lyrics, LyricsSurface.ofCard(card), offsetMs);
+                return;
+            }
+            showFull(client, track, lyrics, null, true, new CardFullView(card), translator);
+        });
+    }
+
     public static void presentViaHook(MusicPlayerClient client, AudioTrack track, InteractionHook hook,
                                       long offsetMs, boolean liveWanted, @Nullable Member requester) {
-        present(client, track, offsetMs, liveWanted, requester,
-                embeds -> hook.editOriginalEmbeds(embeds).submit(),
-                view -> hook.editOriginalComponents(view).useComponentsV2(true).submit());
-    }
-
-    public static void presentInChannel(MusicPlayerClient client, AudioTrack track, MessageChannel channel, long offsetMs) {
-        present(client, track, offsetMs, true, null,
-                embeds -> channel.sendMessageEmbeds(embeds).submit(),
-                view -> channel.sendMessageComponents(view).useComponentsV2(true).submit());
-    }
-
-    private static void present(MusicPlayerClient client, AudioTrack track, long offsetMs, boolean liveWanted,
-                                @Nullable Member requester,
-                                Function<List<MessageEmbed>, CompletableFuture<Message>> sendEmbeds,
-                                Function<Container, CompletableFuture<Message>> sendView) {
-        MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
-        CompletableFuture
-                .supplyAsync(() -> {
-                    try {
-                        return controller.getLyricsClient().find(track.getInfo());
-                    } catch (Exception e) {
-                        throw new RuntimeException(e);
-                    }
-                }, TranslationJobs.EXECUTOR)
-                .whenComplete((lyrics, error) -> {
-                    if (error != null) {
-                        Throwable cause = error.getCause() == null ? error : error.getCause();
-                        LOGGER.warn("lyrics lookup failed for {}", track.getInfo().title, cause);
-                        if (requester != null) {
-                            sendEmbeds.apply(List.of(MusicEmbeds.error(requester, "가사를 불러오지 못했습니다", cause.getMessage()).build()));
-                        }
-                        return;
-                    }
-                    if (lyrics == null || lyrics.instrumental() || (!lyrics.hasPlain() && !lyrics.hasSynced())) {
-                        if (requester != null) {
-                            sendEmbeds.apply(List.of(MusicEmbeds.error(requester, "가사를 찾지 못했습니다",
-                                    track.getInfo().author + " - " + track.getInfo().title).build()));
-                        }
-                        prefetchNext(client);
+        TranslationClient translator = Main.getLuffia().getMusicPlayerController().getTranslationClient();
+        Function<List<MessageEmbed>, CompletableFuture<Message>> sendEmbeds = embeds -> hook.editOriginalEmbeds(embeds).submit();
+        lookup(track).whenComplete((lyrics, error) -> {
+            if (error != null) {
+                Throwable cause = error.getCause() == null ? error : error.getCause();
+                LOGGER.warn("lyrics lookup failed for {}", track.getInfo().title, cause);
+                if (requester != null) {
+                    sendEmbeds.apply(List.of(MusicEmbeds.error(requester, "가사를 불러오지 못했습니다", cause.getMessage()).build()));
+                }
+                return;
+            }
+            if (hasNoLyrics(lyrics)) {
+                if (requester != null) {
+                    sendEmbeds.apply(List.of(MusicEmbeds.error(requester, "가사를 찾지 못했습니다",
+                            track.getInfo().author + " - " + track.getInfo().title).build()));
+                }
+                prefetchNext(client);
+                return;
+            }
+            if (!client.isCurrentTrack(track)) return;
+            if (liveWanted && lyrics.hasSynced()) {
+                replaceSession(client, track);
+                String initialTranslation = LyricsSession.isTranslatable(translator, lyrics) ? LyricsSession.REST : null;
+                Container initial = LyricsSession.buildView(track, lyrics, -1, initialTranslation, "가사 동기화 준비 중");
+                hook.editOriginalComponents(initial).useComponentsV2(true).submit().whenComplete((message, sendError) -> {
+                    if (sendError != null || message == null) {
+                        LOGGER.warn("failed to send lyrics message", sendError);
                         return;
                     }
                     if (!client.isCurrentTrack(track)) return;
-                    if (liveWanted && lyrics.hasSynced()) {
-                        LyricsSession previous = client.getLyricsSession();
-                        if (previous != null && !previous.isForTrack(track)) client.dismissLyrics();
-                        else client.stopLyrics("새 가사 표시로 대체되었습니다");
-                        String initialTranslation = LyricsSession.isTranslatable(controller.getTranslationClient(), lyrics)
-                                ? LyricsSession.REST : null;
-                        Container initial = LyricsSession.buildView(track, lyrics, -1, initialTranslation, "가사 동기화 준비 중");
-                        sendView.apply(initial).whenComplete((message, sendError) -> {
-                            if (sendError != null || message == null) {
-                                LOGGER.warn("failed to send lyrics message", sendError);
-                                return;
-                            }
-                            if (!client.isCurrentTrack(track)) return;
-                            LyricsSession session = new LyricsSession(client, track, lyrics, message,
-                                    controller.getScheduler(), controller.getTranslationClient(), offsetMs);
-                            client.setLyricsSession(session);
-                            session.start();
-                        });
-                        return;
-                    }
-                    showFull(client, track, lyrics, requester, liveWanted, sendEmbeds, controller.getTranslationClient());
+                    startSession(client, track, lyrics, LyricsSurface.ofMessage(message, track), offsetMs);
                 });
+                return;
+            }
+            showFull(client, track, lyrics, requester, liveWanted, new EmbedFullView(sendEmbeds), translator);
+        });
+    }
+
+    private interface FullView {
+        CompletableFuture<?> show(AudioTrack track, List<String> lines, @Nullable Map<Integer, String> translations,
+                                  String footer, @Nullable String note, long deadlineAt);
+
+        long channelId();
+
+        void dismissWhenTrackEnds(MusicPlayerClient client, AudioTrack track);
+    }
+
+    private static final class EmbedFullView implements FullView {
+        private final Function<List<MessageEmbed>, CompletableFuture<Message>> send;
+        private volatile Message message;
+
+        private EmbedFullView(Function<List<MessageEmbed>, CompletableFuture<Message>> send) {
+            this.send = send;
+        }
+
+        @Override
+        public CompletableFuture<?> show(AudioTrack track, List<String> lines, @Nullable Map<Integer, String> translations,
+                                         String footer, @Nullable String note, long deadlineAt) {
+            List<MessageEmbed> embeds = buildFullEmbeds(track, lines, translations, footer, note);
+            Message current = message;
+            if (current == null) {
+                return send.apply(embeds).thenApply(sent -> {
+                    message = sent;
+                    return sent;
+                });
+            }
+            return current.editMessageEmbeds(embeds).deadline(deadlineAt).submit();
+        }
+
+        @Override
+        public long channelId() {
+            Message current = message;
+            return current == null ? 0 : current.getChannel().getIdLong();
+        }
+
+        @Override
+        public void dismissWhenTrackEnds(MusicPlayerClient client, AudioTrack track) {
+            Message current = message;
+            if (current != null) deleteWhenTrackEnds(client, track, current);
+        }
+    }
+
+    private static final class CardFullView implements FullView {
+        private final TrackCard card;
+
+        private CardFullView(TrackCard card) {
+            this.card = card;
+        }
+
+        @Override
+        public CompletableFuture<?> show(AudioTrack track, List<String> lines, @Nullable Map<Integer, String> translations,
+                                         String footer, @Nullable String note, long deadlineAt) {
+            if (card.isClosed()) return CompletableFuture.completedFuture(null);
+            TextDisplay body = TextDisplay.of(fullBody(lines, translations, footer, note, CARD_TEXT_BUDGET));
+            return card.edit(card.frame(List.of(body)), deadlineAt);
+        }
+
+        @Override
+        public long channelId() {
+            return card.channelId();
+        }
+
+        @Override
+        public void dismissWhenTrackEnds(MusicPlayerClient client, AudioTrack track) {
+        }
     }
 
     private static void showFull(MusicPlayerClient client, AudioTrack track, Lyrics lyrics, @Nullable Member requester, boolean liveWanted,
-                                 Function<List<MessageEmbed>, CompletableFuture<Message>> sendEmbeds,
-                                 TranslationClient translator) {
+                                 FullView view, TranslationClient translator) {
         List<String> lines = fullLines(lyrics);
-        String footer = liveWanted ? "타임스탬프 가사가 없어 전체 가사로 표시합니다" : SharedConstant.RELEASE_VERSION;
+        String footer = liveWanted ? FULL_LYRICS_NOTE : SharedConstant.RELEASE_VERSION;
         if (requester != null) footer += " · 요청: " + MemberUtil.getName(requester);
         String finalFooter = footer;
         List<LyricLine> asLines = new ArrayList<>();
@@ -229,17 +328,18 @@ public final class LyricsPresenter {
         String initialNote = willTranslate ? translatingNote(client, translator) : null;
         boolean dismissOnEnd = requester == null && liveWanted;
         boolean showClock = liveWanted;
-        sendEmbeds.apply(buildFullEmbeds(track, lines, null, clockFooter(client, track, finalFooter, showClock), initialNote)).whenComplete((message, sendError) -> {
-            if (sendError != null || message == null) {
+        long firstDeadline = System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS;
+        view.show(track, lines, null, clockFooter(client, track, finalFooter, showClock), initialNote, firstDeadline).whenComplete((sent, sendError) -> {
+            if (sendError != null) {
                 LOGGER.warn("failed to send full lyrics", sendError);
                 return;
             }
-            if (dismissOnEnd) deleteWhenTrackEnds(client, track, message);
+            if (dismissOnEnd) view.dismissWhenTrackEnds(client, track);
             if (!willTranslate && !showClock) return;
             String cacheKey = TranslationJobs.cacheKey("plain", lines);
             Map<Integer, String> cache = willTranslate ? translator.cacheFor(cacheKey) : null;
             AtomicReference<TranslationJobs.Job> jobRef = new AtomicReference<>();
-            ProgressiveEditor editor = new ProgressiveEditor(message.getChannel().getIdLong(),
+            ProgressiveEditor editor = new ProgressiveEditor(view.channelId(),
                     showClock ? CLOCK_INTERVAL_MS : ProgressiveEditor.MIN_INTERVAL_MS, () -> {
                 String note = null;
                 if (willTranslate) {
@@ -249,15 +349,16 @@ public final class LyricsPresenter {
                             ? translatingNote(client, translator)
                             : (cache.isEmpty() ? "번역에 실패했습니다" : translationStatus(client, translator));
                 }
-                return message.editMessageEmbeds(buildFullEmbeds(track, lines, cache,
-                        clockFooter(client, track, finalFooter, showClock), note))
-                        .deadline(System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS).submit();
+                return view.show(track, lines, cache, clockFooter(client, track, finalFooter, showClock), note,
+                        System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS);
             });
             if (showClock) {
                 startClock(client, track, editor, () -> {
                     if (willTranslate || dismissOnEnd) return;
-                    message.editMessageEmbeds(buildFullEmbeds(track, lines, null, finalFooter, null))
-                            .queue(null, e -> LOGGER.debug("failed to finalize full lyrics", e));
+                    view.show(track, lines, null, finalFooter, null, System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS)
+                            .whenComplete((result, error) -> {
+                                if (error != null) LOGGER.debug("failed to finalize full lyrics", error);
+                            });
                 });
             }
             if (!willTranslate) return;
@@ -310,8 +411,10 @@ public final class LyricsPresenter {
                 String doneNote = translations.isEmpty()
                         ? "번역에 실패했습니다"
                         : translationStatus(client, translator);
-                message.editMessageEmbeds(buildFullEmbeds(track, lines, translations, finalFooter, doneNote))
-                        .queue(null, e -> LOGGER.debug("failed to attach translations", e));
+                view.show(track, lines, translations, finalFooter, doneNote, System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS)
+                        .whenComplete((result, error) -> {
+                            if (error != null) LOGGER.debug("failed to attach translations", error);
+                        });
             }, TranslationJobs.EXECUTOR);
         });
     }
@@ -577,6 +680,29 @@ public final class LyricsPresenter {
         List<String> lines = new ArrayList<>();
         lyrics.synced().forEach(line -> lines.add(line.text()));
         return lines;
+    }
+
+    static String fullBody(List<String> lines, @Nullable Map<Integer, String> translations, String footer, @Nullable String note, int budget) {
+        StringBuilder tail = new StringBuilder("-# ").append(footer);
+        if (note != null && !note.isBlank()) {
+            for (String noteLine : note.split("\n")) {
+                tail.append('\n');
+                if (!noteLine.isBlank()) tail.append("-# ").append(noteLine);
+            }
+        }
+        int limit = budget - tail.length() - TRUNCATED_NOTE.length() - 2;
+        StringBuilder text = new StringBuilder();
+        for (int i = 0; i < lines.size(); i++) {
+            String entry = DiscordSafe.text(lines.get(i), MAX_LINE_LENGTH);
+            String translation = translations == null ? null : DiscordSafe.text(translations.get(i), MAX_LINE_LENGTH);
+            if (translation != null && !translation.isBlank()) entry += "\n-# " + translation;
+            if (text.length() + entry.length() + 1 > limit) {
+                text.append(TRUNCATED_NOTE).append('\n');
+                break;
+            }
+            text.append(entry).append('\n');
+        }
+        return text.append('\n').append(tail).toString();
     }
 
     private static List<MessageEmbed> buildFullEmbeds(AudioTrack track, List<String> lines,

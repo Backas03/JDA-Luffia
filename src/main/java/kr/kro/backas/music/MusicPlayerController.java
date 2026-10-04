@@ -210,10 +210,12 @@ public class MusicPlayerController extends ListenerAdapter {
                     loader.getLoadedTracks().get(event.getValues().get(0))
             ));
             event.editSelectMenu(event.getComponent().asDisabled()).queue();
-            event.getMessage()
-                    .replyEmbeds(result.build())
-                    .mentionRepliedUser(false)
-                    .queue();
+            if (result != null) {
+                event.getMessage()
+                        .replyEmbeds(result.build())
+                        .mentionRepliedUser(false)
+                        .queue();
+            }
         } catch (MusicPlayerException e) {
             EmbedBuilder builder = switch (e.getErrorType()) {
                 case NOT_IN_VOICE_CHANNEL -> MusicEmbeds.error(member,
@@ -227,6 +229,7 @@ public class MusicPlayerController extends ListenerAdapter {
         }
     }
 
+    @Nullable
     public EmbedBuilder findClientAndEnqueue(MusicSelection selection) throws MusicPlayerException {
         Member requestedMember = selection.getRequestedMember();
         AudioChannelUnion joinedAudioChannel = MemberUtil.getJoinedAudioChannel(requestedMember);
