@@ -4,6 +4,7 @@ import club.minnced.discord.jdave.interop.JDaveSessionFactory;
 import com.merakianalytics.orianna.Orianna;
 import com.merakianalytics.orianna.types.common.Platform;
 import kr.kro.backas.secret.BotSecret;
+import kr.kro.backas.util.BotShutdown;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.audio.AudioModuleConfig;
@@ -16,8 +17,8 @@ import net.dv8tion.jda.api.utils.messages.MessageRequest;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.time.Duration;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Scanner;
 
 public class Main {
@@ -27,22 +28,10 @@ public class Main {
         return luffia;
     }
 
-    public static final int SHUTDOWN_TIMEOUT = 5;
+    static final long SHUTDOWN_HALT_AFTER_MS = 10_000;
 
     public static void main(String[] args) {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("stopping luffia...");
-            JDA discordAPI = luffia.getDiscordAPI();
-            luffia.getMusicPlayerController().shutdownGracefully();
-            try {
-                if (!discordAPI.awaitShutdown(Duration.ofSeconds(SHUTDOWN_TIMEOUT))) {
-                    discordAPI.shutdownNow();
-                    discordAPI.awaitShutdown();
-                }
-            } catch (InterruptedException e) {
-                LoggerFactory.getLogger("Luffia").debug("await shutdown failed", e);
-            }
-        }));
+        Runtime.getRuntime().addShutdownHook(new Thread(Main::stop, "luffia-shutdown"));
         MessageRequest.setDefaultMentions(EnumSet.noneOf(Message.MentionType.class));
         MessageRequest.setDefaultMentionRepliedUser(false);
         JDABuilder builder = JDABuilder
@@ -66,31 +55,48 @@ public class Main {
         }
     }
 
+    private static void stop() {
+        startHaltWatchdog();
+        System.out.println("stopping luffia...");
+        Luffia current = luffia;
+        if (current == null) return;
+        try {
+            current.getMusicPlayerController().shutdownGracefully();
+        } catch (RuntimeException e) {
+            LoggerFactory.getLogger("Luffia").warn("music controller shutdown failed", e);
+        }
+        if (!BotShutdown.stopAll(List.of(current.getDiscordAPI()))) {
+            LoggerFactory.getLogger("Luffia").warn("discord api did not stop within the shutdown timeout");
+        }
+    }
+
+    private static void startHaltWatchdog() {
+        Thread watchdog = new Thread(() -> {
+            try {
+                Thread.sleep(SHUTDOWN_HALT_AFTER_MS);
+            } catch (InterruptedException e) {
+                return;
+            }
+            System.err.println("shutdown hook did not finish in time, halting jvm");
+            Runtime.getRuntime().halt(0);
+        }, "luffia-shutdown-watchdog");
+        watchdog.setDaemon(true);
+        watchdog.start();
+    }
+
     private static void initScanner() {
         /* scanner start */
         while (true) {
             Scanner scanner = new Scanner(System.in);
-            try {
-                String input = scanner.nextLine();
-                if (input.equals("stop")) {
-                    if (!isInitialized()) {
-                        System.out.println("luffia isn't initialized.");
-                        return;
-                    }
-                    System.out.println("stopping luffia...");
-                    JDA discordAPI = luffia.getDiscordAPI();
-                    luffia.getMusicPlayerController().shutdownGracefully();
-                    if (!discordAPI.awaitShutdown(Duration.ofSeconds(SHUTDOWN_TIMEOUT))) {
-                        discordAPI.shutdownNow();
-                        discordAPI.awaitShutdown();
-                    }
-                    System.out.println("...done");
-                    System.exit(0);
+            String input = scanner.nextLine();
+            if (input.equals("stop")) {
+                if (!isInitialized()) {
+                    System.out.println("luffia isn't initialized.");
+                    return;
                 }
-                System.out.println(input);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+                System.exit(0);
             }
+            System.out.println(input);
             /* scanner end */
         }
     }

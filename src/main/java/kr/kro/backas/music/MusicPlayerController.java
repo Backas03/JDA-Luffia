@@ -14,6 +14,7 @@ import kr.kro.backas.music.lyrics.LrcLibClient;
 import kr.kro.backas.music.lyrics.LyricsExpansions;
 import kr.kro.backas.music.lyrics.TranslationClient;
 import kr.kro.backas.music.source.MusicSourceRegistry;
+import kr.kro.backas.util.BotShutdown;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
@@ -38,7 +39,6 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -51,7 +51,6 @@ import java.util.concurrent.TimeUnit;
 
 public class MusicPlayerController extends ListenerAdapter {
     private static final Logger LOGGER = LoggerFactory.getLogger(MusicPlayerController.class);
-    private static final int SHUTDOWN_TIMEOUT_SECONDS = 5;
     private static final long AI_CACHE_FLUSH_SECONDS = 60;
     private static final long EXPANSION_PRUNE_MINUTES = 10;
 
@@ -340,15 +339,8 @@ public class MusicPlayerController extends ListenerAdapter {
         for (MusicPlayerClient client : clients.values()) {
             client.shutdownGracefully();
         }
-        for (JDA bot : ownedBots) {
-            try {
-                if (!bot.awaitShutdown(Duration.ofSeconds(SHUTDOWN_TIMEOUT_SECONDS))) {
-                    bot.shutdownNow();
-                    bot.awaitShutdown();
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+        if (!BotShutdown.stopAll(ownedBots)) {
+            LOGGER.warn("some owned bots did not stop within the shutdown timeout");
         }
         scheduler.shutdownNow();
         sourceRegistry.shutdown();
