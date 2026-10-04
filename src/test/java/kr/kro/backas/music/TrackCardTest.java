@@ -13,14 +13,14 @@ class TrackCardTest {
 
     @Test
     void headerLooksLikeTheOldPlayEmbedWhilePlaying() {
-        assertEquals("**DECO*27**\n### [DECO*27 - Monitoring](https://youtu.be/id)\n음악을 재생합니다\n"
+        assertEquals("**DECO*27**\n## [DECO*27 - Monitoring](https://youtu.be/id)\n음악을 재생합니다\n"
                         + "**노래 봇** 김노래#6163 · **재생 시간** 3분 2초 · **출처** YouTube",
                 TrackCard.headerText(info("DECO*27 - Monitoring", "DECO*27", 182_000, false), "김노래#6163", "YouTube", true));
     }
 
     @Test
     void collapsedHeaderDropsThePlayingNoteAndMissingArtist() {
-        assertEquals("### [Radio](https://youtu.be/id)\n**노래 봇** 김노래 · **재생 시간** 실시간 스트리밍 · **출처** YouTube",
+        assertEquals("## [Radio](https://youtu.be/id)\n**노래 봇** 김노래 · **재생 시간** 실시간 스트리밍 · **출처** YouTube",
                 TrackCard.headerText(info("Radio", "", 0, true), "김노래", "YouTube", false));
     }
 
