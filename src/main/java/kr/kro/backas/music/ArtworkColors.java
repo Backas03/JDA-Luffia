@@ -99,6 +99,22 @@ public final class ArtworkColors {
         return cached.banner() == null ? new Banner(url, null) : new Banner(null, cached.banner());
     }
 
+    @Nullable
+    public static Banner await(@Nullable String url, long timeoutMs) {
+        if (url == null || url.isBlank()) return null;
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        warm(url);
+        while (!CACHE.containsKey(url) && System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        return bannerFor(url);
+    }
+
     public static void warm(@Nullable String url) {
         if (url == null || url.isBlank() || CACHE.containsKey(url) || !LOADING.add(url)) return;
         TranslationJobs.EXECUTOR.execute(() -> {
