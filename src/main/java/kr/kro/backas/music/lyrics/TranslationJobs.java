@@ -66,8 +66,12 @@ public final class TranslationJobs {
 
     public static Job submit(TranslationClient translator, String key, List<String> lines, boolean priority,
                              @Nullable BiConsumer<Integer, String> onLine, @Nullable String songContext) {
-        Job job = JOBS.compute(key, (k, existing) ->
-                existing != null && !existing.done.isDone() ? existing : new Job(translator, k, lines, songContext));
+        Job job = JOBS.compute(key, (k, existing) -> {
+            if (existing != null && !existing.done.isDone() && !existing.cancelled) return existing;
+            Job created = new Job(translator, k, lines, songContext);
+            if (priority) created.cache.values().removeIf(String::isBlank);
+            return created;
+        });
         if (onLine != null) job.listeners.add(onLine);
         boolean fresh = job.started.compareAndSet(false, true);
         if (priority) job.promote();

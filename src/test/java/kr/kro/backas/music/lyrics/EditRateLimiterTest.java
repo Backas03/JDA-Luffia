@@ -89,6 +89,31 @@ class EditRateLimiterTest {
     }
 
     @Test
+    void pausesTimeOnlyUpdatesAfterEditsAreHeldBack() {
+        long channel = CHANNELS.incrementAndGet();
+        long now = 7_000_000L;
+        assertTrue(EditRateLimiter.extrasAllowed(channel, now));
+        EditRateLimiter.reportHeldBack(channel, "test", now);
+        assertFalse(EditRateLimiter.extrasAllowed(channel, now + EditRateLimiter.EXTRAS_PAUSE_MS - 1));
+        assertTrue(EditRateLimiter.extrasAllowed(channel, now + EditRateLimiter.EXTRAS_PAUSE_MS));
+        assertTrue(EditRateLimiter.extrasAllowed(CHANNELS.incrementAndGet(), now));
+    }
+
+    @Test
+    void recognisesRequestsThatWereDroppedOrRateLimited() {
+        assertTrue(EditRateLimiter.isHeldBack(new java.util.concurrent.TimeoutException()));
+        assertTrue(EditRateLimiter.isHeldBack(new java.util.concurrent.CompletionException(new java.util.concurrent.TimeoutException())));
+        assertTrue(EditRateLimiter.isHeldBack(new java.util.concurrent.CancellationException()));
+        assertFalse(EditRateLimiter.isHeldBack(new IllegalStateException("unknown message")));
+    }
+
+    @Test
+    void usesTheSameFiveSecondWindowAsDiscord() {
+        assertEquals(5000, EditRateLimiter.WINDOW_MS);
+        assertEquals(5, EditRateLimiter.MAX_EDITS_PER_WINDOW);
+    }
+
+    @Test
     void clockClimbsEverySecondWhenNoLyricsAreNear() {
         Outcome outcome = simulate(new long[0], 60_000);
         assertTrue(outcome.clockEdits() >= 57, "clock edits: " + outcome.clockEdits());

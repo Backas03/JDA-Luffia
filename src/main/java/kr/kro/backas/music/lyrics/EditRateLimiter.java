@@ -1,18 +1,60 @@
 package kr.kro.backas.music.lyrics;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeoutException;
 
 public final class EditRateLimiter {
 
     public static final int MAX_EDITS_PER_WINDOW = 5;
-    public static final long WINDOW_MS = 5125;
+    public static final long WINDOW_MS = 5000;
+    public static final long EDIT_DEADLINE_MS = 2500;
+    public static final long IN_FLIGHT_TIMEOUT_MS = 4000;
+    static final long EXTRAS_PAUSE_MS = 30_000;
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(EditRateLimiter.class);
     private static final Map<Long, Deque<Long>> HISTORY = new ConcurrentHashMap<>();
+    private static final Map<Long, Long> EXTRAS_PAUSED_UNTIL = new ConcurrentHashMap<>();
 
     private EditRateLimiter() {
+    }
+
+    public static boolean extrasAllowed(long channelId) {
+        return extrasAllowed(channelId, System.currentTimeMillis());
+    }
+
+    static boolean extrasAllowed(long channelId, long now) {
+        Long until = EXTRAS_PAUSED_UNTIL.get(channelId);
+        return until == null || now >= until;
+    }
+
+    public static void reportHeldBack(long channelId, String what) {
+        reportHeldBack(channelId, what, System.currentTimeMillis());
+    }
+
+    static void reportHeldBack(long channelId, String what, long now) {
+        boolean alreadyPaused = !extrasAllowed(channelId, now);
+        EXTRAS_PAUSED_UNTIL.put(channelId, now + EXTRAS_PAUSE_MS);
+        if (!alreadyPaused) {
+            LOGGER.warn("lyrics message edits in channel {} are being held back ({}); pausing time-only updates for {}s",
+                    channelId, what, EXTRAS_PAUSE_MS / 1000);
+        }
+    }
+
+    public static boolean isHeldBack(Throwable error) {
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            if (current instanceof TimeoutException || current instanceof CancellationException
+                    || current.getClass().getSimpleName().equals("RateLimitedException")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static final long[] NOTHING_UPCOMING = new long[0];
