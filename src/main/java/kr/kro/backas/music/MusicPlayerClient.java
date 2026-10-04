@@ -64,6 +64,7 @@ public class MusicPlayerClient {
     private volatile long lyricsOffsetMs = LyricsSession.DEFAULT_OFFSET_MS;
     private volatile long connectRequestedAt;
     private volatile TrackCard trackCard;
+    private volatile TrackCard homeCard;
 
     public MusicPlayerClient(JDA musicBot, Guild guild, AudioPlayerManager sharedAudioPlayerManager) {
         this.musicBot = musicBot;
@@ -242,15 +243,6 @@ public class MusicPlayerClient {
         lyricsOffsetMs = LyricsSession.DEFAULT_OFFSET_MS;
     }
 
-    @Nullable
-    private MessageChannel lyricsChannelFor(AudioTrack track) {
-        MessageChannel channel = lyricsChannel;
-        if (channel != null) return channel;
-        MusicSelection selection = track.getUserData(MusicSelection.class);
-        if (selection == null || selection.getSlashCommandInteractionEvent() == null) return null;
-        return selection.getSlashCommandInteractionEvent().getMessageChannel();
-    }
-
     public long getLyricsOffsetMs() {
         return lyricsOffsetMs;
     }
@@ -264,33 +256,47 @@ public class MusicPlayerClient {
         return playing != null && track != null && playing.getIdentifier().equals(track.getIdentifier());
     }
 
+    @Nullable
+    private MessageChannel homeChannelFor(AudioTrack track) {
+        MusicSelection selection = track.getUserData(MusicSelection.class);
+        if (selection == null || selection.getSlashCommandInteractionEvent() == null) return null;
+        return selection.getSlashCommandInteractionEvent().getMessageChannel();
+    }
+
+    private static String mirrorNote(MessageChannel channel) {
+        return "가사를 <#" + channel.getId() + "> 에서 표시하고 있습니다";
+    }
+
     private void onTrackStarted(AudioTrack track) {
-        MessageChannel channel = lyricsChannelFor(track);
-        if (channel == null) return;
+        MessageChannel home = homeChannelFor(track);
+        MessageChannel live = lyricsChannel != null ? lyricsChannel : home;
+        if (live == null) return;
         LyricsSession current = lyricsSession;
         if (current != null && current.isForTrack(track)) return;
         MusicSelection selection = track.getUserData(MusicSelection.class);
         InteractionHook hook = selection == null ? null : selection.takeReplyHook();
-        MessageChannel requestChannel = selection == null || selection.getSlashCommandInteractionEvent() == null
-                ? null : selection.getSlashCommandInteractionEvent().getMessageChannel();
-        boolean hookInChannel = hook != null && requestChannel != null && requestChannel.getIdLong() == channel.getIdLong();
-        if (hook != null && !hookInChannel) {
-            hook.editOriginalEmbeds(MusicEmbeds.play(track, getGuild()).build())
-                    .queue(null, e -> LOGGER.debug("failed to answer the play request", e));
-        }
-        TrackCard card = TrackCard.send(this, track, channel, hookInChannel ? hook : null);
+        boolean mirrored = home != null && home.getIdLong() != live.getIdLong();
+        TrackCard record = home == null ? null
+                : TrackCard.send(this, track, home, hook, false, mirrored ? mirrorNote(live) : TrackCard.LOOKING_UP);
+        TrackCard card = record != null && !mirrored ? record : TrackCard.send(this, track, live, null, true, TrackCard.LOOKING_UP);
+        homeCard = record;
         trackCard = card;
         LyricsPresenter.presentOnCard(this, track, card, lyricsOffsetMs);
     }
 
     public TrackCard repostTrackCard(AudioTrack track, MessageChannel channel) {
         TrackCard previous = trackCard;
-        TrackCard card = TrackCard.send(this, track, channel, null);
-        trackCard = card;
-        if (previous != null) {
-            if (previous.channelId() == channel.getIdLong()) previous.delete();
-            else previous.showNote("가사를 <#" + channel.getId() + "> 에서 표시하고 있습니다");
+        TrackCard home = homeCard;
+        boolean atHome = home != null && home.channelId() == channel.getIdLong();
+        TrackCard card = TrackCard.send(this, track, channel, null, !atHome, TrackCard.LOOKING_UP);
+        if (previous != null && previous != home) previous.delete();
+        if (atHome) {
+            home.delete();
+            homeCard = card;
+        } else if (home != null && !home.isClosed()) {
+            home.showNote(mirrorNote(channel));
         }
+        trackCard = card;
         return card;
     }
 
@@ -505,6 +511,7 @@ public class MusicPlayerClient {
     public void resetSession() {
         connectRequestedAt = 0;
         trackCard = null;
+        homeCard = null;
         autoplay.reset();
         musicTrack.reset();
         resetLyricsPreferences();
