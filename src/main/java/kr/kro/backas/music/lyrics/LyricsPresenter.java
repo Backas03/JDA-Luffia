@@ -443,7 +443,7 @@ public final class LyricsPresenter {
     private static final Set<MusicPlayerClient> PREFETCH_RUNNING = ConcurrentHashMap.newKeySet();
 
     private static List<AudioTrack> prefetchTargets(MusicPlayerClient client, TranslationClient translator) {
-        List<AudioTrack> queue = client.getTrackQueue();
+        List<AudioTrack> queue = client.getUpcomingTracks();
         int count = translator.hasUsableGpu() ? PREFETCH_COUNT_FAST : PREFETCH_COUNT;
         return new ArrayList<>(queue.subList(0, Math.min(count, queue.size())));
     }
@@ -481,7 +481,7 @@ public final class LyricsPresenter {
     public static void prefetchNext(MusicPlayerClient client) {
         MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
         TranslationClient translator = controller.getTranslationClient();
-        List<AudioTrack> queue = client.getTrackQueue();
+        List<AudioTrack> queue = client.getUpcomingTracks();
         boolean llmIsSlow = translator != null && translator.isEnabled() && !translator.hasUsableGpu();
         warmLyrics(controller, queue.subList(0, Math.min(llmIsSlow ? PREFETCH_COUNT : PREFETCH_COUNT_FAST, queue.size())));
         if (translator == null || !translator.isEnabled()) {

@@ -10,20 +10,39 @@ import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
 import kr.kro.backas.music.MusicSelection;
 import kr.kro.backas.music.ai.AiAutoplay;
+import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.DurationUtil;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.components.container.Container;
+import net.dv8tion.jda.api.components.container.ContainerChildComponent;
+import net.dv8tion.jda.api.components.section.Section;
+import net.dv8tion.jda.api.components.separator.Separator;
+import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
+import net.dv8tion.jda.api.components.thumbnail.Thumbnail;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
+import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class QueueSlashCommand implements SlashCommandSource {
     public static final String COMMAND_NAME = "대기열";
+    static final boolean USE_COMPONENTS_V2 = true;
+    static final boolean ROW_THUMBNAILS = false;
     private static final int MAX_QUEUE_ROWS = 5;
+    static final int MAX_VIEW_ROWS = 10;
+    static final int MAX_THUMBNAIL_ROWS = 5;
+    static final int MAX_AUTO_ROWS = AiAutoplay.AUTO_QUEUE_SIZE;
+    static final int PROGRESS_WIDTH = 14;
+    private static final int MAX_TITLE_LENGTH = 80;
+    private static final int MAX_NAME_LENGTH = 40;
 
     @Override
     public SlashCommandData buildCommand() {
@@ -54,6 +73,165 @@ public class QueueSlashCommand implements SlashCommandSource {
                     .build()).queue();
             return;
         }
+        if (USE_COMPONENTS_V2) {
+            event.replyComponents(buildView(client, currentPlaying)).useComponentsV2(true).queue();
+        } else {
+            event.replyEmbeds(buildEmbed(client, currentPlaying).build()).queue();
+        }
+    }
+
+    private static Container buildView(MusicPlayerClient client, AudioTrack current) {
+        AudioTrackInfo info = current.getInfo();
+        MusicSelection selection = current.getUserData(MusicSelection.class);
+        StringBuilder head = new StringBuilder("### ").append(link(info)).append('\n');
+        if (info.author != null && !info.author.isBlank()) {
+            head.append(DiscordSafe.escaped(info.author, MAX_TITLE_LENGTH)).append('\n');
+        }
+        head.append("-# ").append(progress(client, info)).append('\n');
+        List<String> meta = new ArrayList<>();
+        meta.add(MusicEmbeds.sourceLabel(current));
+        if (selection != null) meta.add(selection.isAiRecommended() ? requesterOf(selection) : "요청 " + requesterOf(selection));
+        head.append("-# ").append(String.join(" · ", meta));
+        TextDisplay nowPlaying = TextDisplay.of(head.toString());
+        String artwork = MusicEmbeds.thumbnailOf(current);
+
+        List<ContainerChildComponent> children = new ArrayList<>();
+        children.add(artwork == null ? nowPlaying : Section.of(Thumbnail.fromUrl(artwork), nowPlaying));
+        children.add(TextDisplay.of("-# " + String.join(" · ", settings(client))));
+        children.add(Separator.createDivider(Separator.Spacing.SMALL));
+
+        List<AudioTrack> queue = client.getTrackQueue();
+        addList(children, "대기열", null, queue, MAX_VIEW_ROWS);
+
+        List<AudioTrack> autoQueue = client.getAutoQueue();
+        if (!autoQueue.isEmpty()) {
+            children.add(Separator.createDivider(Separator.Spacing.SMALL));
+            addList(children, "다음 추천", "대기열이 비면 이어서 재생합니다", autoQueue, MAX_AUTO_ROWS);
+        }
+        children.add(Separator.createDivider(Separator.Spacing.SMALL));
+        children.add(TextDisplay.of("-# " + MusicEmbeds.botName(client.getGuild()) + " · " + SharedConstant.RELEASE_VERSION));
+        return Container.of(children).withAccentColor(MusicEmbeds.PRIMARY);
+    }
+
+    private static void addList(List<ContainerChildComponent> children, String title, @Nullable String note,
+                                List<AudioTrack> tracks, int limit) {
+        int max = ROW_THUMBNAILS ? Math.min(limit, MAX_THUMBNAIL_ROWS) : limit;
+        int shown = Math.min(tracks.size(), max);
+        List<AudioTrack> visible = tracks.subList(0, shown);
+        Set<String> requesters = requesters(visible);
+        String single = requesters.size() == 1 && !tracks.isEmpty() ? requesters.iterator().next() : null;
+        children.add(TextDisplay.of(heading(title, tracks.size(), totalLength(tracks), single)
+                + (note == null ? "" : "\n-# " + note)));
+        if (tracks.isEmpty()) return;
+
+        StringBuilder text = new StringBuilder();
+        for (int i = 0; i < shown; i++) {
+            AudioTrack track = tracks.get(i);
+            AudioTrackInfo info = track.getInfo();
+            MusicSelection selection = track.getUserData(MusicSelection.class);
+            List<String> details = new ArrayList<>();
+            if (info.author != null && !info.author.isBlank()) details.add(DiscordSafe.escaped(info.author, MAX_NAME_LENGTH));
+            details.add(info.isStream ? "라이브" : DurationUtil.formatClock(info.length / 1000));
+            if (single == null && selection != null) details.add(requesterOf(selection));
+            String row = rowText(i + 1, link(info), details);
+            String artwork = ROW_THUMBNAILS ? MusicEmbeds.thumbnailOf(track) : null;
+            if (artwork != null) {
+                children.add(Section.of(Thumbnail.fromUrl(artwork), TextDisplay.of(row)));
+                continue;
+            }
+            if (!text.isEmpty()) text.append('\n');
+            text.append(row);
+        }
+        String overflow = overflow(tracks.size(), shown);
+        if (!overflow.isEmpty()) {
+            if (!text.isEmpty()) text.append('\n');
+            text.append(overflow);
+        }
+        if (!text.isEmpty()) children.add(TextDisplay.of(text.toString()));
+    }
+
+    private static Set<String> requesters(List<AudioTrack> tracks) {
+        Set<String> names = new HashSet<>();
+        for (AudioTrack track : tracks) {
+            MusicSelection selection = track.getUserData(MusicSelection.class);
+            if (selection != null && !selection.isAiRecommended()) names.add(requesterOf(selection));
+            else names.add("");
+        }
+        return names;
+    }
+
+    static String heading(String title, int count, @Nullable String length, @Nullable String requester) {
+        if (count == 0) return "**" + title + "** · 비어 있음";
+        StringBuilder text = new StringBuilder("**").append(title).append("** · ").append(count).append("곡");
+        if (length != null) text.append(" · ").append(length);
+        if (requester != null && !requester.isEmpty()) text.append(" · 요청 ").append(requester);
+        return text.toString();
+    }
+
+    static String rowText(int number, String link, List<String> details) {
+        return number + ". " + link + "\n-# " + String.join(" · ", details);
+    }
+
+    static String overflow(int total, int shown) {
+        return total > shown ? "-# 외 " + (total - shown) + "곡" : "";
+    }
+
+    static String progressBar(long positionMs, long lengthMs, int width) {
+        long bounded = Math.max(0, Math.min(positionMs, lengthMs));
+        int marker = lengthMs <= 0 ? 0 : (int) Math.round((double) bounded / lengthMs * (width - 1));
+        StringBuilder bar = new StringBuilder(width);
+        for (int i = 0; i < width; i++) bar.append(i < marker ? '━' : i == marker ? '●' : '─');
+        return bar.toString();
+    }
+
+    @Nullable
+    static String totalLength(List<AudioTrack> tracks) {
+        long total = 0;
+        for (AudioTrack track : tracks) {
+            if (!track.getInfo().isStream) total += Math.max(0, track.getInfo().length);
+        }
+        return total <= 0 ? null : totalLength(total);
+    }
+
+    static String totalLength(long ms) {
+        long minutes = ms / 60_000;
+        long hours = minutes / 60;
+        if (hours > 0) return hours + "시간" + (minutes % 60 > 0 ? " " + minutes % 60 + "분" : "");
+        if (minutes > 0) return minutes + "분";
+        return (ms / 1000) + "초";
+    }
+
+    private static String progress(MusicPlayerClient client, AudioTrackInfo info) {
+        long position = Math.max(0, (long) client.getRealPositionMs());
+        if (info.isStream || info.length <= 0) return DurationUtil.formatClock(position / 1000) + " · 라이브";
+        return progressBar(position, info.length, PROGRESS_WIDTH) + " " + DurationUtil.formatClock(Math.min(position, info.length) / 1000)
+                + " / " + DurationUtil.formatClock(info.length / 1000);
+    }
+
+    private static List<String> settings(MusicPlayerClient client) {
+        List<String> settings = new ArrayList<>();
+        settings.add("볼륨 " + client.getVolume() + "%");
+        settings.add(client.getRepeatModeName());
+        if (Math.abs(client.getCurrentPlaySpeed() - 1.0) > 0.001) settings.add(client.getCurrentPlaySpeed() + "배속");
+        if (client.getKaraokeMode().isActive()) settings.add("노래방 " + client.getKaraokeMode().getName());
+        if (!client.getCurrentEqualizer().isFlat()) settings.add("이퀄라이저 " + client.getCurrentEqualizer().getName());
+        settings.add("AI 추천 " + autoplayStatus(client));
+        return settings;
+    }
+
+    private static String link(AudioTrackInfo info) {
+        String title = DiscordSafe.escaped(info.title, MAX_TITLE_LENGTH).replace('[', '(').replace(']', ')');
+        if (info.uri == null || info.uri.isBlank()) return title;
+        return "[" + title + "](" + info.uri + ")";
+    }
+
+    private static String requesterOf(MusicSelection selection) {
+        String name = DiscordSafe.escaped(MemberUtil.getName(selection.getRequestedMember()), MAX_NAME_LENGTH);
+        if (selection.isAutoplay()) return "AI 자동 추천 · " + name;
+        return selection.isAiRecommended() ? "AI 추천 · " + name : name;
+    }
+
+    private static EmbedBuilder buildEmbed(MusicPlayerClient client, AudioTrack currentPlaying) {
         AudioTrackInfo currentPlayingInfo = currentPlaying.getInfo();
         MusicSelection currentMusicSelection = currentPlaying.getUserData(MusicSelection.class);
         EmbedBuilder builder = new EmbedBuilder()
@@ -96,7 +274,11 @@ public class QueueSlashCommand implements SlashCommandSource {
                 builder.addField("", "... 외 " + (queue.size() - rows) + "곡", false);
             }
         }
-        event.replyEmbeds(builder.build()).queue();
+        List<AudioTrack> autoQueue = client.getAutoQueue();
+        if (!autoQueue.isEmpty()) {
+            builder.addField("다음 추천 (" + autoQueue.size() + "곡)", MusicEmbeds.queuePreview(autoQueue, MAX_QUEUE_ROWS), false);
+        }
+        return builder;
     }
 
     private static String autoplayStatus(MusicPlayerClient client) {
