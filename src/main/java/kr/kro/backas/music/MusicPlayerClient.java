@@ -298,10 +298,15 @@ public class MusicPlayerClient {
             if (!isConnecting()) resetSession();
             connectToVoiceChannel(memberChannel);
         }
-        if (!selection.isAutoplay()) autoplay.onListenerTracksAdded(selection);
         AudioTrack track = selection.getSelectedTrack();
         track.setUserData(selection);
-        boolean enqueued = musicTrack.enqueueOrPlay(track);
+        boolean enqueued;
+        if (selection.isAutoplay()) {
+            enqueued = musicTrack.enqueueAutoOrPlay(track);
+        } else {
+            autoplay.onListenerTracksAdded(selection);
+            enqueued = musicTrack.enqueueOrPlay(track);
+        }
         if (enqueued) LyricsPresenter.prefetchNext(this);
         return enqueued;
     }
@@ -315,6 +320,18 @@ public class MusicPlayerClient {
 
     public List<AudioTrack> getTrackQueue() {
         return new ArrayList<>(musicTrack.getTrackQueue());
+    }
+
+    public List<AudioTrack> getAutoQueue() {
+        return new ArrayList<>(musicTrack.getAutoQueue());
+    }
+
+    public List<AudioTrack> getUpcomingTracks() {
+        return musicTrack.getUpcoming();
+    }
+
+    public int clearAutoQueue() {
+        return musicTrack.clearAutoQueue();
     }
 
     public int shuffleQueue() {
@@ -331,7 +348,10 @@ public class MusicPlayerClient {
 
     public int removeFromQueue(Set<AudioTrack> tracks) {
         int removed = musicTrack.remove(tracks);
-        if (removed > 0) LyricsPresenter.prefetchNext(this);
+        if (removed > 0) {
+            LyricsPresenter.prefetchNext(this);
+            autoplay.onQueueChanged();
+        }
         return removed;
     }
 

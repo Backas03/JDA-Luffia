@@ -18,6 +18,7 @@ public class MusicTrack {
     private final MusicPlayerClient client;
     private final AudioPlayer player;
     private final Queue<AudioTrack> trackQueue;
+    private final Queue<AudioTrack> autoQueue;
 
     private volatile RepeatMode repeatMode;
 
@@ -25,6 +26,7 @@ public class MusicTrack {
         this.client = client;
         this.player = player;
         this.trackQueue = new ConcurrentLinkedQueue<>();
+        this.autoQueue = new ConcurrentLinkedQueue<>();
         this.repeatMode = RepeatMode.NO_REPEAT;
     }
 
@@ -44,12 +46,22 @@ public class MusicTrack {
         client.dismissLyrics();
         this.player.stopTrack();
         this.trackQueue.clear();
+        this.autoQueue.clear();
         this.repeatMode = RepeatMode.NO_REPEAT;
     }
 
     public synchronized boolean enqueueOrPlay(AudioTrack track) {
         if (hasPlayingTrack()) {
             trackQueue.add(track);
+            return true;
+        }
+        player.playTrack(track);
+        return false;
+    }
+
+    public synchronized boolean enqueueAutoOrPlay(AudioTrack track) {
+        if (hasPlayingTrack()) {
+            autoQueue.add(track);
             return true;
         }
         player.playTrack(track);
@@ -73,7 +85,7 @@ public class MusicTrack {
                 trackQueue.add(endedTrack);
             }
         }
-        AudioTrack nextTrack = trackQueue.poll();
+        AudioTrack nextTrack = pollNext();
         if (nextTrack == null) {
             if (client.getAutoplay().onQueueEmpty()) return;
             client.disconnectFromVoiceChannelAndResetTrack();
@@ -81,6 +93,12 @@ public class MusicTrack {
         }
         announce(nextTrack, MusicEmbeds.play(nextTrack, client.getGuild()).build());
         player.playTrack(nextTrack);
+    }
+
+    @Nullable
+    private AudioTrack pollNext() {
+        AudioTrack next = trackQueue.poll();
+        return next != null ? next : autoQueue.poll();
     }
 
     private void announce(AudioTrack track, MessageEmbed embed) {
@@ -98,7 +116,7 @@ public class MusicTrack {
         AudioTrack current = player.getPlayingTrack();
         List<AudioTrack> dropped = new ArrayList<>();
         for (int i = 1; i < count; i++) {
-            AudioTrack next = trackQueue.poll();
+            AudioTrack next = pollNext();
             if (next == null) break;
             dropped.add(next);
         }
@@ -133,9 +151,16 @@ public class MusicTrack {
     }
 
     public synchronized int remove(Set<AudioTrack> tracks) {
-        int before = trackQueue.size();
+        int before = trackQueue.size() + autoQueue.size();
         trackQueue.removeIf(tracks::contains);
-        return before - trackQueue.size();
+        autoQueue.removeIf(tracks::contains);
+        return before - trackQueue.size() - autoQueue.size();
+    }
+
+    public synchronized int clearAutoQueue() {
+        int cleared = autoQueue.size();
+        autoQueue.clear();
+        return cleared;
     }
 
     public synchronized int reorder(List<AudioTrack> order) {
@@ -156,11 +181,21 @@ public class MusicTrack {
     }
 
     public boolean hasNextTrack() {
-        return !trackQueue.isEmpty();
+        return !trackQueue.isEmpty() || !autoQueue.isEmpty();
     }
 
     public Queue<AudioTrack> getTrackQueue() {
         return trackQueue;
+    }
+
+    public Queue<AudioTrack> getAutoQueue() {
+        return autoQueue;
+    }
+
+    public List<AudioTrack> getUpcoming() {
+        List<AudioTrack> upcoming = new ArrayList<>(trackQueue);
+        upcoming.addAll(autoQueue);
+        return upcoming;
     }
 
     public boolean isNowPlaying() {
