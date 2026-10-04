@@ -141,7 +141,7 @@ public final class TrackCard {
         if (info.author != null && !info.author.isBlank()) {
             text.append("**").append(DiscordSafe.escaped(info.author, MAX_AUTHOR_LENGTH)).append("**\n");
         }
-        text.append("### ").append(MusicEmbeds.titleLink(info)).append('\n');
+        text.append("## ").append(MusicEmbeds.titleLink(info)).append('\n');
         if (playing) text.append(PLAYING_NOTE).append('\n');
         return text.append("**노래 봇** ").append(botName)
                 .append(" · **재생 시간** ").append(MusicEmbeds.durationOf(info))
