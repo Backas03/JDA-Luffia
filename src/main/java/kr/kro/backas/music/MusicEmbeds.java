@@ -37,6 +37,12 @@ public final class MusicEmbeds {
         return YoutubeService.getThumbnailURL(info.uri);
     }
 
+    @Nullable
+    public static String bannerOf(AudioTrack track) {
+        String youtube = YoutubeService.getBannerURL(track.getInfo().uri);
+        return youtube != null ? youtube : thumbnailOf(track);
+    }
+
     public static String sourceLabel(AudioTrack track) {
         AudioSourceManager source = track.getSourceManager();
         String name = source == null ? null : source.getSourceName();

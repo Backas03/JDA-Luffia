@@ -611,6 +611,7 @@ public final class LyricsPresenter {
     private static void warmLyrics(MusicPlayerController controller, List<AudioTrack> tracks) {
         for (AudioTrack track : tracks) {
             ArtworkColors.warm(MusicEmbeds.thumbnailOf(track));
+            ArtworkColors.warm(MusicEmbeds.bannerOf(track));
             String identifier = track.getIdentifier();
             if (!WARMED.add(identifier)) continue;
             LOOKUP_EXECUTOR.execute(() -> {
