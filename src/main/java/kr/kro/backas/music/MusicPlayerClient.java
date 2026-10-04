@@ -218,6 +218,13 @@ public class MusicPlayerClient {
         return true;
     }
 
+    public void detachLyrics() {
+        LyricsSession session = lyricsSession;
+        if (session == null) return;
+        lyricsSession = null;
+        session.detach();
+    }
+
     public void dismissLyrics() {
         LyricsSession session = lyricsSession;
         if (session == null) return;
@@ -280,7 +287,10 @@ public class MusicPlayerClient {
         TrackCard previous = trackCard;
         TrackCard card = TrackCard.send(this, track, channel, null);
         trackCard = card;
-        if (previous != null) previous.delete();
+        if (previous != null) {
+            if (previous.channelId() == channel.getIdLong()) previous.delete();
+            else previous.showNote("가사를 <#" + channel.getId() + "> 에서 표시하고 있습니다");
+        }
         return card;
     }
 

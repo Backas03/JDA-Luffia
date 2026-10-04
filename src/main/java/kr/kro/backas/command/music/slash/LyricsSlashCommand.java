@@ -80,7 +80,7 @@ public class LyricsSlashCommand implements SlashCommandSource {
             client.useLyricsChannel(event.getMessageChannel(), offsetMs);
             if (client.getTrackCard(track) != null) {
                 event.reply("이번 곡의 카드를 아래에 다시 띄웁니다.").setEphemeral(true).queue();
-                client.dismissLyrics();
+                client.detachLyrics();
                 TrackCard card = client.repostTrackCard(track, event.getMessageChannel());
                 LyricsPresenter.presentOnCard(client, track, card, offsetMs);
                 return;

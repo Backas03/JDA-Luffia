@@ -101,6 +101,14 @@ public final class TrackCard {
                 });
     }
 
+    public void showNote(String note) {
+        if (closed.get()) return;
+        edit(frame(List.of(TextDisplay.of("-# " + note))), System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS)
+                .whenComplete((result, error) -> {
+                    if (error != null) LOGGER.debug("failed to annotate track card for {}", track.getInfo().title, error);
+                });
+    }
+
     public void delete() {
         closed.set(true);
         message.thenAccept(current -> current.delete().queue(null,
