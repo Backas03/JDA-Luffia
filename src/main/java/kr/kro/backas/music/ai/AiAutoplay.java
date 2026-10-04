@@ -6,7 +6,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import kr.kro.backas.Main;
-import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
 import kr.kro.backas.music.MusicSelection;
@@ -257,8 +256,7 @@ public class AiAutoplay {
         int added = 0;
         for (AudioTrack track : picked) {
             if (!enabled || !client.hasJoinedToVoiceChannel() || generation.get() != startGeneration) break;
-            boolean queued = client.enqueueOrPlay(MusicSelection.autoplay(requester, requestEvent, track), channel);
-            if (!queued) announceNowPlaying(requestEvent, track);
+            client.enqueueOrPlay(MusicSelection.autoplay(requester, requestEvent, track), channel);
             added++;
         }
         LOGGER.info("ai autoplay queued {} recommendation(s) from {} candidate(s)", added, candidates.size());
@@ -377,16 +375,6 @@ public class AiAutoplay {
             LOGGER.warn("ai autoplay selection failed, using mix order: {}", e.toString());
         }
         return fallback;
-    }
-
-    private void announceNowPlaying(SlashCommandInteractionEvent requestEvent, AudioTrack track) {
-        try {
-            requestEvent.getMessageChannel()
-                    .sendMessageEmbeds(MusicEmbeds.play(track, client.getGuild()).build())
-                    .queue(null, e -> LOGGER.debug("failed to announce ai autoplay track", e));
-        } catch (RuntimeException e) {
-            LOGGER.debug("failed to announce ai autoplay track", e);
-        }
     }
 
     private static ObjectNode schema(int candidates, int need) {

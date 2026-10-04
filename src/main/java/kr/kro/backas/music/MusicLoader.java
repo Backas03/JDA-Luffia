@@ -31,6 +31,7 @@ public class MusicLoader implements AudioLoadResultHandler {
     public static final int MAX_SELECT_MENU_OPTIONS = 25;
     public static final int MAX_PLAYLIST_ENQUEUE = 1000;
     private static final int SELECT_MENU_TEXT_LIMIT = 100;
+    private static final long HOOK_FALLBACK_SECONDS = 10;
 
     private final MusicPlayerController controller;
     private final MusicSearchQueryInfo queryInfo;
@@ -77,8 +78,22 @@ public class MusicLoader implements AudioLoadResultHandler {
             replyNotInVoiceChannel();
             return;
         }
-        EmbedBuilder result = musicPlayerClient.enqueue(new MusicSelection(queryInfo, track), channel);
-        hook.editOriginalEmbeds(result.build()).queue();
+        playSingle(track, channel);
+    }
+
+    private void playSingle(AudioTrack track, VoiceChannel channel) {
+        MusicSelection selection = new MusicSelection(queryInfo, track).withReplyHook(hook);
+        EmbedBuilder result = musicPlayerClient.enqueue(selection, channel);
+        if (result != null) {
+            selection.takeReplyHook();
+            hook.editOriginalEmbeds(result.build()).queue();
+            return;
+        }
+        controller.getScheduler().schedule(() -> {
+            if (selection.takeReplyHook() == null) return;
+            hook.editOriginalEmbeds(MusicEmbeds.play(track, musicPlayerClient.getGuild()).build())
+                    .queue(null, e -> LOGGER.debug("failed to answer the play request", e));
+        }, HOOK_FALLBACK_SECONDS, TimeUnit.SECONDS);
     }
 
     @Override
@@ -123,8 +138,7 @@ public class MusicLoader implements AudioLoadResultHandler {
 
         AudioTrack selected = playlist.getSelectedTrack();
         if (selected != null) {
-            EmbedBuilder result = musicPlayerClient.enqueue(new MusicSelection(queryInfo, selected), channel);
-            hook.editOriginalEmbeds(result.build()).queue();
+            playSingle(selected, channel);
             return;
         }
         List<AudioTrack> tracks = playlist.getTracks();

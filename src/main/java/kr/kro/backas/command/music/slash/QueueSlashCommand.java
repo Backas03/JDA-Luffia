@@ -220,9 +220,7 @@ public class QueueSlashCommand implements SlashCommandSource {
     }
 
     private static String link(AudioTrackInfo info) {
-        String title = DiscordSafe.escaped(info.title, MAX_TITLE_LENGTH).replace('[', '(').replace(']', ')');
-        if (info.uri == null || info.uri.isBlank()) return title;
-        return "[" + title + "](" + info.uri + ")";
+        return MusicEmbeds.titleLink(info);
     }
 
     private static String requesterOf(MusicSelection selection) {
