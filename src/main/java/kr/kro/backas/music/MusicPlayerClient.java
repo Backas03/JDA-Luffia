@@ -64,7 +64,6 @@ public class MusicPlayerClient {
     private volatile long lyricsOffsetMs = LyricsSession.DEFAULT_OFFSET_MS;
     private volatile long connectRequestedAt;
     private volatile TrackCard trackCard;
-    private volatile TrackCard homeCard;
     private volatile MessageChannel sessionHomeChannel;
 
     public MusicPlayerClient(JDA musicBot, Guild guild, AudioPlayerManager sharedAudioPlayerManager) {
@@ -271,10 +270,6 @@ public class MusicPlayerClient {
         sessionHomeChannel = selection.getSlashCommandInteractionEvent().getMessageChannel();
     }
 
-    private static String mirrorNote(MessageChannel channel) {
-        return "가사를 <#" + channel.getId() + "> 에서 표시하고 있습니다";
-    }
-
     private void onTrackStarted(AudioTrack track) {
         MessageChannel home = homeChannelFor(track);
         MessageChannel live = lyricsChannel != null ? lyricsChannel : home;
@@ -284,26 +279,23 @@ public class MusicPlayerClient {
         MusicSelection selection = track.getUserData(MusicSelection.class);
         InteractionHook hook = selection == null ? null : selection.takeReplyHook();
         boolean mirrored = home != null && home.getIdLong() != live.getIdLong();
-        TrackCard record = home == null ? null
-                : TrackCard.send(this, track, home, hook, false, mirrored ? mirrorNote(live) : TrackCard.LOOKING_UP);
-        TrackCard card = record != null && !mirrored ? record : TrackCard.send(this, track, live, null, true, TrackCard.LOOKING_UP);
-        homeCard = record;
+        if (hook != null && mirrored) {
+            hook.editOriginalEmbeds(MusicEmbeds.play(track, getGuild()).build())
+                    .queue(null, e -> LOGGER.debug("failed to answer the play request", e));
+        }
+        TrackCard card = mirrored || home == null
+                ? TrackCard.sendMirror(this, track, live, home)
+                : TrackCard.send(this, track, home, hook);
         trackCard = card;
         LyricsPresenter.presentOnCard(this, track, card, lyricsOffsetMs);
     }
 
     public TrackCard repostTrackCard(AudioTrack track, MessageChannel channel) {
         TrackCard previous = trackCard;
-        TrackCard home = homeCard;
-        boolean atHome = home != null && home.channelId() == channel.getIdLong();
-        TrackCard card = TrackCard.send(this, track, channel, null, !atHome, TrackCard.LOOKING_UP);
-        if (previous != null && previous != home) previous.delete();
-        if (atHome) {
-            home.delete();
-            homeCard = card;
-        } else if (home != null && !home.isClosed()) {
-            home.showNote(mirrorNote(channel));
-        }
+        MessageChannel home = previous != null && previous.recordChannel() != null ? previous.recordChannel() : homeChannelFor(track);
+        boolean atHome = home != null && home.getIdLong() == channel.getIdLong();
+        TrackCard card = atHome ? TrackCard.send(this, track, channel, null) : TrackCard.sendMirror(this, track, channel, home);
+        if (previous != null) previous.delete();
         trackCard = card;
         return card;
     }
@@ -520,7 +512,6 @@ public class MusicPlayerClient {
     public void resetSession() {
         connectRequestedAt = 0;
         trackCard = null;
-        homeCard = null;
         sessionHomeChannel = null;
         autoplay.reset();
         musicTrack.reset();

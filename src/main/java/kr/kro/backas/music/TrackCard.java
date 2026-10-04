@@ -42,31 +42,37 @@ public final class TrackCard {
     private final AudioTrack track;
     private final long channelId;
     private final CompletableFuture<Message> message;
-    private final boolean ephemeral;
+    private final MessageChannel recordChannel;
     private final AtomicBoolean closed = new AtomicBoolean();
     private volatile List<? extends ContainerChildComponent> lastBody = List.of();
     private volatile long finishedAt;
 
-    private TrackCard(MusicPlayerClient client, AudioTrack track, long channelId, CompletableFuture<Message> message, boolean ephemeral) {
+    private TrackCard(MusicPlayerClient client, AudioTrack track, long channelId, CompletableFuture<Message> message,
+                      @Nullable MessageChannel recordChannel) {
         this.client = client;
         this.track = track;
         this.channelId = channelId;
         this.message = message;
-        this.ephemeral = ephemeral;
+        this.recordChannel = recordChannel;
     }
 
     public static TrackCard send(MusicPlayerClient client, AudioTrack track, MessageChannel channel, @Nullable InteractionHook hook) {
-        return send(client, track, channel, hook, false, LOOKING_UP);
+        return send(client, track, channel, hook, null);
     }
 
-    public static TrackCard send(MusicPlayerClient client, AudioTrack track, MessageChannel channel, @Nullable InteractionHook hook,
-                                 boolean ephemeral, String note) {
-        List<TextDisplay> body = List.of(TextDisplay.of("-# " + note));
+    public static TrackCard sendMirror(MusicPlayerClient client, AudioTrack track, MessageChannel channel, @Nullable MessageChannel recordChannel) {
+        return send(client, track, channel, null, recordChannel == null || recordChannel.getIdLong() == channel.getIdLong()
+                ? null : recordChannel);
+    }
+
+    private static TrackCard send(MusicPlayerClient client, AudioTrack track, MessageChannel channel, @Nullable InteractionHook hook,
+                                  @Nullable MessageChannel recordChannel) {
+        List<TextDisplay> body = List.of(TextDisplay.of("-# " + LOOKING_UP));
         Container initial = frame(client, track, body, 0);
         CompletableFuture<Message> sent = hook != null
                 ? hook.editOriginalComponents(initial).useComponentsV2(true).submit()
                 : channel.sendMessageComponents(initial).useComponentsV2(true).submit();
-        TrackCard card = new TrackCard(client, track, channel.getIdLong(), sent, ephemeral);
+        TrackCard card = new TrackCard(client, track, channel.getIdLong(), sent, recordChannel);
         card.lastBody = body;
         sent.whenComplete((message, error) -> {
             if (error != null) {
@@ -109,16 +115,9 @@ public final class TrackCard {
                 });
     }
 
-    public void showNote(String note) {
-        if (closed.get()) return;
-        edit(frame(List.of(TextDisplay.of("-# " + note))), System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS)
-                .whenComplete((result, error) -> {
-                    if (error != null) LOGGER.debug("failed to annotate track card for {}", track.getInfo().title, error);
-                });
-    }
-
-    public boolean isEphemeral() {
-        return ephemeral;
+    @Nullable
+    public MessageChannel recordChannel() {
+        return recordChannel;
     }
 
     public void delete() {
@@ -133,11 +132,13 @@ public final class TrackCard {
 
     public boolean close() {
         if (!closed.compareAndSet(false, true)) return false;
-        if (ephemeral) {
+        finishedAt = System.currentTimeMillis();
+        if (recordChannel != null) {
             remove();
+            recordChannel.sendMessageComponents(frame(client, track, List.of(), finishedAt)).useComponentsV2(true)
+                    .queue(null, error -> LOGGER.debug("failed to leave a play record for {}", track.getInfo().title, error));
             return true;
         }
-        finishedAt = System.currentTimeMillis();
         collapse();
         scheduler().schedule(this::collapse, RECOLLAPSE_SECONDS, TimeUnit.SECONDS);
         return true;
