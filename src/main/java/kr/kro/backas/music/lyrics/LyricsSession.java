@@ -1,6 +1,7 @@
 package kr.kro.backas.music.lyrics;
 
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
+import kr.kro.backas.music.ArtworkColors;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.util.DiscordSafe;
@@ -287,7 +288,7 @@ public class LyricsSession {
         Container container = artwork == null
                 ? Container.of(body)
                 : Container.of(Section.of(Thumbnail.fromUrl(artwork), body));
-        return container.withAccentColor(MusicEmbeds.PRIMARY);
+        return container.withAccentColor(ArtworkColors.of(artwork));
     }
 
     static TextDisplay body(@Nullable MusicPlayerClient client, AudioTrack track, Lyrics lyrics, int index,

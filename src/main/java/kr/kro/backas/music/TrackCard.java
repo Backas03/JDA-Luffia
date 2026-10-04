@@ -154,7 +154,7 @@ public final class TrackCard {
         }
         children.add(Separator.createDivider(Separator.Spacing.SMALL));
         children.add(TextDisplay.of(footerText(MusicEmbeds.botName(client.getGuild()), playing ? 0 : finishedAt)));
-        return Container.of(children).withAccentColor(MusicEmbeds.PRIMARY);
+        return Container.of(children).withAccentColor(ArtworkColors.of(MusicEmbeds.thumbnailOf(track)));
     }
 
     public static ContainerChildComponent header(MusicPlayerClient client, AudioTrack track, boolean playing) {
