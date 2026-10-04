@@ -3,11 +3,11 @@ package kr.kro.backas.music;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import kr.kro.backas.Main;
+import kr.kro.backas.SharedConstant;
 import kr.kro.backas.music.ai.AiAutoplay;
 import kr.kro.backas.music.lyrics.EditRateLimiter;
 import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.DurationUtil;
-import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.components.container.Container;
 import net.dv8tion.jda.api.components.container.ContainerChildComponent;
 import net.dv8tion.jda.api.components.section.Section;
@@ -37,7 +37,6 @@ public final class TrackCard {
     static final String PLAYING_NOTE = "음악을 재생합니다";
     static final String PLAYED_NOTE = "재생 완료";
     private static final int MAX_AUTHOR_LENGTH = 80;
-    private static final int MAX_NAME_LENGTH = 40;
     private static final long RECOLLAPSE_SECONDS = 3;
 
     private final MusicPlayerClient client;
@@ -135,32 +134,30 @@ public final class TrackCard {
         List<ContainerChildComponent> children = new ArrayList<>();
         children.add(header(client, track, playing));
         if (playing) {
-            children.add(TextDisplay.of("-# " + settingsLine(client)));
             children.add(Separator.createDivider(Separator.Spacing.SMALL));
             children.addAll(body);
         }
+        children.add(Separator.createDivider(Separator.Spacing.SMALL));
+        children.add(TextDisplay.of("-# " + MusicEmbeds.botName(client.getGuild()) + " · " + SharedConstant.RELEASE_VERSION));
         return Container.of(children).withAccentColor(MusicEmbeds.PRIMARY);
     }
 
     public static ContainerChildComponent header(MusicPlayerClient client, AudioTrack track, boolean playing) {
-        TextDisplay text = TextDisplay.of(headerText(track.getInfo(), MusicEmbeds.botName(client.getGuild()), MusicEmbeds.sourceLabel(track),
-                requesterLabel(track.getUserData(MusicSelection.class)), playing));
+        TextDisplay text = TextDisplay.of(headerText(track.getInfo(), MusicEmbeds.sourceLabel(track),
+                playing ? settingsLine(client) : null));
         String artwork = MusicEmbeds.thumbnailOf(track);
         return artwork == null ? text : Section.of(Thumbnail.fromUrl(artwork), text);
     }
 
-    static String headerText(AudioTrackInfo info, String botName, String source, @Nullable String requester, boolean playing) {
-        StringBuilder text = new StringBuilder("-# ").append(playing ? PLAYING_NOTE : PLAYED_NOTE).append('\n');
-        text.append("### ").append(MusicEmbeds.titleLink(info)).append('\n');
+    static String headerText(AudioTrackInfo info, String source, @Nullable String settings) {
+        StringBuilder text = new StringBuilder(settings != null ? PLAYING_NOTE : PLAYED_NOTE).append('\n');
+        text.append("### ").append(MusicEmbeds.titleLink(info)).append("\n\n");
         if (info.author != null && !info.author.isBlank()) {
-            text.append(DiscordSafe.escaped(info.author, MAX_AUTHOR_LENGTH)).append('\n');
+            text.append("-# ").append(DiscordSafe.escaped(info.author, MAX_AUTHOR_LENGTH)).append('\n');
         }
-        List<String> meta = new ArrayList<>();
-        meta.add(info.isStream ? "라이브" : DurationUtil.formatClock(info.length / 1000));
-        meta.add(source);
-        if (requester != null) meta.add(requester);
-        meta.add("노래 봇 " + botName);
-        return text.append("-# ").append(String.join(" · ", meta)).toString();
+        text.append("-# ").append(info.isStream ? "라이브" : DurationUtil.formatClock(info.length / 1000)).append(" · ").append(source);
+        if (settings != null) text.append("\n-# ").append(settings);
+        return text.toString();
     }
 
     public static String settingsLine(MusicPlayerClient client) {
@@ -180,14 +177,5 @@ public final class TrackCard {
         if (!Main.getLuffia().getMusicPlayerController().getTranslationClient().isAvailable()) return "켜짐 (AI 서버 연결 안 됨)";
         String criteria = autoplay.getCriteria();
         return criteria.isBlank() ? "켜짐" : "켜짐 (" + criteria + ")";
-    }
-
-    @Nullable
-    static String requesterLabel(@Nullable MusicSelection selection) {
-        if (selection == null) return null;
-        String name = DiscordSafe.escaped(MemberUtil.getName(selection.getRequestedMember()), MAX_NAME_LENGTH);
-        if (selection.isAutoplay()) return "AI 자동 추천 · " + name;
-        if (selection.isAiRecommended()) return "AI 추천 · " + name;
-        return name;
     }
 }

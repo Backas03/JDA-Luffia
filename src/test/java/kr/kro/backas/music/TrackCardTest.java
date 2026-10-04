@@ -12,15 +12,15 @@ class TrackCardTest {
     }
 
     @Test
-    void headerFollowsTheQueueViewStyleWithAPlayingNoteOnTop() {
-        assertEquals("-# 음악을 재생합니다\n### [DECO*27 - ヴァンパイア](https://youtu.be/id)\nDECO*27\n-# 3:00 · YouTube · AI 추천 · 박카스 · 노래 봇 김노래#6163",
-                TrackCard.headerText(info("DECO*27 - ヴァンパイア", "DECO*27", 180_000, false), "김노래#6163", "YouTube", "AI 추천 · 박카스", true));
+    void playingHeaderShowsNoteTitleArtistLengthSourceAndSettings() {
+        assertEquals("음악을 재생합니다\n### [【GUMI】Envy Baby【Kanaria】](https://youtu.be/id)\n\n-# Kanaria\n-# 2:16 · YouTube\n-# 볼륨 10% · 반복 없음 · AI 추천 켜짐",
+                TrackCard.headerText(info("【GUMI】Envy Baby【Kanaria】", "Kanaria", 136_000, false), "YouTube", "볼륨 10% · 반복 없음 · AI 추천 켜짐"));
     }
 
     @Test
-    void finishedHeaderSaysPlayedAndSkipsMissingArtistOrRequester() {
-        assertEquals("-# 재생 완료\n### [Radio](https://youtu.be/id)\n-# 라이브 · YouTube · 노래 봇 김노래",
-                TrackCard.headerText(info("Radio", "", 0, true), "김노래", "YouTube", null, false));
+    void finishedHeaderSaysPlayedAndDropsSettingsAndMissingArtist() {
+        assertEquals("재생 완료\n### [Radio](https://youtu.be/id)\n\n-# 라이브 · YouTube",
+                TrackCard.headerText(info("Radio", "", 0, true), "YouTube", null));
     }
 
     @Test
