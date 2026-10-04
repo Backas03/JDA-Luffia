@@ -19,6 +19,12 @@ class LyricsPresenterTest {
     }
 
     @Test
+    void previewHintSitsBetweenTheLinesAndTheFooter() {
+        String body = LyricsPresenter.fullBody(List.of("a", "b"), null, "footer", null, 4000, "\n-# 외 12줄");
+        assertEquals("a\nb\n\n-# 외 12줄\n-# footer", body);
+    }
+
+    @Test
     void fullBodyStaysInsideTheBudgetAndSaysWhatWasCut() {
         List<String> lines = new ArrayList<>();
         for (int i = 0; i < 200; i++) lines.add("line " + i + " " + "가".repeat(40));
