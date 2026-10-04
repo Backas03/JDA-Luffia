@@ -78,9 +78,10 @@ public class LyricsSlashCommand implements SlashCommandSource {
         long offsetMs = offset == null ? client.getLyricsOffsetMs() : offset;
         if (MODE_LIVE.equals(mode)) {
             client.useLyricsChannel(event.getMessageChannel(), offsetMs);
-            TrackCard card = client.getTrackCard(track);
-            if (card != null && card.channelId() == event.getMessageChannel().getIdLong()) {
-                event.reply("이번 곡의 가사를 곡 카드에 다시 표시합니다.").setEphemeral(true).queue();
+            if (client.getTrackCard(track) != null) {
+                event.reply("이번 곡의 카드를 아래에 다시 띄웁니다.").setEphemeral(true).queue();
+                client.dismissLyrics();
+                TrackCard card = client.repostTrackCard(track, event.getMessageChannel());
                 LyricsPresenter.presentOnCard(client, track, card, offsetMs);
                 return;
             }

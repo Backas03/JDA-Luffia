@@ -101,6 +101,12 @@ public final class TrackCard {
                 });
     }
 
+    public void delete() {
+        closed.set(true);
+        message.thenAccept(current -> current.delete().queue(null,
+                error -> LOGGER.debug("failed to delete track card for {}", track.getInfo().title, error)));
+    }
+
     public boolean close() {
         if (!closed.compareAndSet(false, true)) return false;
         finishedAt = System.currentTimeMillis();
