@@ -4,6 +4,7 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import kr.kro.backas.music.ArtworkColors;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
+import kr.kro.backas.music.TrackCard;
 import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.DurationUtil;
 import net.dv8tion.jda.api.components.container.Container;
@@ -240,8 +241,14 @@ public class LyricsSession {
                     .whenComplete((result, error) -> {
                         editInFlightSince.compareAndSet(now, 0);
                         if (error == null) return;
-                        if (EditRateLimiter.isHeldBack(error)) EditRateLimiter.reportHeldBack(channelId, error.getClass().getSimpleName());
-                        else LOGGER.debug("lyrics edit failed", error);
+                        if (TrackCard.isGone(error)) {
+                            LOGGER.info("lyrics message for {} was deleted, stopping until the next track", track.getInfo().title);
+                            halt();
+                        } else if (EditRateLimiter.isHeldBack(error)) {
+                            EditRateLimiter.reportHeldBack(channelId, error.getClass().getSimpleName());
+                        } else {
+                            LOGGER.debug("lyrics edit failed", error);
+                        }
                     });
         } catch (RuntimeException e) {
             LOGGER.warn("lyrics tick failed", e);
