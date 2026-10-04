@@ -478,6 +478,15 @@ public class TranslationClient {
         }
     }
 
+    public void shutdown() {
+        Process process = fallbackProcess;
+        if (process == null || !process.isAlive()) return;
+        LOGGER.info("stopping the cpu fallback server started by this bot");
+        process.descendants().forEach(ProcessHandle::destroy);
+        process.destroy();
+        fallbackProcess = null;
+    }
+
     private void stopFallback() {
         Process process = fallbackProcess;
         if (process != null && process.isAlive()) {

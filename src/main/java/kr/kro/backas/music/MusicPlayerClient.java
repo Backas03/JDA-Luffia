@@ -64,6 +64,7 @@ public class MusicPlayerClient {
     private volatile long lyricsOffsetMs = LyricsSession.DEFAULT_OFFSET_MS;
     private volatile long connectRequestedAt;
     private volatile TrackCard trackCard;
+    private volatile MessageChannel sessionHomeChannel;
 
     public MusicPlayerClient(JDA musicBot, Guild guild, AudioPlayerManager sharedAudioPlayerManager) {
         this.musicBot = musicBot;
@@ -242,15 +243,6 @@ public class MusicPlayerClient {
         lyricsOffsetMs = LyricsSession.DEFAULT_OFFSET_MS;
     }
 
-    @Nullable
-    private MessageChannel lyricsChannelFor(AudioTrack track) {
-        MessageChannel channel = lyricsChannel;
-        if (channel != null) return channel;
-        MusicSelection selection = track.getUserData(MusicSelection.class);
-        if (selection == null || selection.getSlashCommandInteractionEvent() == null) return null;
-        return selection.getSlashCommandInteractionEvent().getMessageChannel();
-    }
-
     public long getLyricsOffsetMs() {
         return lyricsOffsetMs;
     }
@@ -264,34 +256,53 @@ public class MusicPlayerClient {
         return playing != null && track != null && playing.getIdentifier().equals(track.getIdentifier());
     }
 
+    @Nullable
+    private MessageChannel homeChannelFor(AudioTrack track) {
+        MusicSelection selection = track.getUserData(MusicSelection.class);
+        if (selection == null || selection.getSlashCommandInteractionEvent() == null) return null;
+        MessageChannel session = sessionHomeChannel;
+        if (selection.isAiRecommended() && session != null) return session;
+        return selection.getSlashCommandInteractionEvent().getMessageChannel();
+    }
+
+    private void rememberSessionHome(MusicSelection selection) {
+        if (sessionHomeChannel != null || selection.getSlashCommandInteractionEvent() == null) return;
+        sessionHomeChannel = selection.getSlashCommandInteractionEvent().getMessageChannel();
+    }
+
     private void onTrackStarted(AudioTrack track) {
-        MessageChannel channel = lyricsChannelFor(track);
-        if (channel == null) return;
+        MessageChannel home = homeChannelFor(track);
+        MessageChannel live = lyricsChannel != null ? lyricsChannel : home;
+        if (live == null) return;
         LyricsSession current = lyricsSession;
         if (current != null && current.isForTrack(track)) return;
         MusicSelection selection = track.getUserData(MusicSelection.class);
         InteractionHook hook = selection == null ? null : selection.takeReplyHook();
-        MessageChannel requestChannel = selection == null || selection.getSlashCommandInteractionEvent() == null
-                ? null : selection.getSlashCommandInteractionEvent().getMessageChannel();
-        boolean hookInChannel = hook != null && requestChannel != null && requestChannel.getIdLong() == channel.getIdLong();
-        if (hook != null && !hookInChannel) {
+        boolean mirrored = home != null && home.getIdLong() != live.getIdLong();
+        if (hook != null && mirrored) {
             hook.editOriginalEmbeds(MusicEmbeds.play(track, getGuild()).build())
                     .queue(null, e -> LOGGER.debug("failed to answer the play request", e));
         }
-        TrackCard card = TrackCard.send(this, track, channel, hookInChannel ? hook : null);
+        TrackCard card = mirrored || home == null
+                ? TrackCard.sendMirror(this, track, live, home)
+                : TrackCard.send(this, track, home, hook);
         trackCard = card;
         LyricsPresenter.presentOnCard(this, track, card, lyricsOffsetMs);
     }
 
     public TrackCard repostTrackCard(AudioTrack track, MessageChannel channel) {
         TrackCard previous = trackCard;
-        TrackCard card = TrackCard.send(this, track, channel, null);
+        MessageChannel home = previous != null && previous.recordChannel() != null ? previous.recordChannel() : homeChannelFor(track);
+        boolean atHome = home != null && home.getIdLong() == channel.getIdLong();
+        TrackCard card = atHome ? TrackCard.send(this, track, channel, null) : TrackCard.sendMirror(this, track, channel, home);
+        if (previous != null) previous.delete();
         trackCard = card;
-        if (previous != null) {
-            if (previous.channelId() == channel.getIdLong()) previous.delete();
-            else previous.showNote("가사를 <#" + channel.getId() + "> 에서 표시하고 있습니다");
-        }
         return card;
+    }
+
+    public void onTrackCardGone(TrackCard card) {
+        LyricsSession session = lyricsSession;
+        if (session != null && session.isForTrack(card.track())) detachLyrics();
     }
 
     public void refreshTrackCard() {
@@ -353,6 +364,7 @@ public class MusicPlayerClient {
         }
         AudioTrack track = selection.getSelectedTrack();
         track.setUserData(selection);
+        rememberSessionHome(selection);
         boolean enqueued;
         if (selection.isAutoplay()) {
             enqueued = musicTrack.enqueueAutoOrPlay(track);
@@ -505,6 +517,7 @@ public class MusicPlayerClient {
     public void resetSession() {
         connectRequestedAt = 0;
         trackCard = null;
+        sessionHomeChannel = null;
         autoplay.reset();
         musicTrack.reset();
         resetLyricsPreferences();

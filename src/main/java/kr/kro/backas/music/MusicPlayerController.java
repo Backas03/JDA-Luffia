@@ -53,6 +53,7 @@ public class MusicPlayerController extends ListenerAdapter {
     private static final Logger LOGGER = LoggerFactory.getLogger(MusicPlayerController.class);
     private static final int SHUTDOWN_TIMEOUT_SECONDS = 5;
     private static final long AI_CACHE_FLUSH_SECONDS = 60;
+    private static final long EXPANSION_PRUNE_MINUTES = 10;
 
     private final MusicSourceRegistry sourceRegistry;
     private final List<JDA> bots;
@@ -85,6 +86,7 @@ public class MusicPlayerController extends ListenerAdapter {
         this.aiTrackTagger = new AiTrackTagger(this.translationClient);
         this.aiShuffleClassifier = new AiShuffleClassifier(this.translationClient, this.aiTrackTagger);
         this.scheduler.scheduleWithFixedDelay(this::flushAiCaches, AI_CACHE_FLUSH_SECONDS, AI_CACHE_FLUSH_SECONDS, TimeUnit.SECONDS);
+        this.scheduler.scheduleWithFixedDelay(lyricsExpansions::prune, EXPANSION_PRUNE_MINUTES, EXPANSION_PRUNE_MINUTES, TimeUnit.MINUTES);
         this.aiPlaylistBuilder = new AiPlaylistBuilder(this.translationClient, this.aiShuffleClassifier);
         this.lyricsClient = new LrcLibClient(new AiSongResolver(this.translationClient));
         this.bots = new CopyOnWriteArrayList<>();
@@ -334,6 +336,7 @@ public class MusicPlayerController extends ListenerAdapter {
 
     public void shutdownGracefully() {
         flushAiCaches();
+        translationClient.shutdown();
         for (MusicPlayerClient client : clients.values()) {
             client.shutdownGracefully();
         }
