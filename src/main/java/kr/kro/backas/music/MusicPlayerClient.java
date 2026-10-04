@@ -27,8 +27,11 @@ import net.dv8tion.jda.api.audio.hooks.ConnectionStatus;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.entities.channel.unions.AudioChannelUnion;
+import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.managers.AudioManager;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -37,6 +40,7 @@ import java.util.List;
 import java.util.Set;
 
 public class MusicPlayerClient {
+    private static final Logger LOGGER = LoggerFactory.getLogger(MusicPlayerClient.class);
     public static final int DEFAULT_VOLUME = 10;
     public static final float KARAOKE_ECHO_SECONDS = 0.30f;
     public static final float KARAOKE_ECHO_DECAY = 0.15f;
@@ -59,6 +63,7 @@ public class MusicPlayerClient {
     private volatile MessageChannel lyricsChannel;
     private volatile long lyricsOffsetMs = LyricsSession.DEFAULT_OFFSET_MS;
     private volatile long connectRequestedAt;
+    private volatile TrackCard trackCard;
 
     public MusicPlayerClient(JDA musicBot, Guild guild, AudioPlayerManager sharedAudioPlayerManager) {
         this.musicBot = musicBot;
@@ -129,6 +134,7 @@ public class MusicPlayerClient {
             this.currentPlaySpeed = speed;
         }
         updateFilter();
+        refreshTrackCard();
     }
 
     private int bufferedFrames() {
@@ -144,11 +150,13 @@ public class MusicPlayerClient {
     public void setKaraokeMode(KaraokeMode mode) {
         this.karaokeMode = mode;
         updateFilter();
+        refreshTrackCard();
     }
 
     public void setEqualizer(ConfiguredEqualizer equalizer) {
         this.currentEqualizer = equalizer;
         updateFilter();
+        refreshTrackCard();
     }
 
     public ConfiguredEqualizer getCurrentEqualizer() {
@@ -210,6 +218,13 @@ public class MusicPlayerClient {
         return true;
     }
 
+    public void detachLyrics() {
+        LyricsSession session = lyricsSession;
+        if (session == null) return;
+        lyricsSession = null;
+        session.detach();
+    }
+
     public void dismissLyrics() {
         LyricsSession session = lyricsSession;
         if (session == null) return;
@@ -254,7 +269,44 @@ public class MusicPlayerClient {
         if (channel == null) return;
         LyricsSession current = lyricsSession;
         if (current != null && current.isForTrack(track)) return;
-        LyricsPresenter.presentInChannel(this, track, channel, lyricsOffsetMs);
+        MusicSelection selection = track.getUserData(MusicSelection.class);
+        InteractionHook hook = selection == null ? null : selection.takeReplyHook();
+        MessageChannel requestChannel = selection == null || selection.getSlashCommandInteractionEvent() == null
+                ? null : selection.getSlashCommandInteractionEvent().getMessageChannel();
+        boolean hookInChannel = hook != null && requestChannel != null && requestChannel.getIdLong() == channel.getIdLong();
+        if (hook != null && !hookInChannel) {
+            hook.editOriginalEmbeds(MusicEmbeds.play(track, getGuild()).build())
+                    .queue(null, e -> LOGGER.debug("failed to answer the play request", e));
+        }
+        TrackCard card = TrackCard.send(this, track, channel, hookInChannel ? hook : null);
+        trackCard = card;
+        LyricsPresenter.presentOnCard(this, track, card, lyricsOffsetMs);
+    }
+
+    public TrackCard repostTrackCard(AudioTrack track, MessageChannel channel) {
+        TrackCard previous = trackCard;
+        TrackCard card = TrackCard.send(this, track, channel, null);
+        trackCard = card;
+        if (previous != null) {
+            if (previous.channelId() == channel.getIdLong()) previous.delete();
+            else previous.showNote("가사를 <#" + channel.getId() + "> 에서 표시하고 있습니다");
+        }
+        return card;
+    }
+
+    public void refreshTrackCard() {
+        TrackCard card = trackCard;
+        if (card == null || card.isClosed() || !isCurrentTrack(card.track())) return;
+        LyricsSession session = lyricsSession;
+        if (session != null && session.isForTrack(card.track())) return;
+        card.refresh();
+    }
+
+    @Nullable
+    public TrackCard getTrackCard(AudioTrack track) {
+        TrackCard card = trackCard;
+        if (card == null || card.isClosed() || !isCurrentTrack(track)) return null;
+        return card.track().getIdentifier().equals(track.getIdentifier()) ? card : null;
     }
 
     public int getVolume() {
@@ -263,6 +315,7 @@ public class MusicPlayerClient {
 
     public void setVolume(int volume) {
         audioPlayer.setVolume(volume);
+        refreshTrackCard();
     }
 
     public KaraokeMode getKaraokeMode() {
@@ -311,11 +364,11 @@ public class MusicPlayerClient {
         return enqueued;
     }
 
+    @Nullable
     public EmbedBuilder enqueue(MusicSelection selection, @NotNull VoiceChannel memberChannel) {
         boolean enqueued = enqueueOrPlay(selection, memberChannel);
-        AudioTrack track = selection.getSelectedTrack();
-        if (!enqueued) return MusicEmbeds.play(track, getGuild());
-        return MusicEmbeds.enqueue(track, getGuild(), musicTrack.getTrackQueue().size());
+        if (!enqueued) return null;
+        return MusicEmbeds.enqueue(selection.getSelectedTrack(), getGuild(), musicTrack.getTrackQueue().size());
     }
 
     public List<AudioTrack> getTrackQueue() {
@@ -397,6 +450,7 @@ public class MusicPlayerClient {
 
     public void setRepeatMode(RepeatMode mode) {
         musicTrack.setRepeatMode(mode);
+        refreshTrackCard();
     }
 
     public boolean pause() {
@@ -450,6 +504,7 @@ public class MusicPlayerClient {
 
     public void resetSession() {
         connectRequestedAt = 0;
+        trackCard = null;
         autoplay.reset();
         musicTrack.reset();
         resetLyricsPreferences();

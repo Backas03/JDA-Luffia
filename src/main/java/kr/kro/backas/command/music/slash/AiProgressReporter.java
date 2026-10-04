@@ -3,7 +3,7 @@ package kr.kro.backas.command.music.slash;
 import kr.kro.backas.Main;
 import kr.kro.backas.music.ai.AiAgent;
 import kr.kro.backas.music.lyrics.TranslationClient;
-import net.dv8tion.jda.api.entities.MessageEmbed;
+import net.dv8tion.jda.api.components.container.Container;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,7 +21,7 @@ final class AiProgressReporter implements AiAgent.StatusListener {
 
     private final SequentialHookEditor editor;
     private final TranslationClient translator;
-    private final BiFunction<String, String, MessageEmbed> statusEmbed;
+    private final BiFunction<String, String, Container> statusView;
     private final long startedAt = System.currentTimeMillis();
     private final ScheduledFuture<?> ticker;
     private volatile String message;
@@ -29,10 +29,10 @@ final class AiProgressReporter implements AiAgent.StatusListener {
     private volatile int total = -1;
 
     AiProgressReporter(SequentialHookEditor editor, TranslationClient translator, ScheduledExecutorService scheduler,
-                       String initialMessage, BiFunction<String, String, MessageEmbed> statusEmbed) {
+                       String initialMessage, BiFunction<String, String, Container> statusView) {
         this.editor = editor;
         this.translator = translator;
-        this.statusEmbed = statusEmbed;
+        this.statusView = statusView;
         this.message = initialMessage;
         this.ticker = scheduler.scheduleAtFixedRate(this::render, INTERVAL_SECONDS, INTERVAL_SECONDS, TimeUnit.SECONDS);
     }
@@ -57,7 +57,7 @@ final class AiProgressReporter implements AiAgent.StatusListener {
 
     private void render() {
         try {
-            editor.edit(statusEmbed.apply(message, computeLine()));
+            editor.edit(statusView.apply(message, computeLine()));
         } catch (RuntimeException e) {
             LOGGER.debug("failed to render ai progress", e);
         }

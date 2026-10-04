@@ -5,6 +5,7 @@ import kr.kro.backas.Main;
 import kr.kro.backas.command.api.SlashCommandSource;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
+import kr.kro.backas.music.TrackCard;
 import kr.kro.backas.music.lyrics.LyricsPresenter;
 import kr.kro.backas.music.lyrics.LyricsSession;
 import kr.kro.backas.util.MemberUtil;
@@ -75,10 +76,17 @@ public class LyricsSlashCommand implements SlashCommandSource {
         }
 
         long offsetMs = offset == null ? client.getLyricsOffsetMs() : offset;
-        InteractionHook hook = event.deferReply().complete();
         if (MODE_LIVE.equals(mode)) {
             client.useLyricsChannel(event.getMessageChannel(), offsetMs);
+            if (client.getTrackCard(track) != null) {
+                event.reply("이번 곡의 카드를 아래에 다시 띄웁니다.").setEphemeral(true).queue();
+                client.detachLyrics();
+                TrackCard card = client.repostTrackCard(track, event.getMessageChannel());
+                LyricsPresenter.presentOnCard(client, track, card, offsetMs);
+                return;
+            }
         }
+        InteractionHook hook = event.deferReply().complete();
         LyricsPresenter.presentViaHook(client, track, hook, offsetMs, MODE_LIVE.equals(mode), member);
     }
 

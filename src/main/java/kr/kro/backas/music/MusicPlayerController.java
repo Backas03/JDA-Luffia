@@ -11,6 +11,7 @@ import kr.kro.backas.music.ai.AiPlaylistBuilder;
 import kr.kro.backas.music.ai.AiShuffleClassifier;
 import kr.kro.backas.music.ai.AiTrackTagger;
 import kr.kro.backas.music.lyrics.LrcLibClient;
+import kr.kro.backas.music.lyrics.LyricsExpansions;
 import kr.kro.backas.music.lyrics.TranslationClient;
 import kr.kro.backas.music.source.MusicSourceRegistry;
 import kr.kro.backas.util.MemberUtil;
@@ -69,6 +70,7 @@ public class MusicPlayerController extends ListenerAdapter {
     private final ChartClient chartClient = new ChartClient();
     private final SongInfoClient songInfoClient = new SongInfoClient();
     private final AiRemovalConfirmations aiRemovalConfirmations = new AiRemovalConfirmations();
+    private final LyricsExpansions lyricsExpansions = new LyricsExpansions();
 
     public MusicPlayerController(MusicSourceRegistry sourceRegistry, String translatorUrl) {
         this.sourceRegistry = sourceRegistry;
@@ -154,6 +156,10 @@ public class MusicPlayerController extends ListenerAdapter {
         return aiRemovalConfirmations;
     }
 
+    public LyricsExpansions getLyricsExpansions() {
+        return lyricsExpansions;
+    }
+
     public void search(Identifier id, String query, Member member, SlashCommandInteractionEvent slashEvent) {
         VoiceChannel joinedVoiceChannel = MemberUtil.getJoinedVoiceChannel(member);
         if (joinedVoiceChannel == null) {
@@ -210,10 +216,12 @@ public class MusicPlayerController extends ListenerAdapter {
                     loader.getLoadedTracks().get(event.getValues().get(0))
             ));
             event.editSelectMenu(event.getComponent().asDisabled()).queue();
-            event.getMessage()
-                    .replyEmbeds(result.build())
-                    .mentionRepliedUser(false)
-                    .queue();
+            if (result != null) {
+                event.getMessage()
+                        .replyEmbeds(result.build())
+                        .mentionRepliedUser(false)
+                        .queue();
+            }
         } catch (MusicPlayerException e) {
             EmbedBuilder builder = switch (e.getErrorType()) {
                 case NOT_IN_VOICE_CHANNEL -> MusicEmbeds.error(member,
@@ -227,6 +235,7 @@ public class MusicPlayerController extends ListenerAdapter {
         }
     }
 
+    @Nullable
     public EmbedBuilder findClientAndEnqueue(MusicSelection selection) throws MusicPlayerException {
         Member requestedMember = selection.getRequestedMember();
         AudioChannelUnion joinedAudioChannel = MemberUtil.getJoinedAudioChannel(requestedMember);
