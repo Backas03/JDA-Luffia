@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -85,6 +86,22 @@ class LlmSchedulerTest {
         assertSame(radeon, take(scheduler, LlmPriority.INTERACTIVE).endpoint());
         now.addAndGet(LlmScheduler.RETRY_FAILED_MS);
         assertSame(rtx, take(scheduler, LlmPriority.INTERACTIVE).endpoint());
+    }
+
+    @Test
+    void liveEndpointMeansAtLeastOneServerAnsweredSinceItsLastFailure() {
+        LlmEndpoint rtx = gpu("5080", 1, 85);
+        LlmEndpoint cpu = new LlmEndpoint("http://cpu", "cpu", "", 1, true);
+        LlmScheduler scheduler = scheduler(rtx, cpu);
+        assertTrue(scheduler.hasLiveEndpoint());
+        rtx.markFailed(now.get());
+        assertTrue(scheduler.hasLiveEndpoint());
+        cpu.markFailed(now.get());
+        assertFalse(scheduler.hasLiveEndpoint());
+        now.addAndGet(LlmScheduler.RETRY_FAILED_MS);
+        assertFalse(scheduler.hasLiveEndpoint());
+        rtx.markDetected(LlmEndpoint.Mode.LLM, "model", "model");
+        assertTrue(scheduler.hasLiveEndpoint());
     }
 
     @Test

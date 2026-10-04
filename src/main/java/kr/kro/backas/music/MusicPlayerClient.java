@@ -22,6 +22,8 @@ import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import org.jetbrains.annotations.Nullable;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.audio.hooks.ConnectionListener;
+import net.dv8tion.jda.api.audio.hooks.ConnectionStatus;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.entities.channel.unions.AudioChannelUnion;
@@ -39,6 +41,7 @@ public class MusicPlayerClient {
     public static final float KARAOKE_ECHO_SECONDS = 0.30f;
     public static final float KARAOKE_ECHO_DECAY = 0.15f;
     public static final float KARAOKE_CENTER_GAIN = 1.3f;
+    private static final long CONNECT_GRACE_MS = 10_000;
 
     private final AudioPlayerManager audioPlayerManager;
     private final JDA musicBot;
@@ -55,6 +58,7 @@ public class MusicPlayerClient {
     private volatile LyricsSession lyricsSession;
     private volatile MessageChannel lyricsChannel;
     private volatile long lyricsOffsetMs = LyricsSession.DEFAULT_OFFSET_MS;
+    private volatile long connectRequestedAt;
 
     public MusicPlayerClient(JDA musicBot, Guild guild, AudioPlayerManager sharedAudioPlayerManager) {
         this.musicBot = musicBot;
@@ -80,7 +84,16 @@ public class MusicPlayerClient {
         MusicTrackHandler trackHandler = new MusicTrackHandler(this.musicTrack, this);
         this.audioPlayer.addListener(trackHandler);
 
-        guild.getAudioManager().setSendingHandler(new AudioForwarder(this));
+        AudioManager audioManager = guild.getAudioManager();
+        audioManager.setSendingHandler(new AudioForwarder(this));
+        audioManager.setConnectionListener(new ConnectionListener() {
+            @Override
+            public void onStatusChange(@NotNull ConnectionStatus status) {
+                if (status != ConnectionStatus.CONNECTED) return;
+                connectRequestedAt = 0;
+                autoplay.onVoiceConnected();
+            }
+        });
         updateFilter();
     }
 
@@ -282,8 +295,10 @@ public class MusicPlayerClient {
 
     public boolean enqueueOrPlay(MusicSelection selection, @NotNull VoiceChannel memberChannel) {
         if (!hasJoinedToVoiceChannel()) {
+            if (!isConnecting()) resetSession();
             connectToVoiceChannel(memberChannel);
         }
+        if (!selection.isAutoplay()) autoplay.onListenerTracksAdded(selection);
         AudioTrack track = selection.getSelectedTrack();
         track.setUserData(selection);
         boolean enqueued = musicTrack.enqueueOrPlay(track);
@@ -394,18 +409,38 @@ public class MusicPlayerClient {
             throw new IllegalStateException("노래봇 " + musicBot.getSelfUser().getName() + "이(가) 서버 " + guildId + "에 없습니다");
         }
         VoiceChannel own = musicBot.getVoiceChannelById(channel.getIdLong());
+        connectRequestedAt = System.currentTimeMillis();
         manager.openAudioConnection(own == null ? channel : own);
+    }
+
+    private boolean isConnecting() {
+        return System.currentTimeMillis() - connectRequestedAt < CONNECT_GRACE_MS;
     }
 
     public void disconnectFromVoiceChannelAndResetTrack() {
         AudioManager manager = audioManager();
-        if (manager == null || !manager.isConnected()) return;
-        manager.closeAudioConnection();
+        if (manager != null && manager.isConnected()) manager.closeAudioConnection();
+        resetSession();
+    }
 
+    public void onLeftVoiceChannel() {
+        if (isConnecting()) return;
+        resetSession();
+    }
+
+    public void resetSession() {
+        connectRequestedAt = 0;
         autoplay.reset();
         musicTrack.reset();
         resetLyricsPreferences();
         audioPlayer.setVolume(DEFAULT_VOLUME);
+        synchronized (speedLock) {
+            bufferedSpeeds.clear();
+            currentPlaySpeed = 1.0;
+        }
+        karaokeMode = KaraokeMode.OFF;
+        currentEqualizer = ConfiguredEqualizer.NORMAL;
+        updateFilter();
     }
 
     public void shutdownGracefully() {
