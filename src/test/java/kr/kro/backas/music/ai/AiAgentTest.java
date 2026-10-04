@@ -82,4 +82,22 @@ class AiAgentTest {
         }
         assertTrue(names.containsAll(Set.of("remove_from_queue", "keep_only_in_queue", "play_chart", "add_songs", "set_autoplay", "skip", "get_song_info")));
     }
+
+    @Test
+    void onlyRemovalToolsCanAimAtTheRecommendationQueue() {
+        Set<String> aimable = Set.of("remove_from_queue", "keep_only_in_queue", "remove_positions");
+        for (JsonNode tool : AiAgent.TOOLS) {
+            JsonNode function = tool.path("function");
+            JsonNode target = function.path("parameters").path("properties").path("target");
+            assertEquals(aimable.contains(function.path("name").asText()), !target.isMissingNode(), function.path("name").asText());
+            if (!target.isMissingNode()) assertFalse(function.path("parameters").path("required").toString().contains("target"));
+        }
+    }
+
+    @Test
+    void queueToolsActOnTheListenerQueueUnlessToldOtherwise() throws Exception {
+        assertFalse(AiAgent.targetsAutoQueue(MAPPER.readTree("{\"criteria\": \"한국 노래\"}")));
+        assertFalse(AiAgent.targetsAutoQueue(MAPPER.readTree("{\"target\": \"listener\"}")));
+        assertTrue(AiAgent.targetsAutoQueue(MAPPER.readTree("{\"target\": \"auto\"}")));
+    }
 }
