@@ -124,6 +124,10 @@ public class LyricsSession {
         surface.dismiss();
     }
 
+    public void detach() {
+        halt();
+    }
+
     static void deleteMessage(Message message) {
         try {
             message.delete().queue(null, e -> LOGGER.debug("failed to delete lyrics message", e));
