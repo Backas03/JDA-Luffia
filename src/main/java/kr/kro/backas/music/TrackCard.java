@@ -18,7 +18,9 @@ import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.components.thumbnail.Thumbnail;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
+import net.dv8tion.jda.api.exceptions.ErrorResponseException;
 import net.dv8tion.jda.api.interactions.InteractionHook;
+import net.dv8tion.jda.api.requests.ErrorResponse;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -104,7 +106,26 @@ public final class TrackCard {
     }
 
     public CompletableFuture<?> edit(Container view, long deadlineAt) {
-        return message.thenCompose(current -> current.editMessageComponents(view).useComponentsV2(true).deadline(deadlineAt).submit());
+        if (closed.get()) return CompletableFuture.completedFuture(null);
+        return message.thenCompose(current -> current.editMessageComponents(view).useComponentsV2(true).deadline(deadlineAt).submit())
+                .whenComplete((result, error) -> {
+                    if (error != null && isGone(error)) onGone();
+                });
+    }
+
+    private void onGone() {
+        if (!closed.compareAndSet(false, true)) return;
+        LOGGER.info("track card for {} was deleted, leaving it alone until the next track", track.getInfo().title);
+        client.onTrackCardGone(this);
+    }
+
+    public static boolean isGone(Throwable error) {
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            if (current instanceof ErrorResponseException response && response.getErrorResponse() == ErrorResponse.UNKNOWN_MESSAGE) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void refresh() {

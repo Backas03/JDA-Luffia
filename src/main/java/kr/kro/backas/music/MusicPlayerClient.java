@@ -300,6 +300,11 @@ public class MusicPlayerClient {
         return card;
     }
 
+    public void onTrackCardGone(TrackCard card) {
+        LyricsSession session = lyricsSession;
+        if (session != null && session.isForTrack(card.track())) detachLyrics();
+    }
+
     public void refreshTrackCard() {
         TrackCard card = trackCard;
         if (card == null || card.isClosed() || !isCurrentTrack(card.track())) return;
