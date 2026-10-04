@@ -34,11 +34,10 @@ public final class ArtworkColors {
     private static final float DISPLAY_MIN_BRIGHTNESS = 0.45f;
     private static final float DISPLAY_MIN_SATURATION = 0.35f;
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
-    record Artwork(Color color, boolean wide) {
+    record Artwork(Color color, boolean available) {
     }
 
     private static final Artwork FALLBACK = new Artwork(MusicEmbeds.PRIMARY, false);
-    private static final double WIDE_RATIO = 1.4;
     private static final Map<String, Artwork> CACHE = Collections.synchronizedMap(new LinkedHashMap<>(64, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, Artwork> eldest) {
@@ -58,11 +57,11 @@ public final class ArtworkColors {
         return MusicEmbeds.PRIMARY;
     }
 
-    public static boolean isWide(@Nullable String url) {
+    public static boolean isAvailable(@Nullable String url) {
         if (url == null || url.isBlank()) return false;
         Artwork cached = CACHE.get(url);
         if (cached == null) warm(url);
-        return cached != null && cached.wide();
+        return cached != null && cached.available();
     }
 
     public static void warm(@Nullable String url) {
@@ -89,7 +88,7 @@ public final class ArtworkColors {
         }
         BufferedImage image = ImageIO.read(new ByteArrayInputStream(response.body()));
         if (image == null) throw new IOException("unsupported artwork format");
-        return new Artwork(dominant(image), image.getHeight() > 0 && (double) image.getWidth() / image.getHeight() >= WIDE_RATIO);
+        return new Artwork(dominant(image), true);
     }
 
     static Color dominant(BufferedImage image) {
