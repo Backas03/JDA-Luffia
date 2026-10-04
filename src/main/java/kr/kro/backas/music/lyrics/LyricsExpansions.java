@@ -32,15 +32,19 @@ public class LyricsExpansions extends ListenerAdapter {
     private final Map<String, Entry> entries = new ConcurrentHashMap<>();
 
     public String register(Expandable view) {
-        long now = System.currentTimeMillis();
-        entries.values().removeIf(entry -> now - entry.createdAt() > EXPIRE_MS);
+        prune();
         String token = UUID.randomUUID().toString();
-        entries.put(token, new Entry(view, now));
+        entries.put(token, new Entry(view, System.currentTimeMillis()));
         return token;
     }
 
     public void release(String token) {
         entries.remove(token);
+    }
+
+    public void prune() {
+        long now = System.currentTimeMillis();
+        entries.values().removeIf(entry -> now - entry.createdAt() > EXPIRE_MS);
     }
 
     public static Button button(String token, boolean expanded) {
