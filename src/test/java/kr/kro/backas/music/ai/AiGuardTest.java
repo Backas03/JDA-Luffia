@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.atomic.AtomicLong;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -50,5 +51,12 @@ class AiGuardTest {
         assertNotNull(guard.tryAcquire(2L, GUILD, false));
         guard.setEnabled(true);
         assertNull(guard.tryAcquire(2L, GUILD, false));
+    }
+
+    @Test
+    void shuffleLimitGrowsWithTheNumberOfGpus() {
+        assertEquals(300, AiGuard.maxShuffleTracks(0));
+        assertEquals(300, AiGuard.maxShuffleTracks(1));
+        assertEquals(600, AiGuard.maxShuffleTracks(2));
     }
 }

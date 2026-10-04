@@ -294,12 +294,16 @@ public class AiAgent {
         return out.put("status", "removed").put("count", removed).toString();
     }
 
+    private int maxShuffleTracks() {
+        return AiGuard.maxShuffleTracks(controller.getTranslationClient().liveGpus().size());
+    }
+
     private String prioritize(JsonNode args) throws IOException {
         String criteria = criteria(args, "criteria");
         if (criteria.isBlank()) return error("criteria is required");
         List<AudioTrack> queue = client.getTrackQueue();
         if (queue.size() < 2) return error("the queue has fewer than 2 songs");
-        List<AudioTrack> targets = queue.subList(0, Math.min(queue.size(), AiShuffleClassifier.MAX_TRACKS));
+        List<AudioTrack> targets = queue.subList(0, Math.min(queue.size(), maxShuffleTracks()));
         Set<AudioTrack> matched = controller.getAiShuffleClassifier().classify(criteria, targets, done ->
                 listener.progress("조건에 맞는 곡을 찾고 있습니다", done, targets.size()));
         int moved = matched.isEmpty() ? 0 : client.prioritizeQueue(matched);
@@ -311,7 +315,7 @@ public class AiAgent {
         List<AudioTrack> queue = client.getTrackQueue();
         if (queue.size() < 2) return error("the queue has fewer than 2 songs");
         if ("flow".equals(args.path("style").asText("random"))) {
-            List<AudioTrack> targets = queue.subList(0, Math.min(queue.size(), AiTrackTagger.MAX_TRACKS));
+            List<AudioTrack> targets = queue.subList(0, Math.min(queue.size(), maxShuffleTracks()));
             Map<AudioTrack, AiTrackTagger.Tag> tags = controller.getAiTrackTagger().tag(targets, done ->
                     listener.progress("곡의 장르와 분위기를 분석하고 있습니다", done, targets.size()));
             List<AudioTrack> order = new ArrayList<>(AiFlowShuffle.arrange(targets, tags, ThreadLocalRandom.current()));
