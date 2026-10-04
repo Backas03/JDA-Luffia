@@ -3,6 +3,7 @@ package kr.kro.backas.music.lyrics;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import kr.kro.backas.Main;
 import kr.kro.backas.SharedConstant;
+import kr.kro.backas.music.ArtworkColors;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
@@ -609,6 +610,7 @@ public final class LyricsPresenter {
 
     private static void warmLyrics(MusicPlayerController controller, List<AudioTrack> tracks) {
         for (AudioTrack track : tracks) {
+            ArtworkColors.warm(MusicEmbeds.thumbnailOf(track));
             String identifier = track.getIdentifier();
             if (!WARMED.add(identifier)) continue;
             LOOKUP_EXECUTOR.execute(() -> {

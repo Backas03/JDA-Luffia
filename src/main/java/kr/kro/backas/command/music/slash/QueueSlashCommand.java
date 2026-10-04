@@ -5,6 +5,7 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import kr.kro.backas.Main;
 import kr.kro.backas.SharedConstant;
 import kr.kro.backas.command.api.SlashCommandSource;
+import kr.kro.backas.music.ArtworkColors;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
@@ -110,7 +111,7 @@ public class QueueSlashCommand implements SlashCommandSource {
         }
         children.add(Separator.createDivider(Separator.Spacing.SMALL));
         children.add(TextDisplay.of("-# " + MusicEmbeds.botName(client.getGuild()) + " · " + SharedConstant.RELEASE_VERSION));
-        return Container.of(children).withAccentColor(MusicEmbeds.PRIMARY);
+        return Container.of(children).withAccentColor(ArtworkColors.of(artwork));
     }
 
     private static void addList(List<ContainerChildComponent> children, String title, @Nullable String note,
