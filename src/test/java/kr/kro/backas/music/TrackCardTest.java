@@ -12,15 +12,16 @@ class TrackCardTest {
     }
 
     @Test
-    void headerShowsTitleLinkArtistAndOneSmallMetaLine() {
-        assertEquals("### [Brand New](https://youtu.be/id)\nMrs. GREEN APPLE\n-# 김노래 · 3:31 · YouTube · 요청 박카스",
-                TrackCard.headerText(info("Brand New", "Mrs. GREEN APPLE", 211_000, false), "김노래", "YouTube", "요청 박카스"));
+    void headerLooksLikeTheOldPlayEmbedWhilePlaying() {
+        assertEquals("**DECO*27**\n### [DECO*27 - Monitoring](https://youtu.be/id)\n음악을 재생합니다\n"
+                        + "**노래 봇** 김노래#6163 · **재생 시간** 3분 2초 · **출처** YouTube",
+                TrackCard.headerText(info("DECO*27 - Monitoring", "DECO*27", 182_000, false), "김노래#6163", "YouTube", true));
     }
 
     @Test
-    void headerSkipsMissingArtistAndRequesterAndMarksStreams() {
-        assertEquals("### [Radio](https://youtu.be/id)\n-# 김노래 · 라이브 · YouTube",
-                TrackCard.headerText(info("Radio", "", 0, true), "김노래", "YouTube", null));
+    void collapsedHeaderDropsThePlayingNoteAndMissingArtist() {
+        assertEquals("### [Radio](https://youtu.be/id)\n**노래 봇** 김노래 · **재생 시간** 실시간 스트리밍 · **출처** YouTube",
+                TrackCard.headerText(info("Radio", "", 0, true), "김노래", "YouTube", false));
     }
 
     @Test
