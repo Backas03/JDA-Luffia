@@ -1,5 +1,6 @@
 package kr.kro.backas.music.lyrics.sync;
 
+import kr.kro.backas.config.Config;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jetbrains.annotations.Nullable;
@@ -30,7 +31,7 @@ public final class WhisperClient {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(WhisperClient.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    static final long RETRY_FAILED_MS = 30_000;
+    static final long RETRY_FAILED_MS = Config.get().whisper().retryFailedSeconds() * 1000L;
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(3);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(90);
 

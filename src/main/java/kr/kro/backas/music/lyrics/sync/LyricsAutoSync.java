@@ -1,5 +1,6 @@
 package kr.kro.backas.music.lyrics.sync;
 
+import kr.kro.backas.config.Config;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import kr.kro.backas.Luffia;
 import kr.kro.backas.Main;
@@ -31,7 +32,7 @@ public final class LyricsAutoSync {
 
     public static boolean isEnabled() {
         WhisperClient whisper = whisper();
-        return whisper != null && whisper.isConfigured();
+        return whisper != null && whisper.isConfigured() && Config.get().whisper().autoSync().enabled();
     }
 
     @Nullable

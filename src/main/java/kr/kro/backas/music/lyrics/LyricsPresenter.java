@@ -1,8 +1,8 @@
 package kr.kro.backas.music.lyrics;
 
+import kr.kro.backas.config.Config;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import kr.kro.backas.Main;
-import kr.kro.backas.SharedConstant;
 import kr.kro.backas.music.ArtworkColors;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
@@ -58,8 +58,8 @@ public final class LyricsPresenter {
     private static final int MAX_LINE_LENGTH = 300;
     private static final int MAX_AUTHOR_LENGTH = 250;
     private static final int MESSAGE_TEXT_BUDGET = 5800;
-    static final int CARD_TEXT_BUDGET = 3500;
-    static final int FULL_PREVIEW_LINES = 6;
+    static final int CARD_TEXT_BUDGET = Config.get().lyrics().display().cardTextBudget();
+    static final int FULL_PREVIEW_LINES = Config.get().lyrics().display().fullPreviewLines();
     private static final String TRUNCATED_NOTE = "… (이하 생략)";
     private static final String FULL_LYRICS_NOTE = "타임스탬프 가사가 없어 전체 가사로 표시합니다";
     private static final String AI_AVAILABLE_NOTE = "AI 타임스탬프 가사를 이용할 수 있습니다";
@@ -229,7 +229,7 @@ public final class LyricsPresenter {
             CardFullView view = new CardFullView(client, track, lyrics, card, Main.getLuffia().getMusicPlayerController().getLyricsExpansions(),
                     Main.getLuffia().getMusicPlayerController().getLyricsConversions());
             showFull(client, track, lyrics, null, true, view, translator);
-            view.requestConversion();
+            if (Config.get().whisper().convert().auto()) view.requestConversion();
         });
     }
 
@@ -475,7 +475,7 @@ public final class LyricsPresenter {
                                  FullView view, TranslationClient translator) {
         List<String> lines = fullLines(lyrics);
         boolean aiAvailable = lyrics.hasPlain() && !lyrics.hasSynced() && !lyrics.aiTimed() && LyricsConverter.isAvailable();
-        String footer = liveWanted ? (aiAvailable ? AI_AVAILABLE_NOTE : FULL_LYRICS_NOTE) : SharedConstant.RELEASE_VERSION;
+        String footer = liveWanted ? (aiAvailable ? AI_AVAILABLE_NOTE : FULL_LYRICS_NOTE) : Config.get().bot().version();
         if (requester != null) footer += " · 요청: " + MemberUtil.getName(requester);
         String finalFooter = footer;
         List<LyricLine> asLines = new ArrayList<>();
@@ -714,12 +714,12 @@ public final class LyricsPresenter {
 
     private static final Set<String> PREFETCHING = ConcurrentHashMap.newKeySet();
 
-    public static final int PREFETCH_COUNT = 3;
+    public static final int PREFETCH_COUNT = Config.get().lyrics().prefetch().count();
     static final String CONVERTING_NOTE = "AI 가사 변환 중...";
     static final String NO_LYRICS_NOTE = "가사를 찾지 못했습니다";
     static final String LYRICS_LOOKUP_FAILED_NOTE = "가사 조회에 실패했습니다";
     static final String CONVERSION_FAILED_NOTE = "AI 가사 변환에 실패했습니다";
-    public static final int PREFETCH_COUNT_FAST = 20;
+    public static final int PREFETCH_COUNT_FAST = Config.get().lyrics().prefetch().countFast();
 
     private static final Map<MusicPlayerClient, Boolean> PREFETCH_RERUN = new ConcurrentHashMap<>();
     private static final Set<MusicPlayerClient> PREFETCH_RUNNING = ConcurrentHashMap.newKeySet();
@@ -730,7 +730,7 @@ public final class LyricsPresenter {
         return new ArrayList<>(queue.subList(0, Math.min(count, queue.size())));
     }
 
-    private static final int LOOKUP_THREADS = 3;
+    private static final int LOOKUP_THREADS = Math.max(1, Config.get().lyrics().prefetch().lookupThreads());
     private static final int WARMED_SIZE = 2000;
     private static final ExecutorService LOOKUP_EXECUTOR = Executors.newFixedThreadPool(LOOKUP_THREADS, runnable -> {
         Thread thread = new Thread(runnable, "lyrics-lookup");

@@ -1,7 +1,7 @@
 package kr.kro.backas.command.certification.slash;
 
+import kr.kro.backas.config.Config;
 import kr.kro.backas.Main;
-import kr.kro.backas.SharedConstant;
 import kr.kro.backas.certification.CertificationManager;
 import kr.kro.backas.command.api.SlashCommandSource;
 import kr.kro.backas.util.MemberUtil;
@@ -62,7 +62,7 @@ public class SlashCertificationCommand implements SlashCommandSource {
                         "/인증 [6자리 인증코드]",
                         "```이메일로 전송받은 코드로 대학교 인증을 완료합니다\n" +
                                 "ex) /인증 714256```", false)
-                .setFooter(SharedConstant.RELEASE_VERSION)
+                .setFooter(Config.get().bot().version())
                 .build()
         ).queue();
     }

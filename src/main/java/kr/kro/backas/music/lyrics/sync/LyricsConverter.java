@@ -1,5 +1,6 @@
 package kr.kro.backas.music.lyrics.sync;
 
+import kr.kro.backas.config.Config;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import kr.kro.backas.Luffia;
 import kr.kro.backas.Main;
@@ -28,9 +29,9 @@ import java.util.function.Consumer;
 public final class LyricsConverter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LyricsConverter.class);
-    static final int MAX_SECONDS = 900;
-    static final long FIRST_PASS_MS = 20_000;
-    static final long PASS_STEP_MS = 30_000;
+    static final int MAX_SECONDS = Config.get().whisper().convert().maxSeconds();
+    static final long FIRST_PASS_MS = Config.get().whisper().convert().firstPassSeconds() * 1000L;
+    static final long PASS_STEP_MS = Config.get().whisper().convert().passStepSeconds() * 1000L;
     private static final long POLL_MS = 1_000;
     private static final long CAPTURE_START_TIMEOUT_S = 60;
     private static final Map<String, CompletableFuture<Optional<Lyrics>>> IN_FLIGHT = new ConcurrentHashMap<>();

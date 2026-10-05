@@ -1,11 +1,11 @@
 package kr.kro.backas.music;
 
+import kr.kro.backas.config.Config;
 import com.github.topi314.lavasrc.ExtendedAudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.source.AudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
-import kr.kro.backas.SharedConstant;
 import kr.kro.backas.music.service.youtube.YoutubeService;
 import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.DurationUtil;
@@ -175,7 +175,7 @@ public final class MusicEmbeds {
         EmbedBuilder builder = new EmbedBuilder()
                 .setColor(ERROR)
                 .setTitle(title)
-                .setFooter(SharedConstant.RELEASE_VERSION);
+                .setFooter(Config.get().bot().version());
         if (member != null) builder.setAuthor(MemberUtil.getName(member));
         if (description != null) builder.setDescription(description);
         return builder;

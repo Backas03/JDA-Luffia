@@ -1,5 +1,6 @@
 package kr.kro.backas.music.lyrics;
 
+import kr.kro.backas.config.Config;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -46,13 +47,13 @@ import java.util.stream.Stream;
 public class TranslationClient {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TranslationClient.class);
-    private static final int CACHE_SIZE = 200;
+    private static final int CACHE_SIZE = Math.max(1, Config.get().llm().translationCacheSize());
     private static final int MAX_TRANSLATION_GROWTH = 4;
     private static final int TRANSLATION_GROWTH_SLACK = 30;
     private static final int ALIGN_WINDOW = 3;
     private static final int TOKENS_PER_LINE = 25;
     private static final int TRANSLATION_VERSION = 2;
-    private static final long ENDPOINT_RECHECK_SECONDS = 30;
+    private static final long ENDPOINT_RECHECK_SECONDS = Math.max(5, Config.get().llm().recheckSeconds());
     private static final String SPEEDS_PATH = "llm/speeds.json";
     private static final java.util.regex.Pattern MARKUP_TAG = java.util.regex.Pattern.compile("</?[A-Za-z][A-Za-z0-9-]*(\\s[^<>]*)?/?>");
     private static final java.util.regex.Pattern ALIGNMENT_NOISE = java.util.regex.Pattern.compile(
@@ -191,7 +192,7 @@ public class TranslationClient {
         HttpResponse<String> response = send(HttpRequest.newBuilder(URI.create(endpoint.baseUrl() + "/v1/models"))
                 .timeout(Duration.ofSeconds(5)).GET().build());
         if (response.statusCode() == 200 && response.body().contains("\"data\"")) {
-            String override = System.getenv("TRANSLATOR_MODEL");
+            String override = Config.blankToNull(Config.get().llm().modelOverride());
             String modelId;
             if (!endpoint.preferredModel().isBlank()) {
                 modelId = endpoint.preferredModel();
@@ -410,7 +411,7 @@ public class TranslationClient {
     private volatile Process fallbackProcess;
 
     public void startFallbackManager(java.util.concurrent.ScheduledExecutorService executor) {
-        String startCommand = System.getenv("TRANSLATOR_FALLBACK_START");
+        String startCommand = Config.blankToNull(Config.get().llm().fallback().startCommand());
         if (fallbackEndpoint() == null || startCommand == null || startCommand.isBlank()) return;
         LOGGER.info("translator fallback manager enabled: {}", startCommand);
         executor.scheduleWithFixedDelay(
@@ -496,7 +497,7 @@ public class TranslationClient {
             fallbackProcess = null;
             return;
         }
-        String stopCommand = System.getenv("TRANSLATOR_FALLBACK_STOP");
+        String stopCommand = Config.blankToNull(Config.get().llm().fallback().stopCommand());
         if (stopCommand == null || stopCommand.isBlank()) return;
         LOGGER.info("a gpu translator is healthy, stopping external cpu fallback: {}", stopCommand);
         try {

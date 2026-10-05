@@ -1,7 +1,7 @@
 package kr.kro.backas.command.music;
 
+import kr.kro.backas.config.Config;
 import kr.kro.backas.Main;
-import kr.kro.backas.SharedConstant;
 import kr.kro.backas.command.api.CommandManager;
 import kr.kro.backas.command.api.SlashCommandSource;
 import net.dv8tion.jda.api.EmbedBuilder;
@@ -53,11 +53,11 @@ public class HelpSlashCommand implements SlashCommandSource {
         }
         builder.setAuthor(
                 "Luffia Github (click)" +
-                        "\n" + SharedConstant.LICENSE,
-                SharedConstant.GITHUB
+                        "\n" + Config.get().bot().license(),
+                Config.get().bot().github()
         );
 
-        builder.setFooter(SharedConstant.RELEASE_VERSION);
+        builder.setFooter(Config.get().bot().version());
         event.replyEmbeds(builder.build()).queue();
     }
 }

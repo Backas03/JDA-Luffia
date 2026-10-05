@@ -1,7 +1,7 @@
 package kr.kro.backas.command.certification;
 
+import kr.kro.backas.config.Config;
 import kr.kro.backas.Main;
-import kr.kro.backas.SharedConstant;
 import kr.kro.backas.certification.CertificationInfo;
 import kr.kro.backas.certification.CertificationManager;
 import kr.kro.backas.command.api.CommandSource;
@@ -41,7 +41,7 @@ public class ForceCertificationCommand implements CommandSource {
             }
             Member member = Main.getLuffia()
                     .getDiscordAPI()
-                    .getGuildById(SharedConstant.MAIN_GUILD_ID)
+                    .getGuildById(Config.get().discord().guilds().main())
                     .retrieveMemberById(userId)
                     .complete();
             if (member == null) {
