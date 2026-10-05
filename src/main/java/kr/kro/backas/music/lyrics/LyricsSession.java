@@ -20,6 +20,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -90,6 +92,7 @@ public class LyricsSession {
         for (LyricLine line : lyrics.synced()) this.sources.add(line.text());
         this.cacheKey = TranslationJobs.cacheKey("synced", sources);
         this.translations = this.translator == null ? Map.of() : this.translator.cacheFor(cacheKey);
+        if (lyrics.aiTimed() && lyrics.hasPlain() && this.translator != null) seedFromPlainTranslations(lyrics);
         this.translatable = isTranslatable(this.translator, lyrics);
         this.leadMs = EditLatency.leadMs(surface.channelId());
         this.offsetMs = offsetMs;
@@ -100,6 +103,29 @@ public class LyricsSession {
                     LyricsPresenter.presentPlain(client, track, card, lyrics);
                 })
                 : null;
+    }
+
+    private void seedFromPlainTranslations(Lyrics lyrics) {
+        List<String> plainLines = Arrays.asList(lyrics.plain().split("\\r?\\n"));
+        Map<Integer, String> plain = translator.cacheFor(TranslationJobs.cacheKey("plain", plainLines));
+        if (plain.isEmpty()) return;
+        Map<String, String> byText = new HashMap<>();
+        plain.forEach((index, text) -> {
+            if (index >= 0 && index < plainLines.size() && text != null && !text.isBlank()) {
+                byText.putIfAbsent(plainLines.get(index).strip(), text);
+            }
+        });
+        int seeded = 0;
+        for (int i = 0; i < sources.size(); i++) {
+            if (translations.containsKey(i)) continue;
+            String text = byText.get(sources.get(i).strip());
+            if (text == null) continue;
+            translations.put(i, text);
+            seeded++;
+        }
+        if (seeded == 0) return;
+        translator.persist(cacheKey);
+        LOGGER.info("reused {} translated line(s) from the plain lyrics for {}", seeded, track.getInfo().title);
     }
 
     public void start() {
