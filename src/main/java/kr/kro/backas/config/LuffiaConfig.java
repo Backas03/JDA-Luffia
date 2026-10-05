@@ -5,7 +5,6 @@ import java.util.List;
 
 public record LuffiaConfig(Bot bot,
                            Discord discord,
-                           Certification certification,
                            Riot riot,
                            Sources sources,
                            MusicPlayer musicPlayer,
@@ -17,13 +16,8 @@ public record LuffiaConfig(Bot bot,
                            Scheduler scheduler) {
 
     public boolean isServiceGuild(long guildId) {
-        if (bot.dev()) return guildId == discord.guilds().dev();
-        List<Long> service = discord.guilds().service();
+        List<Long> service = discord.serviceGuilds();
         return service == null || service.isEmpty() || service.contains(guildId);
-    }
-
-    public long homeGuildId() {
-        return bot.dev() ? discord.guilds().dev() : discord.guilds().main();
     }
 
     public record Bot(boolean dev, String version, String zone, String activity, String github, String license, Shutdown shutdown) {
@@ -32,19 +26,10 @@ public record LuffiaConfig(Bot bot,
     public record Shutdown(int gracefulSeconds, int forcedSeconds, int haltAfterSeconds) {
     }
 
-    public record Discord(String token, String devToken, List<String> musicBotTokens, Guilds guilds) {
+    public record Discord(String token, String devToken, List<String> musicBotTokens, List<Long> serviceGuilds) {
         public String activeToken(boolean dev) {
             return dev ? devToken : token;
         }
-    }
-
-    public record Guilds(long main, long dev, List<Long> service) {
-    }
-
-    public record Certification(boolean enabled, long roleId, Mail mail) {
-    }
-
-    public record Mail(String address, String appPassword) {
     }
 
     public record Riot(String apiKey) {

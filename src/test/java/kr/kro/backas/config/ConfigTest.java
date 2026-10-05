@@ -43,8 +43,7 @@ class ConfigTest {
         Files.writeString(external, String.join("\n",
                 "discord:",
                 "  token: abc",
-                "  guilds:",
-                "    main: 42",
+                "  service-guilds: [42]",
                 "music-player:",
                 "  default-volume: 25",
                 "llm:",
@@ -63,14 +62,15 @@ class ConfigTest {
                 ""));
         LuffiaConfig config = Config.load(external);
         assertEquals("abc", config.discord().token());
-        assertEquals(42, config.discord().guilds().main());
-        assertEquals(0, config.discord().guilds().dev());
+        assertEquals(List.of(42L), config.discord().serviceGuilds());
+        assertTrue(config.isServiceGuild(42));
+        assertFalse(config.isServiceGuild(43));
         assertEquals(25, config.musicPlayer().defaultVolume());
         assertEquals(0.30, config.musicPlayer().karaoke().echoSeconds(), 1e-9);
         assertEquals("http://gpu:11434/|GPU|gemma|4,http://127.0.0.1:8765|CPU||fallback", config.llm().endpointSpec());
         assertEquals("http://gpu:8000|W", config.whisper().endpointSpec());
         assertTrue(Config.missingRequired(config).isEmpty());
-        assertTrue(config.isServiceGuild(999));
+        assertTrue(Config.load(null).isServiceGuild(999));
     }
 
     @Test
