@@ -355,20 +355,40 @@ public final class LyricsPresenter {
             return superseded;
         }
 
+        private synchronized boolean switchToSynced(Lyrics timed, boolean partial) {
+            if (superseded) {
+                LyricsSession current = client.getLyricsSession();
+                if (current != null && current.isForTrack(track)) {
+                    current.updateLyrics(timed);
+                    current.setConvertingPartial(partial);
+                }
+                return true;
+            }
+            if (!client.isCurrentTrack(track) || card.isClosed()) return false;
+            superseded = true;
+            expansions.release(token);
+            if (convertToken != null) conversions.release(convertToken);
+            presentSynced(client, track, card, timed);
+            LyricsSession session = client.getLyricsSession();
+            if (session != null && session.isForTrack(track)) session.setConvertingPartial(partial);
+            return true;
+        }
+
         @Override
         public void requestConversion() {
             if (converting || superseded || convertToken == null) return;
-            CompletableFuture<Optional<Lyrics>> job = LyricsConverter.convert(client, track, lyrics);
+            CompletableFuture<Optional<Lyrics>> job = LyricsConverter.convert(client, track, lyrics, partialLyrics -> switchToSynced(partialLyrics, true));
             if (!job.isDone()) {
                 converting = true;
                 convertNote = CONVERTING_NOTE;
             }
             job.whenComplete((result, error) -> {
-                if (error == null && result != null && result.isPresent() && client.isCurrentTrack(track) && !card.isClosed()) {
-                    superseded = true;
-                    expansions.release(token);
-                    conversions.release(convertToken);
-                    presentSynced(client, track, card, result.get());
+                if (error == null && result != null && result.isPresent()) {
+                    if (switchToSynced(result.get(), false)) return;
+                }
+                if (superseded) {
+                    LyricsSession current = client.getLyricsSession();
+                    if (current != null && current.isForTrack(track)) current.setConvertingPartial(false);
                     return;
                 }
                 converting = false;

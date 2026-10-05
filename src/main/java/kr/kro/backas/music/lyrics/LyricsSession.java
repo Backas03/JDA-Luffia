@@ -50,7 +50,8 @@ public class LyricsSession {
 
     private final MusicPlayerClient client;
     private final AudioTrack track;
-    private final Lyrics lyrics;
+    private volatile Lyrics lyrics;
+    private volatile boolean convertingPartial;
     private final LyricsSurface surface;
     private final ScheduledExecutorService scheduler;
     private final TranslationClient translator;
@@ -143,6 +144,19 @@ public class LyricsSession {
         return autoOffsetMs;
     }
 
+    public boolean updateLyrics(Lyrics replacement) {
+        if (replacement == null || !replacement.hasSynced() || replacement.synced().size() != sources.size()) return false;
+        for (int i = 0; i < sources.size(); i++) {
+            if (!replacement.synced().get(i).text().equals(sources.get(i))) return false;
+        }
+        this.lyrics = replacement;
+        return true;
+    }
+
+    public void setConvertingPartial(boolean partial) {
+        this.convertingPartial = partial;
+    }
+
     public void setAutoPending(boolean pending) {
         this.autoPending = pending;
     }
@@ -150,6 +164,7 @@ public class LyricsSession {
     @Nullable
     private String autoNote() {
         if (autoPending) return AUTO_PENDING_NOTE;
+        if (convertingPartial) return LyricsConversions.LABEL_RUNNING;
         return lyrics.aiTimed() ? LyricsConversions.LABEL_DONE : null;
     }
 
