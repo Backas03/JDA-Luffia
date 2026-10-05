@@ -339,7 +339,7 @@ public class LyricsSession {
         String previous = lineText(lines, index - 1);
         String current = lineText(lines, index);
         String next = lineText(lines, index + 1);
-        String translationBlock = translation == null ? "" : TranslationText.markdown(translation, MAX_LINE_LENGTH);
+        String translationBlock = translation == null ? "" : TranslationText.liveMarkdown(translation, MAX_LINE_LENGTH);
         StringBuilder text = new StringBuilder();
         text.append(previous.isBlank() ? BLANK : "*" + previous + "*").append('\n');
         text.append("## ").append(current.isBlank() ? REST : current).append('\n');
