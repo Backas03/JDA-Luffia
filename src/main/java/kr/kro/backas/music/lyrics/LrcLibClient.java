@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -26,6 +27,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CompletionException;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -39,9 +42,12 @@ public class LrcLibClient {
     private static final int RETRY_ATTEMPTS = 4;
     private static final long RETRY_BASE_DELAY_MS = 1000;
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(15);
+    private static final int MAX_PARALLEL_EXACT = 6;
+    private static final int MAX_PARALLEL_SEARCH = 3;
     private static final int TIMEOUT_RETRIES = 1;
     private static final int MAX_FAILED_REQUESTS = 2;
     private static final Pattern LRC_LINE = Pattern.compile("\\[(\\d{1,2}):(\\d{2})(?:[.:](\\d{1,3}))?](.*)");
+    private static final Pattern LRC_OFFSET = Pattern.compile("\\[offset:\\s*([+-]?\\d+)\\s*]", Pattern.CASE_INSENSITIVE);
     private static final Pattern TITLE_NOISE = Pattern.compile(
             "(?i)\\s*[\\[(【].*?(official|mv|m/v|music video|lyric|audio|visualizer|ver\\.?|version|remaster|가사|자막|한글|번역|공식|뮤직비디오|4k|8k|hd).*?[\\])】]\\s*|\\s*[|_]\\s*(mv|m/v|official.*)$");
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -118,20 +124,19 @@ public class LrcLibClient {
         CompletableFuture<Lyrics> resolved = resolver == null || hasCatalogMetadata(info) ? null
                 : CompletableFuture.supplyAsync(() -> lookupResolved(info), TranslationJobs.EXECUTOR);
         Failures failures = new Failures();
-        JsonNode node = null;
-        int attempts = 0;
+        List<String> exactPaths = new ArrayList<>();
         for (String[] candidate : candidates) {
-            if (attempts++ >= 6 || hasResult(resolved)) break;
-            node = tryGet(failures, "get?track_name=" + encode(candidate[1]) + "&artist_name=" + encode(candidate[0]) + "&duration=" + durationSec);
-            if (node != null) break;
+            if (exactPaths.size() >= MAX_PARALLEL_EXACT) break;
+            exactPaths.add("get?track_name=" + encode(candidate[1]) + "&artist_name=" + encode(candidate[0]) + "&duration=" + durationSec);
         }
+        JsonNode node = firstSuccess(failures, exactPaths, resolved, found -> found);
         if (node == null) {
-            attempts = 0;
+            List<String> searchPaths = new ArrayList<>();
             for (String[] candidate : candidates) {
-                if (attempts++ >= 3 || hasResult(resolved)) break;
-                node = pickBest(tryGet(failures, "search?q=" + encode(candidate[1] + " " + candidate[0])), durationSec);
-                if (node != null) break;
+                if (searchPaths.size() >= MAX_PARALLEL_SEARCH) break;
+                searchPaths.add("search?q=" + encode(candidate[1] + " " + candidate[0]));
             }
+            node = firstSuccess(failures, searchPaths, resolved, found -> pickBest(found, durationSec));
         }
         if (node == null && !hasResult(resolved)) {
             node = pickBest(tryGet(failures, "search?track_name=" + encode(title)), durationSec);
@@ -148,6 +153,37 @@ public class LrcLibClient {
         if (byResolver != null) return byResolver;
         if (failures.last != null) throw failures.last;
         return null;
+    }
+
+    @Nullable
+    private JsonNode firstSuccess(Failures failures, List<String> paths, @Nullable CompletableFuture<Lyrics> resolved,
+                                  Function<JsonNode, JsonNode> select) throws IOException {
+        if (paths.isEmpty() || hasResult(resolved)) return null;
+        List<CompletableFuture<JsonNode>> futures = new ArrayList<>();
+        for (String path : paths) {
+            futures.add(CompletableFuture.supplyAsync(() -> {
+                try {
+                    JsonNode found = tryGet(failures, path);
+                    return found == null ? null : select.apply(found);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }, TranslationJobs.EXECUTOR));
+        }
+        IOException failure = null;
+        JsonNode best = null;
+        for (CompletableFuture<JsonNode> future : futures) {
+            if (best != null) break;
+            try {
+                best = future.join();
+            } catch (CompletionException e) {
+                if (e.getCause() instanceof UncheckedIOException unchecked) failure = unchecked.getCause();
+                else if (e.getCause() instanceof RuntimeException runtime) throw runtime;
+                else throw e;
+            }
+        }
+        if (best == null && failure != null) throw failure;
+        return best;
     }
 
     private static boolean hasResult(@Nullable CompletableFuture<Lyrics> resolved) {
@@ -253,8 +289,10 @@ public class LrcLibClient {
             return get(pathAndQuery);
         } catch (IOException e) {
             if (Thread.currentThread().isInterrupted()) throw e;
-            failures.last = e;
-            if (++failures.count >= MAX_FAILED_REQUESTS) throw e;
+            synchronized (failures) {
+                failures.last = e;
+                if (++failures.count >= MAX_FAILED_REQUESTS) throw e;
+            }
             LOGGER.info("LRCLIB request failed, trying the next candidate: {}", e.toString());
             return null;
         }
@@ -397,6 +435,7 @@ public class LrcLibClient {
     static List<LyricLine> parseLrc(String lrc) {
         List<LyricLine> lines = new ArrayList<>();
         if (lrc == null || lrc.isBlank()) return lines;
+        long offsetMs = lrcOffsetMs(lrc);
         for (String raw : lrc.split("\\r?\\n")) {
             Matcher matcher = LRC_LINE.matcher(raw.trim());
             if (!matcher.matches()) continue;
@@ -409,10 +448,15 @@ public class LrcLibClient {
             }
             String text = matcher.group(4).trim();
             if (CREDIT_LINE.matcher(text).matches()) continue;
-            lines.add(new LyricLine((minutes * 60 + seconds) * 1000 + millis, text));
+            lines.add(new LyricLine(Math.max(0, (minutes * 60 + seconds) * 1000 + millis - offsetMs), text));
         }
         lines.sort((a, b) -> Long.compare(a.timeMs(), b.timeMs()));
         return dropDuplicateTimestampTranslations(lines);
+    }
+
+    static long lrcOffsetMs(String lrc) {
+        Matcher matcher = LRC_OFFSET.matcher(lrc);
+        return matcher.find() ? Long.parseLong(matcher.group(1)) : 0;
     }
 
     private static List<LyricLine> dropDuplicateTimestampTranslations(List<LyricLine> lines) {

@@ -24,10 +24,12 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -44,7 +46,9 @@ public final class ArtworkColors {
     private static final float DISPLAY_MIN_BRIGHTNESS = 0.45f;
     private static final float DISPLAY_MIN_SATURATION = 0.35f;
     private static final double WIDE_RATIO = 1.4;
-    private static final double SIDE_BAND = 0.15;
+    private static final double MAX_BAND = 0.45;
+    private static final int MIN_BAND_PX = 4;
+    private static final int PLACEHOLDER_MAX = 120;
     private static final double FLAT_SIDE_DEVIATION = 14;
     static final int BANNER_WIDTH = 960;
     static final int BANNER_HEIGHT = 540;
@@ -134,33 +138,85 @@ public final class ArtworkColors {
     }
 
     private static Artwork fetch(String url) throws IOException, InterruptedException {
+        BufferedImage image = null;
+        boolean substituted = false;
+        for (String candidate : candidates(url)) {
+            image = download(candidate);
+            if (image != null) break;
+            substituted = true;
+        }
+        if (image == null) throw new IOException("artwork download failed for " + url);
+        BufferedImage cropped = cropFlatBands(image);
+        boolean changed = substituted || cropped != image;
+        boolean wide = cropped.getHeight() > 0 && (double) cropped.getWidth() / cropped.getHeight() >= WIDE_RATIO;
+        byte[] banner;
+        if (!wide) banner = composeBanner(cropped);
+        else banner = changed ? coverBanner(cropped) : null;
+        return new Artwork(dominant(cropped), true, banner);
+    }
+
+    @Nullable
+    private static BufferedImage download(String url) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(5)).GET().build();
         HttpResponse<byte[]> response = HTTP.send(request, HttpResponse.BodyHandlers.ofByteArray());
-        if (response.statusCode() != 200 || response.body().length == 0 || response.body().length > MAX_BYTES) {
-            throw new IOException("artwork download failed with status " + response.statusCode());
-        }
+        if (response.statusCode() != 200 || response.body().length == 0 || response.body().length > MAX_BYTES) return null;
         BufferedImage image = ImageIO.read(new ByteArrayInputStream(response.body()));
-        if (image == null) throw new IOException("unsupported artwork format");
-        boolean wide = image.getHeight() > 0 && (double) image.getWidth() / image.getHeight() >= WIDE_RATIO;
-        if (wide && hasFlatSides(image)) {
-            image = cropCenterSquare(image);
-            wide = false;
+        if (image == null || image.getWidth() <= PLACEHOLDER_MAX || image.getHeight() <= PLACEHOLDER_MAX) return null;
+        return image;
+    }
+
+    static List<String> candidates(String url) {
+        List<String> candidates = new ArrayList<>();
+        candidates.add(url);
+        if (url.endsWith("/maxresdefault.jpg")) {
+            String base = url.substring(0, url.length() - "maxresdefault.jpg".length());
+            candidates.add(base + "sddefault.jpg");
+            candidates.add(base + "hqdefault.jpg");
         }
-        return new Artwork(dominant(image), true, wide ? null : composeBanner(image));
+        return candidates;
     }
 
-    static boolean hasFlatSides(BufferedImage image) {
-        int band = Math.max(1, (int) (image.getWidth() * SIDE_BAND));
-        return isFlat(image, 0, band) && isFlat(image, image.getWidth() - band, image.getWidth());
+    static BufferedImage cropFlatBands(BufferedImage image) {
+        int top = flatRows(image, true);
+        int bottom = flatRows(image, false);
+        int left = flatColumns(image, true);
+        int right = flatColumns(image, false);
+        int width = image.getWidth() - left - right;
+        int height = image.getHeight() - top - bottom;
+        if ((top == 0 && bottom == 0 && left == 0 && right == 0) || width < 16 || height < 16) return image;
+        return image.getSubimage(left, top, width, height);
     }
 
-    private static boolean isFlat(BufferedImage image, int fromX, int toX) {
-        int step = Math.max(1, image.getHeight() / SAMPLE_SIZE);
+    private static int flatRows(BufferedImage image, boolean fromTop) {
+        int limit = (int) (image.getHeight() * MAX_BAND);
+        int flat = 0;
+        for (int i = 0; i < limit; i++) {
+            int y = fromTop ? i : image.getHeight() - 1 - i;
+            if (!isFlat(image, 0, image.getWidth(), y, y + 1)) break;
+            flat++;
+        }
+        return flat < MIN_BAND_PX ? 0 : flat;
+    }
+
+    private static int flatColumns(BufferedImage image, boolean fromLeft) {
+        int limit = (int) (image.getWidth() * MAX_BAND);
+        int flat = 0;
+        for (int i = 0; i < limit; i++) {
+            int x = fromLeft ? i : image.getWidth() - 1 - i;
+            if (!isFlat(image, x, x + 1, 0, image.getHeight())) break;
+            flat++;
+        }
+        return flat < MIN_BAND_PX ? 0 : flat;
+    }
+
+    private static boolean isFlat(BufferedImage image, int fromX, int toX, int fromY, int toY) {
+        int stepX = Math.max(1, (toX - fromX) / SAMPLE_SIZE);
+        int stepY = Math.max(1, (toY - fromY) / SAMPLE_SIZE);
         double sum = 0;
         double squares = 0;
         int count = 0;
-        for (int y = 0; y < image.getHeight(); y += step) {
-            for (int x = fromX; x < toX; x += step) {
+        for (int y = fromY; y < toY; y += stepY) {
+            for (int x = fromX; x < toX; x += stepX) {
                 int rgb = image.getRGB(x, y);
                 double luma = 0.299 * ((rgb >> 16) & 0xFF) + 0.587 * ((rgb >> 8) & 0xFF) + 0.114 * (rgb & 0xFF);
                 sum += luma;
@@ -173,9 +229,20 @@ public final class ArtworkColors {
         return Math.sqrt(Math.max(0, squares / count - mean * mean)) < FLAT_SIDE_DEVIATION;
     }
 
-    static BufferedImage cropCenterSquare(BufferedImage image) {
-        int side = Math.min(image.getWidth(), image.getHeight());
-        return image.getSubimage((image.getWidth() - side) / 2, (image.getHeight() - side) / 2, side, side);
+    static byte[] coverBanner(BufferedImage image) throws IOException {
+        BufferedImage canvas = new BufferedImage(BANNER_WIDTH, BANNER_HEIGHT, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = canvas.createGraphics();
+        try {
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            double cover = Math.max((double) BANNER_WIDTH / image.getWidth(), (double) BANNER_HEIGHT / image.getHeight());
+            int width = (int) Math.ceil(image.getWidth() * cover);
+            int height = (int) Math.ceil(image.getHeight() * cover);
+            graphics.drawImage(image, (BANNER_WIDTH - width) / 2, (BANNER_HEIGHT - height) / 2, width, height, null);
+        } finally {
+            graphics.dispose();
+        }
+        return jpeg(canvas);
     }
 
     static byte[] composeBanner(BufferedImage image) throws IOException {

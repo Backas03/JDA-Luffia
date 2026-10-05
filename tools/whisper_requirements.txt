@@ -1,0 +1,8 @@
+faster-whisper>=1.2.1
+ctranslate2>=4.6.0
+av<16
+fastapi
+uvicorn
+python-multipart
+nvidia-cublas-cu12
+nvidia-cudnn-cu12

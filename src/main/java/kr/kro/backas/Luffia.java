@@ -81,7 +81,8 @@ public class Luffia {
         LoggerFactory.getLogger(Luffia.class).info("번역/AI 서버 주소 ({}): {}", translatorSource, translatorUrl);
         this.musicPlayerController = new MusicPlayerController(
                 new MusicSourceRegistry(BotSecret.SPOTIFY_CLIENT_ID, BotSecret.SPOTIFY_CLIENT_SECRET, BotSecret.SPOTIFY_REFRESH_TOKEN),
-                translatorUrl);
+                translatorUrl,
+                BotSecret.WHISPER_URL);
         this.musicPlayerController.register(discordAPI);
         for (String token : BotSecret.MUSIC_BOT_TOKENS) {
             if (token == null || token.isBlank()) continue;
@@ -94,6 +95,7 @@ public class Luffia {
         discordAPI.addEventListener(this.musicPlayerController);
         discordAPI.addEventListener(this.musicPlayerController.getAiRemovalConfirmations());
         discordAPI.addEventListener(this.musicPlayerController.getLyricsExpansions());
+        discordAPI.addEventListener(this.musicPlayerController.getLyricsConversions());
 
         this.discordAPI.addEventListener(new MusicListener());
         this.discordAPI.addEventListener(new CertificationListener());

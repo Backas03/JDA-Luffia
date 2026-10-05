@@ -57,6 +57,8 @@ public final class TrackCard {
     private volatile CompletableFuture<Message> message = new CompletableFuture<>();
     private volatile boolean bannerAttached;
     private volatile List<? extends ContainerChildComponent> lastBody = List.of();
+    private volatile boolean lyricsExpanded;
+    private volatile Object presenter;
     private volatile long finishedAt;
 
     private TrackCard(MusicPlayerClient client, AudioTrack track, long channelId, @Nullable MessageChannel recordChannel) {
@@ -111,6 +113,23 @@ public final class TrackCard {
         return track;
     }
 
+    public boolean isLyricsExpanded() {
+        return lyricsExpanded;
+    }
+
+    public void setLyricsExpanded(boolean expanded) {
+        this.lyricsExpanded = expanded;
+    }
+
+    public void claim(Object owner) {
+        this.presenter = owner;
+    }
+
+    public boolean isPresentedBy(Object owner) {
+        Object current = presenter;
+        return current == null || current == owner;
+    }
+
     public long channelId() {
         return channelId;
     }
@@ -145,7 +164,8 @@ public final class TrackCard {
     }
 
     private CompletableFuture<?> submitEdit(Container view, long deadlineAt) {
-        return message.thenCompose(current -> current.editMessageComponents(view).useComponentsV2(true).deadline(deadlineAt).submit())
+        return message.thenCompose(current -> current.editMessageComponents(view).useComponentsV2(true)
+                        .deadline(Math.max(deadlineAt, System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS)).submit())
                 .whenComplete((result, error) -> {
                     if (error != null && isGone(error)) onGone();
                 });
@@ -164,6 +184,14 @@ public final class TrackCard {
             }
         }
         return false;
+    }
+
+    public void note(String text) {
+        if (closed.get()) return;
+        edit(frame(List.of(TextDisplay.of("-# " + text))), System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS)
+                .whenComplete((result, error) -> {
+                    if (error != null) LOGGER.debug("failed to note on track card for {}", track.getInfo().title, error);
+                });
     }
 
     public void refresh() {
