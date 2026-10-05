@@ -195,6 +195,8 @@ public final class LyricsPresenter {
         MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
         LyricsSession session = new LyricsSession(client, track, lyrics, surface,
                 controller.getScheduler(), controller.getTranslationClient(), offsetMs);
+        TrackCard card = surface.card();
+        if (card != null) card.claim(session);
         client.setLyricsSession(session);
         session.start();
     }
@@ -321,7 +323,6 @@ public final class LyricsPresenter {
         private final LyricsConversions conversions;
         private final String token;
         private volatile String convertToken;
-        private volatile boolean expanded;
         private volatile boolean converting;
         private volatile boolean superseded;
         private volatile String convertNote;
@@ -339,6 +340,7 @@ public final class LyricsPresenter {
             this.expansions = expansions;
             this.conversions = conversions;
             this.token = expansions.register(this);
+            card.claim(this);
             boolean convertible = lyrics.hasPlain() && !lyrics.hasSynced() && !lyrics.aiTimed() && LyricsConverter.isAvailable();
             this.convertToken = convertible ? conversions.register(this) : null;
         }
@@ -382,17 +384,18 @@ public final class LyricsPresenter {
 
         @Override
         public boolean isExpanded() {
-            return expanded;
+            return card.isLyricsExpanded();
         }
 
         @Override
         public void setExpanded(boolean expanded) {
-            this.expanded = expanded;
+            card.setLyricsExpanded(expanded);
         }
 
         @Override
         public Container render() {
             List<String> all = lines;
+            boolean expanded = card.isLyricsExpanded();
             boolean foldable = all.size() > FULL_PREVIEW_LINES;
             List<String> shown = foldable && !expanded ? all.subList(0, FULL_PREVIEW_LINES) : all;
             String hint = foldable && !expanded ? "\n-# 외 " + (all.size() - FULL_PREVIEW_LINES) + "줄" : "";
@@ -410,7 +413,7 @@ public final class LyricsPresenter {
         @Override
         public CompletableFuture<?> show(AudioTrack track, List<String> lines, @Nullable Map<Integer, String> translations,
                                          String footer, @Nullable String note, long deadlineAt) {
-            if (superseded) return CompletableFuture.completedFuture(null);
+            if (superseded || !card.isPresentedBy(this)) return CompletableFuture.completedFuture(null);
             if (card.isClosed()) {
                 expansions.release(token);
                 String convert = convertToken;
