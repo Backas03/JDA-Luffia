@@ -52,6 +52,7 @@ public class LyricsSession {
     private final List<String> sources;
     private final String cacheKey;
     private final boolean translatable;
+    private final long leadMs;
     private volatile long offsetMs;
     private volatile boolean translating;
     private volatile TranslationJobs.Job job;
@@ -83,6 +84,7 @@ public class LyricsSession {
         this.cacheKey = TranslationJobs.cacheKey("synced", sources);
         this.translations = this.translator == null ? Map.of() : this.translator.cacheFor(cacheKey);
         this.translatable = isTranslatable(this.translator, lyrics);
+        this.leadMs = EditLatency.leadMs(surface.channelId());
         this.offsetMs = offsetMs;
     }
 
@@ -206,8 +208,7 @@ public class LyricsSession {
             }
             if (client.isPaused()) return;
             long channelId = surface.channelId();
-            long position = (long) (client.getRealPositionMs()
-                    + (EditLatency.leadMs(channelId) + offsetMs) * client.getCurrentPlaySpeed());
+            long position = (long) (client.getRealPositionMs() + (leadMs + offsetMs) * client.getCurrentPlaySpeed());
             int index = indexAt(position);
             String translation = translationFor(index);
             boolean pending = isPendingTranslation(index, translation);
