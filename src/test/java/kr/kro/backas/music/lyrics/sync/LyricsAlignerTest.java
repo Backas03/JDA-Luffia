@@ -40,6 +40,15 @@ class LyricsAlignerTest {
     }
 
     @Test
+    void keepsTheLyricsFileTimingWhenWhisperDisagreesByLessThanItsOwnErrorBand() {
+        Optional<LyricsAligner.Alignment> result = LyricsAligner.align(sung(ENGLISH, 400), ENGLISH, 60_000);
+        assertTrue(result.isPresent());
+        assertEquals(0, result.get().offsetMs());
+        assertEquals(4, result.get().matchedLines());
+        assertEquals(-900, LyricsAligner.align(sung(ENGLISH, 900), ENGLISH, 60_000).get().offsetMs());
+    }
+
+    @Test
     void worksForJapaneseLyricsWhereWhisperSplitsDifferently() {
         List<LyricLine> lines = List.of(
                 new LyricLine(5_000, "君の知らない物語を"),
@@ -119,6 +128,15 @@ class LyricsAlignerTest {
         assertEquals("", LyricsAligner.normalize("♪ ... ♪"));
         assertEquals(1.0, LyricsAligner.similarity("abcd", "abcd"));
         assertTrue(LyricsAligner.similarity("abcd", "wxyz") < 0.1);
+    }
+
+    @Test
+    void firstWordOnsetIgnoresLeadingSilenceWhisperAttachedToTheWord() {
+        assertEquals(41_660, LyricsAligner.onsetMs(new WhisperClient.Word("君", 40_980, 41_980)));
+        assertEquals(46_860, LyricsAligner.onsetMs(new WhisperClient.Word("ただ", 46_860, 47_360)));
+        assertEquals(1_000, LyricsAligner.onsetMs(new WhisperClient.Word("hello", 1_000, 1_400)));
+        assertEquals(2_450, LyricsAligner.onsetMs(new WhisperClient.Word("hello", 1_000, 3_000)));
+        assertEquals(LyricsAligner.MIN_WORD_MS, LyricsAligner.plausibleDurationMs("a"));
     }
 
     @Test

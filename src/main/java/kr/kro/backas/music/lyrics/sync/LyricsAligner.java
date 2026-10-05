@@ -23,19 +23,23 @@ public final class LyricsAligner {
     static final long EDGE_MARGIN_MS = 1500;
     static final long OFFSET_SLACK_MS = 30_000;
     static final int MAX_LINES = 12;
+    static final long LATIN_CHAR_MS = 110;
+    static final long CJK_CHAR_MS = 320;
+    static final long MIN_WORD_MS = 250;
+    static final long TRUST_LYRICS_WITHIN_MS = 800;
 
     private LyricsAligner() {
     }
 
     public static Optional<Alignment> align(List<WhisperClient.Word> words, List<LyricLine> lines, long capturedMs) {
         List<Integer> tokenIndex = new ArrayList<>();
-        List<Long> tokenStarts = new ArrayList<>();
+        List<WhisperClient.Word> tokenWords = new ArrayList<>();
         StringBuilder transcript = new StringBuilder();
         for (WhisperClient.Word word : words) {
             String normalized = normalize(word.text());
             if (normalized.isEmpty()) continue;
             tokenIndex.add(transcript.length());
-            tokenStarts.add(word.startMs());
+            tokenWords.add(word);
             transcript.append(normalized);
         }
         if (transcript.length() < MIN_LINE_CHARS) return Optional.empty();
@@ -64,7 +68,7 @@ public final class LyricsAligner {
             }
             if (bestScore < MIN_SCORE) continue;
             lastToken = bestToken;
-            offsets.add(line.timeMs() - tokenStarts.get(bestToken));
+            offsets.add(line.timeMs() - onsetMs(tokenWords.get(bestToken)));
         }
         if (offsets.size() < 2) return Optional.empty();
 
@@ -83,7 +87,23 @@ public final class LyricsAligner {
         if (agreeing.size() < required) return Optional.empty();
         long refined = median(agreeing);
         long spread = agreeing.get(agreeing.size() - 1) - agreeing.get(0);
-        return Optional.of(new Alignment(Math.round(refined / 10.0) * 10, agreeing.size(), spread));
+        long applied = Math.abs(refined) < TRUST_LYRICS_WITHIN_MS ? 0 : Math.round(refined / 10.0) * 10;
+        return Optional.of(new Alignment(applied, agreeing.size(), spread));
+    }
+
+    static long onsetMs(WhisperClient.Word word) {
+        return Math.max(word.startMs(), word.endMs() - plausibleDurationMs(word.text()));
+    }
+
+    static long plausibleDurationMs(String text) {
+        long total = 0;
+        for (int i = 0; i < text.length(); ) {
+            int cp = text.codePointAt(i);
+            i += Character.charCount(cp);
+            if (!Character.isLetterOrDigit(cp)) continue;
+            total += cp < 0x3000 ? LATIN_CHAR_MS : CJK_CHAR_MS;
+        }
+        return Math.max(MIN_WORD_MS, total);
     }
 
     private static long median(List<Long> sorted) {
