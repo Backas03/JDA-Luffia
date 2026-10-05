@@ -37,7 +37,7 @@ class LyricsTimestamperTest {
         Optional<LyricsTimestamper.Result> result = LyricsTimestamper.timestamp(LINES, heard(List.of(), 5_000), 60_000);
         assertTrue(result.isPresent());
         assertEquals(4, result.get().matched());
-        assertEquals(5_000, result.get().lines().get(0).timeMs());
+        assertEquals(5_000 - LyricsTimestamper.LINE_LEAD_MS, result.get().lines().get(0).timeMs());
         assertTrue(result.get().lines().get(1).timeMs() > result.get().lines().get(0).timeMs());
         assertTrue(result.get().lines().get(3).timeMs() > result.get().lines().get(2).timeMs());
     }
