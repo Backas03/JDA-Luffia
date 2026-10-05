@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class LlmEndpointsTest {
 
     @Test
-    void parsesTheCurrentBotSecretFormat() {
+    void parsesTheEndpointSpecFormat() {
         List<LlmEndpoint> endpoints = LlmEndpoints.parse(
                 "http://192.168.0.2:11434|NVIDIA GeForce RTX 5080|luffia,http://gpu-b.example:11434|AMD Radeon RX 7800 XT,"
                         + "http://127.0.0.1:8765|AMD Ryzen 5 5600G(6 core) 32GB");

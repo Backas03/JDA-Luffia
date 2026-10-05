@@ -1,5 +1,6 @@
 package kr.kro.backas.util;
 
+import kr.kro.backas.config.Config;
 import net.dv8tion.jda.api.JDA;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,8 +13,8 @@ import java.util.List;
 public final class BotShutdown {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BotShutdown.class);
-    public static final Duration GRACEFUL_TIMEOUT = Duration.ofSeconds(5);
-    public static final Duration FORCED_TIMEOUT = Duration.ofSeconds(2);
+    public static final Duration GRACEFUL_TIMEOUT = Duration.ofSeconds(Config.get().bot().shutdown().gracefulSeconds());
+    public static final Duration FORCED_TIMEOUT = Duration.ofSeconds(Config.get().bot().shutdown().forcedSeconds());
 
     public interface Stoppable {
         void shutdown();

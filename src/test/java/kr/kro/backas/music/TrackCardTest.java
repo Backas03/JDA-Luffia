@@ -1,7 +1,7 @@
 package kr.kro.backas.music;
 
+import kr.kro.backas.BuildInfo;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
-import kr.kro.backas.SharedConstant;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -26,8 +26,8 @@ class TrackCardTest {
 
     @Test
     void footerNamesTheBotAndStampsWhenPlaybackFinished() {
-        assertEquals("-# 김노래#6163\n-# " + SharedConstant.RELEASE_VERSION, TrackCard.footerText("김노래#6163", 0));
-        assertEquals("-# 김노래#6163 <t:1789900000:t> 재생 완료됨\n-# " + SharedConstant.RELEASE_VERSION,
+        assertEquals("-# 김노래#6163\n-# " + BuildInfo.VERSION, TrackCard.footerText("김노래#6163", 0));
+        assertEquals("-# 김노래#6163 <t:1789900000:t> 재생 완료됨\n-# " + BuildInfo.VERSION,
                 TrackCard.footerText("김노래#6163", 1_789_900_000_000L));
     }
 

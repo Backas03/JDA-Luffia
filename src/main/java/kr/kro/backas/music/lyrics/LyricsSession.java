@@ -1,5 +1,6 @@
 package kr.kro.backas.music.lyrics;
 
+import kr.kro.backas.config.Config;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import kr.kro.backas.music.ArtworkColors;
 import kr.kro.backas.music.MusicEmbeds;
@@ -35,10 +36,10 @@ public class LyricsSession {
     private static final int MAX_SONG_LENGTH = 200;
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LyricsSession.class);
-    public static final long TICK_MS = 200;
-    public static final long MIN_EDIT_INTERVAL_MS = 1200;
-    private static final long CLOCK_EDIT_INTERVAL_MS = 800;
-    private static final long POST_EDIT_GAP_MS = 500;
+    public static final long TICK_MS = Config.get().lyrics().display().tickMs();
+    public static final long MIN_EDIT_INTERVAL_MS = Config.get().lyrics().display().minEditIntervalMs();
+    private static final long CLOCK_EDIT_INTERVAL_MS = Config.get().lyrics().display().clockEditIntervalMs();
+    private static final long POST_EDIT_GAP_MS = Config.get().lyrics().display().postEditGapMs();
     public static final long DEFAULT_OFFSET_MS = 0;
     public static final String AUTO_PENDING_NOTE = "AI 보정 중";
     public static final String TRANSLATING_NOTE = "번역 중...";

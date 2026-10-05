@@ -1,5 +1,6 @@
 package kr.kro.backas.music.ai;
 
+import kr.kro.backas.config.Config;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -38,7 +39,7 @@ public class AiAutoplay {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AiAutoplay.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    public static final int AUTO_QUEUE_SIZE = 2;
+    public static final int AUTO_QUEUE_SIZE = Math.max(1, Config.get().autoplay().queueSize());
     private static final int HISTORY_LIMIT = 200;
     private static final int SESSION_HISTORY = 10;
     private static final int SESSION_QUEUE = 10;
@@ -78,7 +79,7 @@ public class AiAutoplay {
     private final Deque<PlayedTrack> history = new ConcurrentLinkedDeque<>();
     private final AtomicBoolean refilling = new AtomicBoolean();
     private final AtomicInteger generation = new AtomicInteger();
-    private volatile boolean enabled = true;
+    private volatile boolean enabled = Config.get().autoplay().enabledByDefault();
     private volatile boolean explicit;
     private volatile String criteria = "";
     private volatile boolean diverse;

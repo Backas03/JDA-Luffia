@@ -1,5 +1,6 @@
 package kr.kro.backas.music.lyrics;
 
+import kr.kro.backas.config.Config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,11 +13,11 @@ import java.util.concurrent.TimeoutException;
 
 public final class EditRateLimiter {
 
-    public static final int MAX_EDITS_PER_WINDOW = 5;
-    public static final long WINDOW_MS = 5000;
-    public static final long EDIT_DEADLINE_MS = 2500;
-    public static final long IN_FLIGHT_TIMEOUT_MS = 4000;
-    static final long EXTRAS_PAUSE_MS = 30_000;
+    public static final int MAX_EDITS_PER_WINDOW = Config.get().lyrics().rateLimit().editsPerWindow();
+    public static final long WINDOW_MS = Config.get().lyrics().rateLimit().windowMs();
+    public static final long EDIT_DEADLINE_MS = Config.get().lyrics().rateLimit().editDeadlineMs();
+    public static final long IN_FLIGHT_TIMEOUT_MS = Config.get().lyrics().rateLimit().inFlightTimeoutMs();
+    static final long EXTRAS_PAUSE_MS = Config.get().lyrics().rateLimit().extrasPauseMs();
 
     private static final Logger LOGGER = LoggerFactory.getLogger(EditRateLimiter.class);
     private static final Map<Long, Deque<Long>> HISTORY = new ConcurrentHashMap<>();

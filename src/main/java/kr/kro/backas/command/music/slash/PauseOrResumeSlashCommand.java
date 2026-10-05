@@ -1,7 +1,7 @@
 package kr.kro.backas.command.music.slash;
 
+import kr.kro.backas.BuildInfo;
 import kr.kro.backas.Main;
-import kr.kro.backas.SharedConstant;
 import kr.kro.backas.command.api.SlashCommandSource;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
@@ -34,7 +34,7 @@ public class PauseOrResumeSlashCommand implements SlashCommandSource {
                     .setAuthor(MemberUtil.getName(member))
                     .setTitle("노래를 일시정지 할 수 없습니다.")
                     .setDescription("노래를 일시정지 하려면 음성채팅방에 먼저 참여해주세요.")
-                    .setFooter(SharedConstant.RELEASE_VERSION);
+                    .setFooter(BuildInfo.VERSION);
             event.replyEmbeds(builder.build()).queue();
             return;
         }
@@ -46,7 +46,7 @@ public class PauseOrResumeSlashCommand implements SlashCommandSource {
                     .setAuthor(MemberUtil.getName(member))
                     .setTitle("노래를 일시정지 할 수 없습니다.")
                     .setDescription("현재 재생중인 곡이 없으므로 일시정지 할 수 없습니다.")
-                    .setFooter(SharedConstant.RELEASE_VERSION);
+                    .setFooter(BuildInfo.VERSION);
             event.replyEmbeds(builder.build()).queue();
             return;
         }
