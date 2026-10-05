@@ -21,7 +21,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class LyricsAutoSync {
 
-    public static final int PRELOAD_COUNT = 2;
     static final int CAPTURE_SECONDS = PcmCapture.DEFAULT_SECONDS;
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LyricsAutoSync.class);
@@ -56,11 +55,6 @@ public final class LyricsAutoSync {
             LyricsSession current = client.getLyricsSession();
             if (current != null && current.isForTrack(track)) current.setAutoOffsetMs(result.get().offsetMs());
         });
-    }
-
-    public static void preload(MusicPlayerClient client, AudioTrack track, Lyrics lyrics) {
-        if (LyricsOffsets.defaultStore().get(track.getIdentifier()) != null) return;
-        schedule(client, track, lyrics);
     }
 
     @Nullable
