@@ -14,17 +14,7 @@ discord:
   token: ""
   dev-token: ""
   music-bot-tokens: []
-  guilds:
-    main: 0
-    dev: 0
-    service: []
-
-certification:
-  enabled: false
-  role-id: 0
-  mail:
-    address: ""
-    app-password: ""
+  service-guilds: []
 
 riot:
   api-key: ""

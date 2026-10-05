@@ -1,28 +1,14 @@
 package kr.kro.backas.util;
 
-import kr.kro.backas.Main;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.GuildVoiceState;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.entities.channel.unions.AudioChannelUnion;
-import net.dv8tion.jda.api.exceptions.ErrorResponseException;
 import org.jetbrains.annotations.Nullable;
 
 public final class MemberUtil {
-
-    @Nullable
-    public static Member getMember(long userId) {
-        Guild guild = Main.getLuffia().getPublishedGuild();
-        Member member = guild.getMemberById(userId);
-        if (member != null) return member;
-        try {
-            return guild.retrieveMemberById(userId).complete();
-        } catch (ErrorResponseException ignore) {
-            return null;
-        }
-    }
 
     public static String getName(Member member) {
         return getName(member.getUser());

@@ -1,9 +1,7 @@
 package kr.kro.backas;
 
 import kr.kro.backas.config.Config;
-import kr.kro.backas.certification.CertificationManager;
 import org.slf4j.LoggerFactory;
-import kr.kro.backas.certification.listener.CertificationListener;
 import kr.kro.backas.command.HelpCommand;
 import kr.kro.backas.command.api.CommandManager;
 import kr.kro.backas.command.lol.slash.LOLUserInfoSlashCommand;
@@ -16,7 +14,6 @@ import kr.kro.backas.music.source.MusicSourceRegistry;
 import kr.kro.backas.config.LuffiaConfig;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Activity;
-import net.dv8tion.jda.api.entities.Guild;
 
 import java.io.IOException;
 
@@ -24,7 +21,6 @@ public class Luffia {
 
     private final JDA discordAPI;
     private final CommandManager commandManager;
-    private final CertificationManager certificationManager;
     private final MusicPlayerController musicPlayerController;
 
     public Luffia(JDA discordAPI) throws IOException, InterruptedException {
@@ -32,7 +28,6 @@ public class Luffia {
 
         this.commandManager = new CommandManager("!", this);
 
-        //this.commandManager.registerSlashCommand(new SlashCertificationCommand());
         this.commandManager.registerSlashCommand(new PlaySlashCommand());
         this.commandManager.registerSlashCommand(new QueueSlashCommand());
         this.commandManager.registerSlashCommand(new QuitSlashCommand());
@@ -52,10 +47,7 @@ public class Luffia {
         this.commandManager.registerSlashCommand(new HelpSlashCommand());
         this.commandManager.commitSlashCommands();
 
-        //this.commandManager.registerCommand("인증정보", new CertificationInfoCommand());
-        //this.commandManager.registerCommand("인증해제", new CertificationRemoveCommand());
         this.commandManager.registerCommand("도움말", new HelpCommand());
-        //this.commandManager.registerCommand("강제인증", new ForceCertificationCommand());
 
         //this.commandManager.registerCommand("재생", new PlayCommand());
         //this.commandManager.registerCommand("나가기", new QuitCommand());
@@ -66,8 +58,6 @@ public class Luffia {
         //this.commandManager.registerCommand("롤정보", new LOLUserInfoCommand());
 
         this.commandManager.registerCommand("메이플정보", new MapleUserInfoCommand());
-
-        this.certificationManager = null; // new CertificationManager(discordAPI);
 
         LuffiaConfig config = Config.get();
         String translatorUrl = config.llm().endpointSpec();
@@ -92,7 +82,6 @@ public class Luffia {
         discordAPI.addEventListener(this.musicPlayerController.getLyricsConversions());
 
         this.discordAPI.addEventListener(new MusicListener());
-        this.discordAPI.addEventListener(new CertificationListener());
         this.discordAPI.getPresence().setActivity(Activity.playing("/도움말 또는 !도움말  명령어로 기능 확인"));
     }
 
@@ -102,16 +91,6 @@ public class Luffia {
 
     public CommandManager getCommandManager() {
         return commandManager;
-    }
-
-    public CertificationManager getCertificationManager() {
-        return certificationManager;
-    }
-
-    public Guild getPublishedGuild() {
-        return Config.get().bot().dev() ?
-                discordAPI.getGuildById(Config.get().discord().guilds().dev()) :
-                discordAPI.getGuildById(Config.get().discord().guilds().main());
     }
 
     public MusicPlayerController getMusicPlayerController() {
