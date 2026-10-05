@@ -21,7 +21,6 @@ public final class LyricsTimestamper {
     static final long FILL_GAP_MS = 3_000;
     static final long TAIL_MARGIN_MS = 1_000;
     static final long LINE_LEAD_MS = 300;
-    static final long OUTLIER_MS = 2_500;
     private static final double NONE = Double.NEGATIVE_INFINITY;
     private static final Pattern SECTION_TAG = Pattern.compile("^\\s*[\\[(].*[\\])]\\s*$");
 
@@ -152,7 +151,6 @@ public final class LyricsTimestamper {
         }
         if (matchedCount < MIN_MATCHED || matchedCount < count * MIN_MATCHED_RATIO) return Optional.empty();
 
-        matchedCount -= dropOutliers(times, matched);
         for (int i = 0; i < count; i++) {
             if (matched[i]) times[i] = Math.max(0, times[i] - LINE_LEAD_MS);
         }
@@ -160,25 +158,6 @@ public final class LyricsTimestamper {
         List<LyricLine> result = new ArrayList<>(count);
         for (int i = 0; i < count; i++) result.add(new LyricLine(times[i], lines.get(i)));
         return Optional.of(new Result(result, matchedCount, count));
-    }
-
-    static int dropOutliers(long[] times, boolean[] matched) {
-        int dropped = 0;
-        for (int i = 0; i < times.length; i++) {
-            if (!matched[i]) continue;
-            int before = i - 1;
-            while (before >= 0 && !matched[before]) before--;
-            int after = i + 1;
-            while (after < times.length && !matched[after]) after++;
-            if (before < 0 || after >= times.length) continue;
-            long expected = times[before] + (times[after] - times[before]) * (i - before) / (after - before);
-            boolean ordered = times[i] > times[before] && times[i] < times[after];
-            if (!ordered || Math.abs(times[i] - expected) > OUTLIER_MS) {
-                matched[i] = false;
-                dropped++;
-            }
-        }
-        return dropped;
     }
 
     static void fillGaps(long[] times, boolean[] matched, long durationMs) {
