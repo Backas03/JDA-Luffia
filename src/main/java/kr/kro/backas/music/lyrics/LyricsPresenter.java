@@ -62,6 +62,7 @@ public final class LyricsPresenter {
     static final int FULL_PREVIEW_LINES = 6;
     private static final String TRUNCATED_NOTE = "… (이하 생략)";
     private static final String FULL_LYRICS_NOTE = "타임스탬프 가사가 없어 전체 가사로 표시합니다";
+    private static final String AI_AVAILABLE_NOTE = "AI 타임스탬프 가사를 이용할 수 있습니다";
     private static final long CLOCK_INTERVAL_MS = 900;
 
     public static String translationStatus(@Nullable MusicPlayerClient client, @Nullable TranslationClient translator) {
@@ -225,9 +226,10 @@ public final class LyricsPresenter {
                 startSession(client, track, lyrics, LyricsSurface.ofCard(card), offsetMs);
                 return;
             }
-            showFull(client, track, lyrics, null, true,
-                    new CardFullView(client, track, lyrics, card, Main.getLuffia().getMusicPlayerController().getLyricsExpansions(),
-                            Main.getLuffia().getMusicPlayerController().getLyricsConversions()), translator);
+            CardFullView view = new CardFullView(client, track, lyrics, card, Main.getLuffia().getMusicPlayerController().getLyricsExpansions(),
+                    Main.getLuffia().getMusicPlayerController().getLyricsConversions());
+            showFull(client, track, lyrics, null, true, view, translator);
+            view.requestConversion();
         });
     }
 
@@ -328,6 +330,7 @@ public final class LyricsPresenter {
         private final LyricsConversions conversions;
         private final String token;
         private volatile String convertToken;
+        private final boolean stored;
         private volatile boolean converting;
         private volatile boolean superseded;
         private volatile String convertNote;
@@ -348,6 +351,7 @@ public final class LyricsPresenter {
             card.claim(this);
             boolean convertible = lyrics.hasPlain() && !lyrics.hasSynced() && !lyrics.aiTimed() && LyricsConverter.isAvailable();
             this.convertToken = convertible ? conversions.register(this) : null;
+            this.stored = convertible && AiLyricsStore.defaultStore().get(track.getIdentifier()) != null;
         }
 
         @Override
@@ -435,7 +439,7 @@ public final class LyricsPresenter {
             List<Button> buttons = new ArrayList<>();
             if (foldable) buttons.add(LyricsExpansions.button(token, expanded));
             String convert = convertToken;
-            if (convert != null) buttons.add(LyricsConversions.button(convert, converting));
+            if (convert != null) buttons.add(LyricsConversions.button(convert, converting, stored));
             if (!buttons.isEmpty()) body.add(ActionRow.of(buttons));
             return card.frame(body);
         }
@@ -470,7 +474,8 @@ public final class LyricsPresenter {
     private static void showFull(MusicPlayerClient client, AudioTrack track, Lyrics lyrics, @Nullable Member requester, boolean liveWanted,
                                  FullView view, TranslationClient translator) {
         List<String> lines = fullLines(lyrics);
-        String footer = liveWanted ? FULL_LYRICS_NOTE : SharedConstant.RELEASE_VERSION;
+        boolean aiAvailable = lyrics.hasPlain() && !lyrics.hasSynced() && !lyrics.aiTimed() && LyricsConverter.isAvailable();
+        String footer = liveWanted ? (aiAvailable ? AI_AVAILABLE_NOTE : FULL_LYRICS_NOTE) : SharedConstant.RELEASE_VERSION;
         if (requester != null) footer += " · 요청: " + MemberUtil.getName(requester);
         String finalFooter = footer;
         List<LyricLine> asLines = new ArrayList<>();

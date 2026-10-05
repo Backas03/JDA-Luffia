@@ -20,7 +20,8 @@ public class LyricsConversions extends ListenerAdapter {
     private static final long EXPIRE_MS = 60 * 60 * 1000;
     public static final String LABEL = "AI 가사 변환";
     public static final String LABEL_RUNNING = "AI 가사 변환 중";
-    public static final String LABEL_DONE = "AI 가사 변환됨";
+    public static final String LABEL_DONE = "AI 타임스탬프 가사 변환됨";
+    public static final String LABEL_SWITCH = "AI 타임스탬프 가사 전환";
     public static final String LABEL_ORIGINAL = "원문 보기";
 
     public interface Convertible {
@@ -68,7 +69,11 @@ public class LyricsConversions extends ListenerAdapter {
     }
 
     public static Button button(String token, boolean converting) {
-        Button button = Button.primary(PREFIX + token, converting ? LABEL_RUNNING : LABEL);
+        return button(token, converting, false);
+    }
+
+    public static Button button(String token, boolean converting, boolean stored) {
+        Button button = Button.primary(PREFIX + token, converting ? LABEL_RUNNING : stored ? LABEL_SWITCH : LABEL);
         return converting ? button.asDisabled() : button;
     }
 
