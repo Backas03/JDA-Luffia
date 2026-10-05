@@ -18,6 +18,8 @@ import kr.kro.backas.music.filter.KaraokeMode;
 import kr.kro.backas.music.filter.VocalEchoFilter;
 import kr.kro.backas.music.lyrics.LyricsPresenter;
 import kr.kro.backas.music.lyrics.LyricsSession;
+import kr.kro.backas.music.lyrics.sync.LyricsAutoSync;
+import kr.kro.backas.music.lyrics.sync.PcmCapture;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import org.jetbrains.annotations.Nullable;
 import net.dv8tion.jda.api.EmbedBuilder;
@@ -68,6 +70,7 @@ public class MusicPlayerClient {
     private volatile long connectRequestedAt;
     private volatile TrackCard trackCard;
     private volatile MessageChannel sessionHomeChannel;
+    private volatile PcmCapture capture;
 
     public MusicPlayerClient(JDA musicBot, Guild guild, AudioPlayerManager sharedAudioPlayerManager) {
         this.musicBot = musicBot;
@@ -94,6 +97,7 @@ public class MusicPlayerClient {
         MusicTrackHandler trackHandler = new MusicTrackHandler(this.musicTrack, this);
         this.audioPlayer.addListener(trackHandler);
 
+        updateFilter();
         AudioManager audioManager = guild.getAudioManager();
         audioManager.setSendingHandler(new AudioForwarder(this));
         audioManager.setConnectionListener(new ConnectionListener() {
@@ -175,7 +179,8 @@ public class MusicPlayerClient {
         KaraokeMode karaoke = karaokeMode;
         ConfiguredEqualizer equalizerPreset = currentEqualizer;
         boolean speedActive = Math.abs(speed - 1.0) > 0.001;
-        if (!speedActive && !karaoke.isActive() && equalizerPreset.isFlat()) {
+        boolean capturing = LyricsAutoSync.isEnabled();
+        if (!speedActive && !karaoke.isActive() && equalizerPreset.isFlat() && !capturing) {
             this.audioPlayer.setFilterFactory(null);
             return;
         }
@@ -205,8 +210,33 @@ public class MusicPlayerClient {
                 equalizerPreset.applyTo(equalizer);
                 chain.add(0, equalizer);
             }
+            if (capturing) {
+                FloatPcmAudioFilter head = chain.isEmpty() ? output : (FloatPcmAudioFilter) chain.get(0);
+                chain.add(0, captureFor(track, format.sampleRate).tap(head));
+            }
             return chain;
         });
+    }
+
+    private synchronized PcmCapture captureFor(AudioTrack track, int sampleRate) {
+        PcmCapture current = capture;
+        if (current != null && current.track() == track) return current;
+        if (current != null) current.finish();
+        PcmCapture created = new PcmCapture(track, sampleRate, PcmCapture.DEFAULT_SECONDS);
+        capture = created;
+        return created;
+    }
+
+    @Nullable
+    public PcmCapture getCapture(AudioTrack track) {
+        PcmCapture current = capture;
+        if (current == null || current.track() == null) return null;
+        return current.track().getIdentifier().equals(track.getIdentifier()) ? current : null;
+    }
+
+    public void onTrackEnded(AudioTrack track) {
+        PcmCapture current = capture;
+        if (current != null && current.track() == track) current.finish();
     }
 
     public @Nullable LyricsSession getLyricsSession() {
