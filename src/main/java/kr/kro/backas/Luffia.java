@@ -95,6 +95,7 @@ public class Luffia {
         discordAPI.addEventListener(this.musicPlayerController);
         discordAPI.addEventListener(this.musicPlayerController.getAiRemovalConfirmations());
         discordAPI.addEventListener(this.musicPlayerController.getLyricsExpansions());
+        discordAPI.addEventListener(this.musicPlayerController.getLyricsConversions());
 
         this.discordAPI.addEventListener(new MusicListener());
         this.discordAPI.addEventListener(new CertificationListener());
