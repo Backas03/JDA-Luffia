@@ -113,7 +113,8 @@ public class LyricsSession {
 
     @Nullable
     private String autoNote() {
-        return autoPending ? AUTO_PENDING_NOTE : null;
+        if (autoPending) return AUTO_PENDING_NOTE;
+        return lyrics.aiTimed() ? LyricsConversions.LABEL : null;
     }
 
     public void setOffsetMs(long offsetMs) {

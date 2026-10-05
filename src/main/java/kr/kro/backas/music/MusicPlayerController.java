@@ -11,6 +11,7 @@ import kr.kro.backas.music.ai.AiPlaylistBuilder;
 import kr.kro.backas.music.ai.AiShuffleClassifier;
 import kr.kro.backas.music.ai.AiTrackTagger;
 import kr.kro.backas.music.lyrics.LrcLibClient;
+import kr.kro.backas.music.lyrics.LyricsConversions;
 import kr.kro.backas.music.lyrics.LyricsExpansions;
 import kr.kro.backas.music.lyrics.TranslationClient;
 import kr.kro.backas.music.lyrics.sync.WhisperClient;
@@ -73,6 +74,7 @@ public class MusicPlayerController extends ListenerAdapter {
     private final SongInfoClient songInfoClient = new SongInfoClient();
     private final AiRemovalConfirmations aiRemovalConfirmations = new AiRemovalConfirmations();
     private final LyricsExpansions lyricsExpansions = new LyricsExpansions();
+    private final LyricsConversions lyricsConversions = new LyricsConversions();
 
     public MusicPlayerController(MusicSourceRegistry sourceRegistry, String translatorUrl, @Nullable String whisperUrl) {
         this.sourceRegistry = sourceRegistry;
@@ -94,6 +96,7 @@ public class MusicPlayerController extends ListenerAdapter {
         this.aiShuffleClassifier = new AiShuffleClassifier(this.translationClient, this.aiTrackTagger);
         this.scheduler.scheduleWithFixedDelay(this::flushAiCaches, AI_CACHE_FLUSH_SECONDS, AI_CACHE_FLUSH_SECONDS, TimeUnit.SECONDS);
         this.scheduler.scheduleWithFixedDelay(lyricsExpansions::prune, EXPANSION_PRUNE_MINUTES, EXPANSION_PRUNE_MINUTES, TimeUnit.MINUTES);
+        this.scheduler.scheduleWithFixedDelay(lyricsConversions::prune, EXPANSION_PRUNE_MINUTES, EXPANSION_PRUNE_MINUTES, TimeUnit.MINUTES);
         this.aiPlaylistBuilder = new AiPlaylistBuilder(this.translationClient, this.aiShuffleClassifier);
         this.lyricsClient = new LrcLibClient(new AiSongResolver(this.translationClient));
         this.bots = new CopyOnWriteArrayList<>();
@@ -167,6 +170,10 @@ public class MusicPlayerController extends ListenerAdapter {
 
     public AiRemovalConfirmations getAiRemovalConfirmations() {
         return aiRemovalConfirmations;
+    }
+
+    public LyricsConversions getLyricsConversions() {
+        return lyricsConversions;
     }
 
     public LyricsExpansions getLyricsExpansions() {
