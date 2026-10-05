@@ -16,12 +16,13 @@ public final class LyricsAligner {
     public record Alignment(long offsetMs, int matchedLines, long spreadMs) {
     }
 
-    static final double MIN_SCORE = 0.55;
+    static final double MIN_SCORE = 0.45;
     static final int MIN_MATCHES = 3;
     static final long MAX_DEVIATION_MS = 700;
     static final int MIN_LINE_CHARS = 4;
     static final long EDGE_MARGIN_MS = 1500;
-    static final int MAX_LINES = 10;
+    static final long OFFSET_SLACK_MS = 30_000;
+    static final int MAX_LINES = 12;
 
     private LyricsAligner() {
     }
@@ -41,14 +42,14 @@ public final class LyricsAligner {
         String text = transcript.toString();
 
         List<Long> offsets = new ArrayList<>();
-        int eligible = 0;
+        List<Long> eligibleTimes = new ArrayList<>();
         int lastToken = -1;
-        for (int i = 0; i < lines.size() && eligible < MAX_LINES; i++) {
+        for (int i = 0; i < lines.size() && eligibleTimes.size() < MAX_LINES; i++) {
             LyricLine line = lines.get(i);
-            if (line.timeMs() > capturedMs - EDGE_MARGIN_MS) break;
+            if (line.timeMs() > capturedMs + OFFSET_SLACK_MS) break;
             String target = normalize(line.text());
             if (target.length() < MIN_LINE_CHARS) continue;
-            eligible++;
+            eligibleTimes.add(line.timeMs());
             double bestScore = 0;
             int bestToken = -1;
             for (int token = lastToken + 1; token < tokenIndex.size(); token++) {
@@ -65,8 +66,7 @@ public final class LyricsAligner {
             lastToken = bestToken;
             offsets.add(line.timeMs() - tokenStarts.get(bestToken));
         }
-        int required = Math.max(2, Math.min(MIN_MATCHES, eligible));
-        if (offsets.size() < required) return Optional.empty();
+        if (offsets.size() < 2) return Optional.empty();
 
         offsets.sort(Long::compare);
         long median = median(offsets);
@@ -74,6 +74,12 @@ public final class LyricsAligner {
         for (long offset : offsets) {
             if (Math.abs(offset - median) <= MAX_DEVIATION_MS) agreeing.add(offset);
         }
+        int expectedInCapture = 0;
+        for (long time : eligibleTimes) {
+            long expectedAt = time - median;
+            if (expectedAt >= 0 && expectedAt <= capturedMs - EDGE_MARGIN_MS) expectedInCapture++;
+        }
+        int required = Math.max(2, Math.min(MIN_MATCHES, expectedInCapture));
         if (agreeing.size() < required) return Optional.empty();
         long refined = median(agreeing);
         long spread = agreeing.get(agreeing.size() - 1) - agreeing.get(0);
