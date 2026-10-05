@@ -49,10 +49,13 @@ public final class LyricsAutoSync {
         }
         CompletableFuture<Optional<LyricsAligner.Alignment>> job = schedule(client, track, lyrics);
         if (job == null) return;
-        job.thenAccept(result -> result.ifPresent(alignment -> {
+        session.setAutoPending(true);
+        job.whenComplete((result, error) -> {
+            session.setAutoPending(false);
+            if (result == null || result.isEmpty()) return;
             LyricsSession current = client.getLyricsSession();
-            if (current != null && current.isForTrack(track)) current.setAutoOffsetMs(alignment.offsetMs());
-        }));
+            if (current != null && current.isForTrack(track)) current.setAutoOffsetMs(result.get().offsetMs());
+        });
     }
 
     public static void preload(MusicPlayerClient client, AudioTrack track, Lyrics lyrics) {

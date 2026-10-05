@@ -19,7 +19,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -37,7 +36,7 @@ public class LyricsSession {
     private static final long CLOCK_EDIT_INTERVAL_MS = 800;
     private static final long POST_EDIT_GAP_MS = 500;
     public static final long DEFAULT_OFFSET_MS = 0;
-    static final long AUTO_NOTE_MIN_MS = 100;
+    public static final String AUTO_PENDING_NOTE = "AI 보정 중";
     public static final String TRANSLATING_NOTE = "번역 중...";
     private static final String BLANK = "​";
     private static final String WIDTH_FILLER = "⠀".repeat(120);
@@ -58,6 +57,7 @@ public class LyricsSession {
     private final long leadMs;
     private volatile long offsetMs;
     private volatile long autoOffsetMs;
+    private volatile boolean autoPending;
     private volatile boolean translating;
     private volatile TranslationJobs.Job job;
     private ScheduledFuture<?> ticker;
@@ -107,11 +107,13 @@ public class LyricsSession {
         return autoOffsetMs;
     }
 
+    public void setAutoPending(boolean pending) {
+        this.autoPending = pending;
+    }
+
     @Nullable
     private String autoNote() {
-        long offset = autoOffsetMs;
-        if (Math.abs(offset) < AUTO_NOTE_MIN_MS) return null;
-        return String.format(Locale.ROOT, "자동 보정 %+.1f초", offset / 1000.0);
+        return autoPending ? AUTO_PENDING_NOTE : null;
     }
 
     public void setOffsetMs(long offsetMs) {
@@ -347,7 +349,7 @@ public class LyricsSession {
         if (footer != null) text.append("\n-# ").append(footer);
         else if (client != null) {
             text.append("\n-# ").append(playbackClock(client, track));
-            if (autoNote != null) text.append(" · ").append(autoNote);
+            if (autoNote != null) text.append("\n-# ").append(autoNote);
         }
         if ((translation != null && !translation.isBlank()) || pendingTranslation) {
             String note = LyricsPresenter.translationStatus(client, translator);
