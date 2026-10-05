@@ -271,10 +271,16 @@ public class LyricsSession {
                         if (TrackCard.isGone(error)) {
                             LOGGER.info("lyrics message for {} was deleted, stopping until the next track", track.getInfo().title);
                             halt();
-                        } else if (EditRateLimiter.isHeldBack(error)) {
+                            return;
+                        }
+                        if (EditRateLimiter.isHeldBack(error)) {
                             EditRateLimiter.reportHeldBack(channelId, error.getClass().getSimpleName());
                         } else {
                             LOGGER.debug("lyrics edit failed", error);
+                        }
+                        if (!clockOnly) {
+                            shownIndex = -2;
+                            shownClock = "";
                         }
                     });
         } catch (RuntimeException e) {

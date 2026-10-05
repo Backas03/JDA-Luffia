@@ -58,22 +58,50 @@ class ArtworkColorsTest {
         assertTrue(edge.getRed() < centre.getRed(), edge + " vs " + centre);
     }
 
-    @Test
-    void letterboxedYoutubeThumbnailsAreDetectedAndCroppedToTheCover() {
-        BufferedImage padded = image(960, 540, new Color(60, 20, 20));
-        java.util.Random random = new java.util.Random(7);
-        for (int y = 0; y < 540; y++) {
-            for (int x = 210; x < 750; x++) padded.setRGB(x, y, new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256)).getRGB());
+    private static void noise(BufferedImage image, int x0, int y0, int x1, int y1, long seed) {
+        java.util.Random random = new java.util.Random(seed);
+        for (int y = y0; y < y1; y++) {
+            for (int x = x0; x < x1; x++) image.setRGB(x, y, new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256)).getRGB());
         }
-        assertTrue(ArtworkColors.hasFlatSides(padded));
-        BufferedImage cropped = ArtworkColors.cropCenterSquare(padded);
-        assertEquals(540, cropped.getWidth());
-        assertEquals(540, cropped.getHeight());
+    }
+
+    @Test
+    void flatBandsOnAnySideAreCroppedAway() {
+        BufferedImage pillarboxed = image(960, 540, new Color(60, 20, 20));
+        noise(pillarboxed, 210, 0, 750, 540, 7);
+        BufferedImage cover = ArtworkColors.cropFlatBands(pillarboxed);
+        assertEquals(540, cover.getWidth());
+        assertEquals(540, cover.getHeight());
+
+        BufferedImage letterboxed = image(1280, 720, Color.BLACK);
+        noise(letterboxed, 0, 140, 1280, 580, 8);
+        BufferedImage wide = ArtworkColors.cropFlatBands(letterboxed);
+        assertEquals(1280, wide.getWidth());
+        assertEquals(440, wide.getHeight());
 
         BufferedImage photo = image(960, 540, Color.BLACK);
-        for (int y = 0; y < 540; y++) {
-            for (int x = 0; x < 960; x++) photo.setRGB(x, y, new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256)).getRGB());
-        }
-        assertFalse(ArtworkColors.hasFlatSides(photo));
+        noise(photo, 0, 0, 960, 540, 9);
+        assertTrue(ArtworkColors.cropFlatBands(photo) == photo);
+    }
+
+    @Test
+    void croppedWideArtworkIsScaledToFillTheBanner() throws Exception {
+        BufferedImage ultraWide = image(1200, 300, new Color(30, 160, 60));
+        BufferedImage decoded = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(ArtworkColors.coverBanner(ultraWide)));
+        assertEquals(ArtworkColors.BANNER_WIDTH, decoded.getWidth());
+        assertEquals(ArtworkColors.BANNER_HEIGHT, decoded.getHeight());
+        Color corner = new Color(decoded.getRGB(2, 2));
+        assertTrue(corner.getGreen() > 120, corner.toString());
+    }
+
+    @Test
+    void missingMaxResThumbnailsFallBackToSmallerYoutubeSizes() {
+        assertEquals(java.util.List.of(
+                        "https://i.ytimg.com/vi/abc/maxresdefault.jpg",
+                        "https://i.ytimg.com/vi/abc/sddefault.jpg",
+                        "https://i.ytimg.com/vi/abc/hqdefault.jpg"),
+                ArtworkColors.candidates("https://i.ytimg.com/vi/abc/maxresdefault.jpg"));
+        assertEquals(java.util.List.of("https://x/cover.png"), ArtworkColors.candidates("https://x/cover.png"));
+        assertFalse(ArtworkColors.candidates("https://x/cover.png").isEmpty());
     }
 }
