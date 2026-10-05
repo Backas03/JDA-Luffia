@@ -75,6 +75,13 @@ public class MusicPlayerController extends ListenerAdapter {
     private final AiRemovalConfirmations aiRemovalConfirmations = new AiRemovalConfirmations();
     private final LyricsExpansions lyricsExpansions = new LyricsExpansions();
     private final LyricsConversions lyricsConversions = new LyricsConversions();
+    private final ScheduledExecutorService lyricsScheduler;
+    private final java.util.concurrent.atomic.AtomicReference<Thread> schedulerThread = new java.util.concurrent.atomic.AtomicReference<>();
+    private volatile long schedulerHeartbeat = System.currentTimeMillis();
+    private static final int LYRICS_SCHEDULER_THREADS = 2;
+    private static final long WATCHDOG_INTERVAL_MS = 2_000;
+    private static final long WATCHDOG_STALL_MS = 5_000;
+    private static final long WATCHDOG_REPORT_GAP_MS = 30_000;
 
     public MusicPlayerController(MusicSourceRegistry sourceRegistry, String translatorUrl, @Nullable String whisperUrl) {
         this.sourceRegistry = sourceRegistry;
@@ -88,8 +95,15 @@ public class MusicPlayerController extends ListenerAdapter {
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread thread = new Thread(r, "music-scheduler");
             thread.setDaemon(true);
+            schedulerThread.set(thread);
             return thread;
         });
+        this.lyricsScheduler = Executors.newScheduledThreadPool(LYRICS_SCHEDULER_THREADS, r -> {
+            Thread thread = new Thread(r, "lyrics-scheduler");
+            thread.setDaemon(true);
+            return thread;
+        });
+        startSchedulerWatchdog();
         this.translationClient.startEndpointMonitor(this.scheduler);
         this.translationClient.startFallbackManager(this.scheduler);
         this.aiTrackTagger = new AiTrackTagger(this.translationClient);
@@ -130,6 +144,35 @@ public class MusicPlayerController extends ListenerAdapter {
 
     public ScheduledExecutorService getScheduler() {
         return scheduler;
+    }
+
+    public ScheduledExecutorService getLyricsScheduler() {
+        return lyricsScheduler;
+    }
+
+    private void startSchedulerWatchdog() {
+        scheduler.scheduleAtFixedRate(() -> schedulerHeartbeat = System.currentTimeMillis(), 1, 1, TimeUnit.SECONDS);
+        Thread watchdog = new Thread(() -> {
+            long lastReport = 0;
+            while (true) {
+                try {
+                    Thread.sleep(WATCHDOG_INTERVAL_MS);
+                } catch (InterruptedException e) {
+                    return;
+                }
+                long stale = System.currentTimeMillis() - schedulerHeartbeat;
+                if (stale < WATCHDOG_STALL_MS || System.currentTimeMillis() - lastReport < WATCHDOG_REPORT_GAP_MS) continue;
+                lastReport = System.currentTimeMillis();
+                Thread blocked = schedulerThread.get();
+                StringBuilder trace = new StringBuilder();
+                if (blocked != null) {
+                    for (StackTraceElement element : blocked.getStackTrace()) trace.append("\n    at ").append(element);
+                }
+                LOGGER.warn("music scheduler has not ticked for {}ms; it is busy here:{}", stale, trace);
+            }
+        }, "music-scheduler-watchdog");
+        watchdog.setDaemon(true);
+        watchdog.start();
     }
 
     public LrcLibClient getLyricsClient() {
@@ -362,6 +405,7 @@ public class MusicPlayerController extends ListenerAdapter {
             LOGGER.warn("some owned bots did not stop within the shutdown timeout");
         }
         scheduler.shutdownNow();
+        lyricsScheduler.shutdownNow();
         sourceRegistry.shutdown();
     }
 }
