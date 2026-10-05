@@ -26,7 +26,9 @@ public final class ScratchCapture {
     private static final Logger LOGGER = LoggerFactory.getLogger(ScratchCapture.class);
     private static final Semaphore PERMITS = new Semaphore(2);
     private static final long POLL_MS = 500;
-    private static final long DEADLINE_MS = 90_000;
+    private static final long MIN_DEADLINE_MS = 90_000;
+    private static final long DEADLINE_BASE_MS = 30_000;
+    private static final double DEADLINE_PER_SECOND_MS = 1_500;
 
     private ScratchCapture() {
     }
@@ -49,7 +51,7 @@ public final class ScratchCapture {
                 });
                 AudioTrack clone = track.makeClone();
                 if (!player.startTrack(clone, false)) return null;
-                long deadline = System.currentTimeMillis() + DEADLINE_MS;
+                long deadline = System.currentTimeMillis() + Math.max(MIN_DEADLINE_MS, DEADLINE_BASE_MS + (long) (seconds * DEADLINE_PER_SECOND_MS));
                 while (System.currentTimeMillis() < deadline) {
                     PcmCapture capture = holder.get();
                     if (capture != null && capture.wav().isDone()) break;

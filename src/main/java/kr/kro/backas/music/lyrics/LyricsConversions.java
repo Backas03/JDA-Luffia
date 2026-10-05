@@ -26,6 +26,8 @@ public class LyricsConversions extends ListenerAdapter {
     public interface Convertible {
         boolean isConverting();
 
+        boolean isSuperseded();
+
         void requestConversion();
 
         Container render();
@@ -97,6 +99,10 @@ public class LyricsConversions extends ListenerAdapter {
         }
         Convertible view = entry.view();
         if (!view.isConverting()) view.requestConversion();
+        if (view.isSuperseded()) {
+            event.deferEdit().queue(null, e -> LOGGER.debug("failed to acknowledge a finished conversion", e));
+            return;
+        }
         event.editComponents(view.render()).useComponentsV2(true)
                 .queue(null, e -> LOGGER.debug("failed to show conversion progress", e));
     }

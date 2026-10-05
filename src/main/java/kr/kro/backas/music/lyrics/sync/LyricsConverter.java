@@ -65,6 +65,7 @@ public final class LyricsConverter {
         long started = System.currentTimeMillis();
         CompletableFuture<Optional<Lyrics>> job = ScratchCapture.capture(client.getAudioPlayerManager(), track, seconds)
                 .thenApplyAsync(captured -> {
+                    long decodedAt = System.currentTimeMillis();
                     if (captured == null) {
                         LOGGER.info("not enough audio captured to timestamp lyrics for {}", title);
                         return Optional.<Lyrics>empty();
@@ -76,14 +77,16 @@ public final class LyricsConverter {
                         throw new UncheckedIOException(e);
                     }
                     Optional<LyricsTimestamper.Result> result = LyricsTimestamper.timestamp(lines, words, captured.capturedMs());
-                    long elapsed = System.currentTimeMillis() - started;
+                    long now = System.currentTimeMillis();
+                    String timing = "decode " + (decodedAt - started) + "ms, whisper " + (now - decodedAt) + "ms, "
+                            + captured.capturedMs() / 1000 + "s of " + seconds + "s audio";
                     if (result.isEmpty()) {
-                        LOGGER.info("could not timestamp lyrics for {} ({} words, {} lines, {}ms)", title, words.size(), lines.size(), elapsed);
+                        LOGGER.info("could not timestamp lyrics for {} ({} words, {} lines; {})", title, words.size(), lines.size(), timing);
                         return Optional.<Lyrics>empty();
                     }
                     AiLyricsStore.defaultStore().put(identifier, result.get());
-                    LOGGER.info("timestamped lyrics for {}: {} of {} lines matched ({}s audio, {}ms)",
-                            title, result.get().matched(), result.get().total(), captured.capturedMs() / 1000, elapsed);
+                    LOGGER.info("timestamped lyrics for {}: {} of {} lines matched ({})",
+                            title, result.get().matched(), result.get().total(), timing);
                     return Optional.of(lyrics.withAiTimestamps(result.get().lines()));
                 }, TranslationJobs.EXECUTOR);
         job.whenComplete((result, error) -> {
