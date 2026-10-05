@@ -8,7 +8,7 @@ public final class EditLatency {
     public static final long INITIAL_LEAD_MS = 600;
     public static final long MIN_LEAD_MS = 300;
     public static final long MAX_LEAD_MS = 1500;
-    public static final long RENDER_MARGIN_MS = 250;
+    public static final long RENDER_MARGIN_MS = 450;
     static final long MAX_SAMPLE_MS = 5000;
     static final double ALPHA = 0.3;
     private static final int MAX_CHANNELS = 2000;
