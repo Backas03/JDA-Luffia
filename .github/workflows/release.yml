@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  attach-jar:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Check tag
+        id: check
+        run: |
+          if [ ! -f src/main/java/kr/kro/backas/config/Config.java ]; then
+            echo "::notice title=jar 첨부 건너뜀::${TAG} 은 config.yaml 도입 전 버전이라 비밀 파일 없이 빌드할 수 없습니다. 노트만 유지합니다."
+            echo "buildable=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' build.gradle.kts)
+          if [ -z "$version" ] || [ "v${version}" != "${TAG}" ]; then
+            echo "::error title=버전 불일치::태그 ${TAG} 와 build.gradle.kts 의 version '${version}' 이 다릅니다."
+            exit 1
+          fi
+          echo "buildable=true" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - if: steps.check.outputs.buildable == 'true'
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - if: steps.check.outputs.buildable == 'true'
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Test and build fat jar
+        if: steps.check.outputs.buildable == 'true'
+        run: ./gradlew test fatJar --no-daemon
+
+      - name: Attach jar to release
+        if: steps.check.outputs.buildable == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          cp build/libs/JDA-Luffia-1.0.0-SNAPSHOT-all.jar "luffia-${VERSION}.jar"
+          gh release upload "$TAG" "luffia-${VERSION}.jar" --clobber
