@@ -1,7 +1,7 @@
 package kr.kro.backas.music;
 
+import kr.kro.backas.config.Config;
 import club.minnced.discord.jdave.interop.JDaveSessionFactory;
-import kr.kro.backas.SharedConstant;
 import kr.kro.backas.music.ai.AiGuard;
 import kr.kro.backas.music.ai.AiRemovalConfirmations;
 import kr.kro.backas.music.ai.AiSongResolver;
@@ -78,10 +78,10 @@ public class MusicPlayerController extends ListenerAdapter {
     private final ScheduledExecutorService lyricsScheduler;
     private final java.util.concurrent.atomic.AtomicReference<Thread> schedulerThread = new java.util.concurrent.atomic.AtomicReference<>();
     private volatile long schedulerHeartbeat = System.currentTimeMillis();
-    private static final int LYRICS_SCHEDULER_THREADS = 2;
+    private static final int LYRICS_SCHEDULER_THREADS = Math.max(1, Config.get().scheduler().lyricsThreads());
     private static final long WATCHDOG_INTERVAL_MS = 2_000;
-    private static final long WATCHDOG_STALL_MS = 5_000;
-    private static final long WATCHDOG_REPORT_GAP_MS = 30_000;
+    private static final long WATCHDOG_STALL_MS = Config.get().scheduler().watchdog().stallMs();
+    private static final long WATCHDOG_REPORT_GAP_MS = Config.get().scheduler().watchdog().reportGapMs();
 
     public MusicPlayerController(MusicSourceRegistry sourceRegistry, String translatorUrl, @Nullable String whisperUrl) {
         this.sourceRegistry = sourceRegistry;
@@ -90,7 +90,7 @@ public class MusicPlayerController extends ListenerAdapter {
         if (whisperClient.isConfigured()) {
             LOGGER.info("가사 자동 보정용 whisper 서버 {}개 등록", whisperClient.endpoints().size());
         } else {
-            LOGGER.info("BotSecret.WHISPER_URL 이 비어 있어 가사 자동 보정을 비활성화합니다.");
+            LOGGER.info("config.yaml 의 whisper.endpoints 가 비어 있어 가사 자동 보정을 비활성화합니다.");
         }
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread thread = new Thread(r, "music-scheduler");
@@ -365,7 +365,7 @@ public class MusicPlayerController extends ListenerAdapter {
             if (state != null && state.getChannel() != null) playing.add(state.getChannel());
         }
         String activity = switch (playing.size()) {
-            case 0 -> SharedConstant.DEFAULT_ACTIVITY;
+            case 0 -> Config.get().bot().activity();
             case 1 -> playing.get(0).getName() + "에서 플레이";
             default -> playing.size() + "개 서버에서 플레이";
         };

@@ -1,9 +1,11 @@
 package kr.kro.backas;
 
+import kr.kro.backas.config.Config;
 import club.minnced.discord.jdave.interop.JDaveSessionFactory;
 import com.merakianalytics.orianna.Orianna;
 import com.merakianalytics.orianna.types.common.Platform;
-import kr.kro.backas.secret.BotSecret;
+import kr.kro.backas.config.LuffiaConfig;
+import java.nio.file.Path;
 import kr.kro.backas.util.BotShutdown;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -28,14 +30,23 @@ public class Main {
         return luffia;
     }
 
-    static final long SHUTDOWN_HALT_AFTER_MS = 10_000;
-
     public static void main(String[] args) {
+        Path configPath = Config.externalPath();
+        if (Config.writeDefaultsIfMissing(configPath)) {
+            System.out.println("기본 설정 파일을 만들었습니다: " + configPath.toAbsolutePath() + " (토큰과 서버 주소를 채운 뒤 다시 실행하세요)");
+        }
+        LuffiaConfig config = Config.load(configPath);
+        List<String> missing = Config.missingRequired(config);
+        if (!missing.isEmpty()) {
+            System.err.println("설정이 비어 있어 시작할 수 없습니다: " + String.join(", ", missing) + " (" + configPath.toAbsolutePath() + ")");
+            System.exit(2);
+            return;
+        }
         Runtime.getRuntime().addShutdownHook(new Thread(Main::stop, "luffia-shutdown"));
         MessageRequest.setDefaultMentions(EnumSet.noneOf(Message.MentionType.class));
         MessageRequest.setDefaultMentionRepliedUser(false);
         JDABuilder builder = JDABuilder
-                .createDefault(SharedConstant.ON_DEV ? BotSecret.DEV_TOKEN : BotSecret.TOKEN)
+                .createDefault(config.discord().activeToken(config.bot().dev()))
                 .setChunkingFilter(ChunkingFilter.ALL) // enable member chunking for all guilds
                 .setMemberCachePolicy(MemberCachePolicy.ALL)
                 .enableIntents(GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MEMBERS)
@@ -43,7 +54,7 @@ public class Main {
                 .setAudioModuleConfig(new AudioModuleConfig().withDaveSessionFactory(new JDaveSessionFactory()));
 
         try {
-            Orianna.setRiotAPIKey(BotSecret.RIOT_API_KEY);
+            Orianna.setRiotAPIKey(config.riot().apiKey());
             Orianna.setDefaultPlatform(Platform.KOREA);
 
             JDA jda = builder.build().awaitReady();
@@ -73,7 +84,7 @@ public class Main {
     private static void startHaltWatchdog() {
         Thread watchdog = new Thread(() -> {
             try {
-                Thread.sleep(SHUTDOWN_HALT_AFTER_MS);
+                Thread.sleep(Config.get().bot().shutdown().haltAfterSeconds() * 1000L);
             } catch (InterruptedException e) {
                 return;
             }

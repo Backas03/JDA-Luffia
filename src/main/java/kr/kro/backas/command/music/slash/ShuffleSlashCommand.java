@@ -1,7 +1,7 @@
 package kr.kro.backas.command.music.slash;
 
+import kr.kro.backas.BuildInfo;
 import kr.kro.backas.Main;
-import kr.kro.backas.SharedConstant;
 import kr.kro.backas.command.api.SlashCommandSource;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
@@ -53,7 +53,7 @@ public class ShuffleSlashCommand implements SlashCommandSource {
                 .setDescription(shuffled + "곡의 순서를 무작위로 바꿨습니다.\n\n**다음 곡**\n"
                         + MusicEmbeds.queuePreview(client.getTrackQueue(), MAX_PREVIEW_ROWS))
                 .addField("노래 봇", MusicEmbeds.botName(client.getGuild()), false)
-                .setFooter(SharedConstant.RELEASE_VERSION)
+                .setFooter(BuildInfo.VERSION)
                 .build()).queue();
     }
 

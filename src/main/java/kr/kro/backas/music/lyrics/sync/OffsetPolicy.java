@@ -1,11 +1,12 @@
 package kr.kro.backas.music.lyrics.sync;
 
+import kr.kro.backas.config.Config;
 import org.jetbrains.annotations.Nullable;
 
 public final class OffsetPolicy {
 
-    public static final long TRUST_LYRICS_WITHIN_FINE_MS = 200;
-    public static final long TRUST_LYRICS_WITHIN_COARSE_MS = 800;
+    public static final long TRUST_LYRICS_WITHIN_FINE_MS = Config.get().whisper().autoSync().trustLyricsWithinFineMs();
+    public static final long TRUST_LYRICS_WITHIN_COARSE_MS = Config.get().whisper().autoSync().trustLyricsWithinCoarseMs();
 
     private OffsetPolicy() {
     }

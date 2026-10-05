@@ -1,5 +1,6 @@
 package kr.kro.backas.music.cache;
 
+import kr.kro.backas.config.Config;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jetbrains.annotations.Nullable;
@@ -16,7 +17,7 @@ public final class DiskCache {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DiskCache.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final DiskCache DEFAULT = new DiskCache(Path.of(System.getProperty("luffia.cache.dir", "cache")));
+    private static final DiskCache DEFAULT = new DiskCache(Path.of(System.getProperty("luffia.cache.dir", Config.get().cache().dir())));
 
     private final Path root;
 

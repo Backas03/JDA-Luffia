@@ -1,7 +1,7 @@
 package kr.kro.backas.command.api;
 
+import kr.kro.backas.config.Config;
 import kr.kro.backas.Main;
-import kr.kro.backas.SharedConstant;
 import kr.kro.backas.util.StackTraceUtil;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Role;
@@ -19,7 +19,7 @@ public class CommandListener extends ListenerAdapter {
 
     @Override
     public void onSlashCommandInteraction(@NotNull SlashCommandInteractionEvent event) {
-        if (event.getGuild() == null || !SharedConstant.isServiceGuild(event.getGuild().getIdLong())) {
+        if (event.getGuild() == null || !Config.get().isServiceGuild(event.getGuild().getIdLong())) {
             event.reply("이 서버에서는 명령어를 사용할 수 없습니다.")
                     .setEphemeral(true)
                     .queue();
@@ -34,7 +34,7 @@ public class CommandListener extends ListenerAdapter {
 
     @Override
     public void onCommandAutoCompleteInteraction(@NotNull CommandAutoCompleteInteractionEvent event) {
-        if (event.getGuild() == null || !SharedConstant.isServiceGuild(event.getGuild().getIdLong())) {
+        if (event.getGuild() == null || !Config.get().isServiceGuild(event.getGuild().getIdLong())) {
             event.replyChoices().queue();
             return;
         }
@@ -50,7 +50,7 @@ public class CommandListener extends ListenerAdapter {
         if (event.getAuthor().isBot()) {
             return;
         }
-        if (!event.isFromGuild() || !SharedConstant.isServiceGuild(event.getGuild().getIdLong())) {
+        if (!event.isFromGuild() || !Config.get().isServiceGuild(event.getGuild().getIdLong())) {
             return;
         }
         String content = event.getMessage().getContentRaw();

@@ -1,9 +1,9 @@
 package kr.kro.backas.command.music.slash;
 
+import kr.kro.backas.BuildInfo;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import kr.kro.backas.Main;
-import kr.kro.backas.SharedConstant;
 import kr.kro.backas.command.api.SlashCommandSource;
 import kr.kro.backas.music.ArtworkColors;
 import kr.kro.backas.music.MusicEmbeds;
@@ -137,7 +137,7 @@ public class QueueSlashCommand implements SlashCommandSource {
             addList(children, "다음 추천", "대기열이 비면 이어서 재생합니다", autoQueue, MAX_AUTO_ROWS);
         }
         children.add(Separator.createDivider(Separator.Spacing.SMALL));
-        children.add(TextDisplay.of("-# " + MusicEmbeds.botName(client.getGuild()) + " · " + SharedConstant.RELEASE_VERSION));
+        children.add(TextDisplay.of("-# " + MusicEmbeds.botName(client.getGuild()) + " · " + BuildInfo.VERSION));
         return Container.of(children).withAccentColor(ArtworkColors.of(artwork));
     }
 
@@ -249,7 +249,7 @@ public class QueueSlashCommand implements SlashCommandSource {
                 .setThumbnail(MusicEmbeds.thumbnailOf(currentPlaying))
                 .setFooter(currentMusicSelection != null
                         ? MemberUtil.getName(currentMusicSelection.getRequestedMember())
-                        : SharedConstant.RELEASE_VERSION)
+                        : BuildInfo.VERSION)
                 .addField(
                         "재생 시간",
                         DurationUtil.formatDurationColon((int) (client.getRealPositionMs() / 1000))

@@ -1,7 +1,7 @@
 package kr.kro.backas.command.music.slash;
 
+import kr.kro.backas.BuildInfo;
 import kr.kro.backas.Main;
-import kr.kro.backas.SharedConstant;
 import kr.kro.backas.command.api.SlashCommandSource;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
@@ -80,7 +80,7 @@ public class KaraokeModeSlashCommand implements SlashCommandSource {
                 .setTitle("노래방 모드를 변경했습니다")
                 .addField("노래방 모드", before.getName() + " -> " + after.getName(), false)
                 .addField("노래 봇", MusicEmbeds.botName(client.getGuild()), false)
-                .setFooter(SharedConstant.RELEASE_VERSION)
+                .setFooter(BuildInfo.VERSION)
                 .build()
         ).queue();
     }

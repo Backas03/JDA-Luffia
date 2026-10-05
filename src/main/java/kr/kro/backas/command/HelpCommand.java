@@ -1,7 +1,8 @@
 package kr.kro.backas.command;
 
+import kr.kro.backas.BuildInfo;
+import kr.kro.backas.config.Config;
 import kr.kro.backas.Main;
-import kr.kro.backas.SharedConstant;
 import kr.kro.backas.command.api.CommandManager;
 import kr.kro.backas.command.api.CommandSource;
 import kr.kro.backas.command.api.SlashCommandSource;
@@ -86,11 +87,11 @@ public class HelpCommand implements CommandSource {
          */
         builder.setAuthor(
                 "Luffia Github (click)" +
-                "\n" + SharedConstant.LICENSE,
-                SharedConstant.GITHUB
+                "\n" + Config.get().bot().license(),
+                Config.get().bot().github()
         );
 
-        builder.setFooter(SharedConstant.RELEASE_VERSION);
+        builder.setFooter(BuildInfo.VERSION);
         event.getMessage().replyEmbeds(builder.build()).queue();
     }
 
