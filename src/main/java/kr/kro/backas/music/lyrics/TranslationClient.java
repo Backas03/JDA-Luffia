@@ -51,7 +51,7 @@ public class TranslationClient {
     private static final int TRANSLATION_GROWTH_SLACK = 30;
     private static final int ALIGN_WINDOW = 3;
     private static final int TOKENS_PER_LINE = 25;
-    private static final int TRANSLATION_VERSION = 3;
+    private static final int TRANSLATION_VERSION = 2;
     private static final long ENDPOINT_RECHECK_SECONDS = 30;
     private static final String SPEEDS_PATH = "llm/speeds.json";
     private static final java.util.regex.Pattern MARKUP_TAG = java.util.regex.Pattern.compile("</?[A-Za-z][A-Za-z0-9-]*(\\s[^<>]*)?/?>");
@@ -78,14 +78,9 @@ public class TranslationClient {
             "- Keep proper nouns and names. Keep tone: casual speech stays casual, no polite -습니다 unless the source is polite.",
             "- If a line is already Korean, empty, or has no words, copy it unchanged.",
             "- Never leave Japanese kana, kanji, or Chinese characters in the output; translate them.",
-            "- Never add explanations or notes, and never use romanization anywhere.",
-            "- r = the pronunciation of the WHOLE line from its first word to its last word, written only in Hangul with a space between words,"
-                    + " for lines whose script is not Korean or Latin (青い空の下で自転車を漕いだ -> 아오이 소라노 시타데 지텐샤오 코이다, 你好 -> 니하오)."
-                    + " Never shorten it to the first word. Keep long vowels and doubled consonants (ずっと -> 즛토, 東京 -> 토-쿄-)."
-                    + " For Korean or English lines r is an empty string.",
-            "Output JSON only: {\"t\": [{\"n\": 1, \"s\": \"夜明け\", \"r\": \"요아케노 소라오 미테이타\", \"k\": \"translation of line 1\"}, {\"n\": 2, \"s\": \"君の声\", \"r\": \"키미노 코에가 키코에루\", \"k\": \"translation of line 2\"}, ...]}",
-            "with exactly one object per input line, n = the input line number, s = the first three characters of that input line copied exactly,"
-                    + " r = the Hangul pronunciation of that line (or empty), k = the Korean translation of that line only.",
+            "- Never add explanations, notes, or romanization.",
+            "Output JSON only: {\"t\": [{\"n\": 1, \"s\": \"夜明け\", \"k\": \"translation of line 1\"}, {\"n\": 2, \"s\": \"君の声\", \"k\": \"translation of line 2\"}, ...]}",
+            "with exactly one object per input line, n = the input line number, s = the first three characters of that input line copied exactly, k = the Korean translation of that line only.",
             "Never merge or split lines, even when a sentence continues on the next line: every numbered line gets its own translation.",
             PromptSafe.DATA_RULE);
     private static final String RETRY_INSTRUCTION = "These lines were not translated into Korean before."
@@ -626,11 +621,10 @@ public class TranslationClient {
         prefix.put("type", "string");
         prefix.put("minLength", 1);
         prefix.put("maxLength", 12);
-        itemProperties.putObject("r").put("type", "string");
         itemProperties.putObject("k").put("type", "string");
-        item.putArray("required").add("n").add("s").add("r").add("k");
+        item.putArray("required").add("n").add("s").add("k");
         schema.putArray("required").add("t");
-        ObjectNode body = chatRequest(lease, LLM_SYSTEM_PROMPT, user.toString(), retry ? RETRY_TEMPERATURE : 0.2, 140 * lines.size() + 64,
+        ObjectNode body = chatRequest(lease, LLM_SYSTEM_PROMPT, user.toString(), retry ? RETRY_TEMPERATURE : 0.2, 68 * lines.size() + 64,
                 "lyrics_translation", schema);
         body.put("stream", stream);
         if (stream) body.putObject("stream_options").put("include_usage", true);
@@ -814,9 +808,7 @@ public class TranslationClient {
                 continue;
             }
             if (line != n) LOGGER.info("translator line {} realigned to line {} by its source prefix", n, line);
-            String source = lines.get(line - 1);
-            String translation = LyricsRepetition.match(source, cleanTranslation(entry.path("k").asText("")));
-            byNumber.put(line, TranslationText.combine(readingFor(source, entry.path("r").asText("")), translation));
+            byNumber.put(line, LyricsRepetition.match(lines.get(line - 1), cleanTranslation(entry.path("k").asText(""))));
             filled.add(line);
         }
         return filled;
@@ -836,13 +828,6 @@ public class TranslationClient {
         return -1;
     }
 
-    static String readingFor(@Nullable String source, @Nullable String reading) {
-        if (source == null || reading == null || reading.isBlank()) return "";
-        String language = LyricsLanguage.detect(List.of(new LyricLine(0, source)));
-        if (LyricsLanguage.KOREAN.equals(language) || LyricsLanguage.ENGLISH.equals(language)) return "";
-        return cleanTranslation(reading);
-    }
-
     static String cleanTranslation(@Nullable String text) {
         if (text == null) return "";
         return MARKUP_TAG.matcher(text).replaceAll("").replaceAll("\\s+", " ").strip();
@@ -855,7 +840,6 @@ public class TranslationClient {
     }
 
     static boolean isKeptOriginal(String source, @Nullable String translated) {
-        if (translated != null) translated = TranslationText.translation(translated);
         return translated != null && !translated.isBlank() && LyricsLanguage.isLatinOnly(source) && !containsHangul(translated);
     }
 
@@ -911,7 +895,6 @@ public class TranslationClient {
     }
 
     static boolean isAcceptable(String source, @Nullable String translated) {
-        if (translated != null) translated = TranslationText.translation(translated);
         if (translated == null || translated.isBlank()) return false;
         if (containsForeignScript(translated)) return false;
         if (DiscordSafe.hasLinkOrMention(translated) && !DiscordSafe.hasLinkOrMention(source)) return false;

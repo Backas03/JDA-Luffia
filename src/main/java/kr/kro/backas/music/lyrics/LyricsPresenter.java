@@ -816,8 +816,8 @@ public final class LyricsPresenter {
         StringBuilder text = new StringBuilder();
         for (int i = 0; i < lines.size(); i++) {
             String entry = DiscordSafe.text(lines.get(i), MAX_LINE_LENGTH);
-            String translation = translations == null ? "" : TranslationText.markdown(translations.get(i), MAX_LINE_LENGTH);
-            if (!translation.isBlank()) entry += "\n" + translation;
+            String translation = translations == null ? null : DiscordSafe.text(translations.get(i), MAX_LINE_LENGTH);
+            if (translation != null && !translation.isBlank()) entry += "\n-# " + translation;
             if (text.length() + entry.length() + 1 > limit) {
                 text.append(TRUNCATED_NOTE).append('\n');
                 break;
@@ -867,9 +867,9 @@ public final class LyricsPresenter {
         int used = 0;
         for (int i = 0; i < lines.size(); i++) {
             String entry = DiscordSafe.text(lines.get(i), MAX_LINE_LENGTH);
-            String translation = translations == null ? "" : TranslationText.markdown(translations.get(i), MAX_LINE_LENGTH);
-            if (!translation.isBlank()) {
-                entry += "\n" + translation;
+            String translation = translations == null ? null : DiscordSafe.text(translations.get(i), MAX_LINE_LENGTH);
+            if (translation != null && !translation.isBlank()) {
+                entry += "\n-# " + translation;
             }
             int needed = entry.length() + 1;
             if (used + needed + TRUNCATED_NOTE.length() > MESSAGE_TEXT_BUDGET) {
