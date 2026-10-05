@@ -46,3 +46,6 @@ bin/
 
 ### Data ###
 /data
+
+### Local docs ###
+/docs/
