@@ -16,6 +16,8 @@ class TranslationTextTest {
         assertEquals("아오이 소라", TranslationText.reading(value));
         assertEquals(List.of("*(아오이 소라)*", "푸른 하늘"), TranslationText.displayLines(value, 300));
         assertEquals("-# *(아오이 소라)*\n-# 푸른 하늘", TranslationText.markdown(value, 300));
+        assertEquals("아오이 소라\n-# 푸른 하늘", TranslationText.liveMarkdown(value, 300));
+        assertEquals("-# 푸른 하늘", TranslationText.liveMarkdown("푸른 하늘", 300));
     }
 
     @Test
