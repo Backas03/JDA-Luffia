@@ -1,5 +1,5 @@
 # JDA-Luffia
-해당 디스코드 봇을 사용하여 길드 내 여러 음성채팅방에서 노래 재생, 이메일 본인인증, 게임 전적 검색 기능을 서비스 할 수 있습니다
+해당 디스코드 봇을 사용하여 길드 내 여러 음성채팅방에서 노래 재생, 게임 전적 검색 기능을 서비스 할 수 있습니다
 
 ## Information
 ### 이 봇은 Discord bagkaseu(박카스#9970) 에 의해 제작되었습니다.
@@ -57,11 +57,6 @@
 
 /롤정보 <닉네임#태그>
   ㄴ 소환사의 롤 정보를 확인합니다.
-
-/인증 <이메일>
-  ㄴ 이메일로 본인인증을 위한 6자리 코드를 받습니다.
-/인증 <인증코드>
-  ㄴ 이메일로 받은 6자리 코드를 입력하여 이메일 인증을 완료합니다. 완료된 유저는 특정 역할이 부여됩니다. (*역할은 id로 설정가능)
 ```
 
 * 해당 봇의 오류나 건의, 문의사항이 있을시 제작자에게 문의 또는 [Issue](https://github.com/Backas03/JDA-Luffia/issues) 바랍니다.
@@ -72,12 +67,8 @@
     this.discordAPI = discordAPI;
   
     this.commandManager = new CommandManager("!", discordAPI);
-    this.commandManager.registerCommand("인증", new CertificationCommand());
-    this.commandManager.registerCommand("정보", new CertificationInfoCommand());
-    this.commandManager.registerCommand("인증해제", new CertificationRemoveCommand());
     this.commandManager.registerCommand("도움말", new HelpCommand());
-
-    this.certificationManager = new CertificationManager(discordAPI);
+    this.commandManager.registerCommand("메이플정보", new MapleUserInfoCommand());
   
     아래 4줄이 PR에서 추가된 부분 입니다
     /* [backas03] add command start */
@@ -129,18 +120,7 @@ whisper:
 - 개발 중에는 ```./gradlew run``` 으로 실행합니다. 필요한 JVM 옵션(--enable-native-access=ALL-UNNAMED)을 자동으로 넣습니다.
 - 서버에 배포할 때는 ```./gradlew fatJar``` 로 ```build/libs/JDA-Luffia-1.0.0-SNAPSHOT-all.jar``` 를 만들고, ``config.yaml`` 이 있는 폴더에서 ```java -Dfile.encoding=UTF-8 -jar JDA-Luffia-1.0.0-SNAPSHOT-all.jar``` 로 실행합니다.
 ## 기능 소개
-### 1. 이메일 본인인증 기능
- - 이메일로 인증 코드를 받아 본인 인증을 진행 할 수 있습니다
- - 해당 기능을 사용하여 인증 역할을 부여할 수 있습니다
-```
-/인증 [이메일]: - 해당 학교 이메일로 인증 코드를 전송받습니다
-
----- 관리자 명령어 ----
-!인증해제 [userId] - 해당 유저의 인증 데이터를 해제합니다.
-!인증정보 [userId] - 해당 유저의 인증 데이터를 확인합니다.
-!강제인증 [userId] [이메일] - 해당 유저를 관리자의 권한으로 강제 인증시킵니다.
-```
-### 2. 뮤직 플레이어 기능
+### 1. 뮤직 플레이어 기능
  - LavaPlayer(youtube-source, LavaSrc) 라이브러리를 사용하여 유튜브/스포티파이 링크 또는 검색어로 디스코드에서 음악을 재생할 수 있습니다 </br>
  - 스포티파이 곡/앨범/플레이리스트 링크는 곡 정보를 읽어 유튜브에서 같은 곡을 찾아 재생합니다 (미러링) </br>
  - 추가적으로 봇을 추가하여 하나의 디코방에서 여려 음성채팅방에서 음악을 재생할 수 있습니다 </br>
@@ -265,7 +245,7 @@ https://github.com/user-attachments/assets/7bd6bd92-021b-4578-8bd5-e2e310b9ec6b
 https://github.com/user-attachments/assets/5cb94339-9e2c-490b-86a9-42d63d0af4d4
 
 
-### 3. 게임 전적 검색 기능 </br>
+### 2. 게임 전적 검색 기능 </br>
 - !롤정보 [닉네임] 으로 정보를 검색할 수 있습니다 </br>
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/6d5395d0-db25-4b94-bb34-c98561824c17) </br>
 - !메이플정보 [닉네임] 으로 정보를 검색할 수 있습니다 (unstable ~~지원 중단~~) </br>
