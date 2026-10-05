@@ -186,6 +186,14 @@ public final class TrackCard {
         return false;
     }
 
+    public void note(String text) {
+        if (closed.get()) return;
+        edit(frame(List.of(TextDisplay.of("-# " + text))), System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS)
+                .whenComplete((result, error) -> {
+                    if (error != null) LOGGER.debug("failed to note on track card for {}", track.getInfo().title, error);
+                });
+    }
+
     public void refresh() {
         if (closed.get()) return;
         List<? extends ContainerChildComponent> body = lastBody;
