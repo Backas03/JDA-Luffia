@@ -26,7 +26,6 @@ public final class LyricsAligner {
     static final long LATIN_CHAR_MS = 110;
     static final long CJK_CHAR_MS = 320;
     static final long MIN_WORD_MS = 250;
-    static final long TRUST_LYRICS_WITHIN_MS = 800;
 
     private LyricsAligner() {
     }
@@ -87,8 +86,7 @@ public final class LyricsAligner {
         if (agreeing.size() < required) return Optional.empty();
         long refined = median(agreeing);
         long spread = agreeing.get(agreeing.size() - 1) - agreeing.get(0);
-        long applied = Math.abs(refined) < TRUST_LYRICS_WITHIN_MS ? 0 : Math.round(refined / 10.0) * 10;
-        return Optional.of(new Alignment(applied, agreeing.size(), spread));
+        return Optional.of(new Alignment(Math.round(refined / 10.0) * 10, agreeing.size(), spread));
     }
 
     static long onsetMs(WhisperClient.Word word) {

@@ -90,10 +90,14 @@ public final class LyricsAutoSync {
                     Optional<LyricsAligner.Alignment> result = LyricsAligner.align(words, lyrics.synced(), captured.capturedMs());
                     long elapsed = System.currentTimeMillis() - started;
                     if (result.isPresent()) {
-                        LyricsAligner.Alignment alignment = result.get();
-                        store.put(identifier, alignment.offsetMs(), LyricsOffsets.SOURCE_AUTO);
-                        LOGGER.info("aligned lyrics for {}: offset {}ms from {} lines (spread {}ms, {}s audio, {}ms)",
-                                title, alignment.offsetMs(), alignment.matchedLines(), alignment.spreadMs(),
+                        LyricsAligner.Alignment coarse = result.get();
+                        OnsetRefiner.Refinement fine = OnsetRefiner.refine(captured.wav(), lyrics.synced(), coarse.offsetMs()).orElse(null);
+                        long offset = OffsetPolicy.resolve(coarse.offsetMs(), fine);
+                        result = Optional.of(new LyricsAligner.Alignment(offset, coarse.matchedLines(), coarse.spreadMs()));
+                        store.put(identifier, offset, LyricsOffsets.SOURCE_AUTO);
+                        LOGGER.info("aligned lyrics for {}: offset {}ms (whisper {}ms from {} lines, spread {}ms; onsets {}; {}s audio, {}ms)",
+                                title, offset, coarse.offsetMs(), coarse.matchedLines(), coarse.spreadMs(),
+                                fine == null ? "no clear peak" : fine.offsetMs() + "ms z=" + String.format("%.1f", fine.confidence()),
                                 captured.capturedMs() / 1000, elapsed);
                     } else {
                         store.put(identifier, 0, LyricsOffsets.SOURCE_NONE);

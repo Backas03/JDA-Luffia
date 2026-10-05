@@ -40,12 +40,11 @@ class LyricsAlignerTest {
     }
 
     @Test
-    void keepsTheLyricsFileTimingWhenWhisperDisagreesByLessThanItsOwnErrorBand() {
+    void reportsSmallShiftsAsMeasuredAndLeavesTheTrustDecisionToThePolicy() {
         Optional<LyricsAligner.Alignment> result = LyricsAligner.align(sung(ENGLISH, 400), ENGLISH, 60_000);
         assertTrue(result.isPresent());
-        assertEquals(0, result.get().offsetMs());
+        assertEquals(-400, result.get().offsetMs());
         assertEquals(4, result.get().matchedLines());
-        assertEquals(-900, LyricsAligner.align(sung(ENGLISH, 900), ENGLISH, 60_000).get().offsetMs());
     }
 
     @Test
