@@ -48,6 +48,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 public final class LyricsPresenter {
@@ -277,6 +278,10 @@ public final class LyricsPresenter {
         long channelId();
 
         void dismissWhenTrackEnds(MusicPlayerClient client, AudioTrack track);
+
+        default boolean isLive() {
+            return true;
+        }
     }
 
     private static final class EmbedFullView implements FullView {
@@ -353,6 +358,11 @@ public final class LyricsPresenter {
         @Override
         public boolean isSuperseded() {
             return superseded;
+        }
+
+        @Override
+        public boolean isLive() {
+            return !superseded && !card.isClosed() && card.isPresentedBy(this);
         }
 
         private synchronized boolean switchToSynced(Lyrics timed, boolean partial) {
@@ -483,7 +493,7 @@ public final class LyricsPresenter {
             Map<Integer, String> cache = willTranslate ? translator.cacheFor(cacheKey) : null;
             AtomicReference<TranslationJobs.Job> jobRef = new AtomicReference<>();
             ProgressiveEditor editor = new ProgressiveEditor(view.channelId(),
-                    showClock ? CLOCK_INTERVAL_MS : ProgressiveEditor.MIN_INTERVAL_MS, () -> {
+                    showClock ? CLOCK_INTERVAL_MS : ProgressiveEditor.MIN_INTERVAL_MS, view::isLive, () -> {
                 String note = null;
                 if (willTranslate) {
                     TranslationJobs.Job current = jobRef.get();
@@ -496,7 +506,7 @@ public final class LyricsPresenter {
                         System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS);
             });
             if (showClock) {
-                startClock(client, track, editor, () -> {
+                startClock(client, track, view, editor, () -> {
                     if (willTranslate || dismissOnEnd) return;
                     view.show(track, lines, null, finalFooter, null, System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS)
                             .whenComplete((result, error) -> {
@@ -567,7 +577,7 @@ public final class LyricsPresenter {
         return LyricsSession.playbackClock(client, track) + "\n" + footer;
     }
 
-    private static void startClock(MusicPlayerClient client, AudioTrack track, ProgressiveEditor editor, Runnable onEnd) {
+    private static void startClock(MusicPlayerClient client, AudioTrack track, FullView view, ProgressiveEditor editor, Runnable onEnd) {
         ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getLyricsScheduler();
         AtomicReference<ScheduledFuture<?>> ticker = new AtomicReference<>();
         AtomicReference<String> shown = new AtomicReference<>(LyricsSession.playbackClock(client, track));
@@ -580,6 +590,13 @@ public final class LyricsPresenter {
                     if (self != null) self.cancel(false);
                     editor.cancel();
                     onEnd.run();
+                    return;
+                }
+                if (!view.isLive()) {
+                    if (!ended.compareAndSet(false, true)) return;
+                    ScheduledFuture<?> self = ticker.get();
+                    if (self != null) self.cancel(false);
+                    editor.cancel();
                     return;
                 }
                 String clock = LyricsSession.playbackClock(client, track);
@@ -609,6 +626,7 @@ public final class LyricsPresenter {
         private final long channelId;
         private final long minIntervalMs;
         private final Supplier<CompletableFuture<?>> edit;
+        private final BooleanSupplier live;
         private final ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getLyricsScheduler();
         private long lastEditAt;
         private ScheduledFuture<?> pending;
@@ -616,6 +634,11 @@ public final class LyricsPresenter {
         private boolean cancelled;
 
         ProgressiveEditor(long channelId, long minIntervalMs, Supplier<CompletableFuture<?>> edit) {
+            this(channelId, minIntervalMs, () -> true, edit);
+        }
+
+        ProgressiveEditor(long channelId, long minIntervalMs, BooleanSupplier live, Supplier<CompletableFuture<?>> edit) {
+            this.live = live;
             this.channelId = channelId;
             this.minIntervalMs = minIntervalMs;
             this.edit = edit;
@@ -643,6 +666,10 @@ public final class LyricsPresenter {
             synchronized (this) {
                 pending = null;
                 if (cancelled) return;
+                if (!live.getAsBoolean()) {
+                    cancelled = true;
+                    return;
+                }
                 if (inFlightSince != 0) {
                     if (started - inFlightSince < EditRateLimiter.IN_FLIGHT_TIMEOUT_MS) {
                         pending = scheduler.schedule(this::run, IN_FLIGHT_RETRY_MS, TimeUnit.MILLISECONDS);
