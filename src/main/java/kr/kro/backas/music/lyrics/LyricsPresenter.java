@@ -177,6 +177,14 @@ public final class LyricsPresenter {
         else client.stopLyrics("새 가사 표시로 대체되었습니다");
     }
 
+    public static void presentPlain(MusicPlayerClient client, AudioTrack track, TrackCard card, Lyrics lyrics) {
+        MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
+        Lyrics plain = new Lyrics(lyrics.trackName(), lyrics.artistName(), lyrics.plain(), List.of(), lyrics.instrumental());
+        showFull(client, track, plain, null, true,
+                new CardFullView(client, track, plain, card, controller.getLyricsExpansions(), controller.getLyricsConversions()),
+                controller.getTranslationClient());
+    }
+
     public static void presentSynced(MusicPlayerClient client, AudioTrack track, TrackCard card, Lyrics lyrics) {
         replaceSession(client, track);
         startSession(client, track, lyrics, LyricsSurface.ofCard(card), client.getLyricsOffsetMs());

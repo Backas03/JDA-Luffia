@@ -4,11 +4,13 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import kr.kro.backas.music.ArtworkColors;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
+import kr.kro.backas.Main;
 import kr.kro.backas.music.lyrics.sync.LyricsAutoSync;
 import kr.kro.backas.music.TrackCard;
 import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.DurationUtil;
 import net.dv8tion.jda.api.components.container.Container;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.section.Section;
 import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.components.thumbnail.Thumbnail;
@@ -58,6 +60,7 @@ public class LyricsSession {
     private volatile long offsetMs;
     private volatile long autoOffsetMs;
     private volatile boolean autoPending;
+    private volatile String originalToken;
     private volatile boolean translating;
     private volatile TranslationJobs.Job job;
     private ScheduledFuture<?> ticker;
@@ -90,6 +93,13 @@ public class LyricsSession {
         this.translatable = isTranslatable(this.translator, lyrics);
         this.leadMs = EditLatency.leadMs(surface.channelId());
         this.offsetMs = offsetMs;
+        TrackCard card = surface.card();
+        this.originalToken = lyrics.aiTimed() && card != null
+                ? Main.getLuffia().getMusicPlayerController().getLyricsConversions().registerOriginal(() -> {
+                    if (!halt()) return;
+                    LyricsPresenter.presentPlain(client, track, card, lyrics);
+                })
+                : null;
     }
 
     public void start() {
@@ -114,7 +124,7 @@ public class LyricsSession {
     @Nullable
     private String autoNote() {
         if (autoPending) return AUTO_PENDING_NOTE;
-        return lyrics.aiTimed() ? LyricsConversions.LABEL : null;
+        return lyrics.aiTimed() ? LyricsConversions.LABEL_DONE : null;
     }
 
     public void setOffsetMs(long offsetMs) {
@@ -165,6 +175,8 @@ public class LyricsSession {
 
     private boolean halt() {
         if (!stopped.compareAndSet(false, true)) return false;
+        String original = originalToken;
+        if (original != null) Main.getLuffia().getMusicPlayerController().getLyricsConversions().release(original);
         if (ticker != null) ticker.cancel(false);
         TranslationJobs.Job current = job;
         if (current != null) current.cancel();
@@ -219,7 +231,9 @@ public class LyricsSession {
     }
 
     private Container view(int index, @Nullable String translation, @Nullable String footer, boolean pending) {
-        return surface.frame(body(client, track, lyrics, index, translation, footer, translator, pending, surface.showsSong(), autoNote()));
+        String original = originalToken;
+        return surface.frame(body(client, track, lyrics, index, translation, footer, translator, pending, surface.showsSong(), autoNote()),
+                original == null ? null : ActionRow.of(LyricsConversions.originalButton(original)));
     }
 
     private void tick() {

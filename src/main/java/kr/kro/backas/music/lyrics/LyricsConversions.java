@@ -16,9 +16,12 @@ public class LyricsConversions extends ListenerAdapter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LyricsConversions.class);
     private static final String PREFIX = "lyrics-ai:";
+    private static final String ORIGINAL_PREFIX = "lyrics-orig:";
     private static final long EXPIRE_MS = 60 * 60 * 1000;
     public static final String LABEL = "AI 가사 변환";
     public static final String LABEL_RUNNING = "AI 가사 변환 중";
+    public static final String LABEL_DONE = "AI 가사 변환됨";
+    public static final String LABEL_ORIGINAL = "원문 보기";
 
     public interface Convertible {
         boolean isConverting();
@@ -31,7 +34,11 @@ public class LyricsConversions extends ListenerAdapter {
     private record Entry(Convertible view, long createdAt) {
     }
 
+    private record Original(Runnable action, long createdAt) {
+    }
+
     private final Map<String, Entry> entries = new ConcurrentHashMap<>();
+    private final Map<String, Original> originals = new ConcurrentHashMap<>();
 
     public String register(Convertible view) {
         prune();
@@ -40,13 +47,22 @@ public class LyricsConversions extends ListenerAdapter {
         return token;
     }
 
+    public String registerOriginal(Runnable action) {
+        prune();
+        String token = UUID.randomUUID().toString();
+        originals.put(token, new Original(action, System.currentTimeMillis()));
+        return token;
+    }
+
     public void release(String token) {
         entries.remove(token);
+        originals.remove(token);
     }
 
     public void prune() {
         long now = System.currentTimeMillis();
         entries.values().removeIf(entry -> now - entry.createdAt() > EXPIRE_MS);
+        originals.values().removeIf(entry -> now - entry.createdAt() > EXPIRE_MS);
     }
 
     public static Button button(String token, boolean converting) {
@@ -54,9 +70,25 @@ public class LyricsConversions extends ListenerAdapter {
         return converting ? button.asDisabled() : button;
     }
 
+    public static Button originalButton(String token) {
+        return Button.secondary(ORIGINAL_PREFIX + token, LABEL_ORIGINAL);
+    }
+
     @Override
     public void onButtonInteraction(@NotNull ButtonInteractionEvent event) {
         String id = event.getComponentId();
+        if (id.startsWith(ORIGINAL_PREFIX)) {
+            Original original = originals.remove(id.substring(ORIGINAL_PREFIX.length()));
+            event.deferEdit().queue(null, e -> LOGGER.debug("failed to acknowledge the original lyrics button", e));
+            if (original != null) {
+                try {
+                    original.action().run();
+                } catch (RuntimeException e) {
+                    LOGGER.warn("failed to switch back to the original lyrics", e);
+                }
+            }
+            return;
+        }
         if (!id.startsWith(PREFIX)) return;
         Entry entry = entries.get(id.substring(PREFIX.length()));
         if (entry == null) {
