@@ -145,7 +145,8 @@ public final class TrackCard {
     }
 
     private CompletableFuture<?> submitEdit(Container view, long deadlineAt) {
-        return message.thenCompose(current -> current.editMessageComponents(view).useComponentsV2(true).deadline(deadlineAt).submit())
+        return message.thenCompose(current -> current.editMessageComponents(view).useComponentsV2(true)
+                        .deadline(Math.max(deadlineAt, System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS)).submit())
                 .whenComplete((result, error) -> {
                     if (error != null && isGone(error)) onGone();
                 });
