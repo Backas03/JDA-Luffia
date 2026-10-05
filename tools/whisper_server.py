@@ -33,6 +33,7 @@ def transcribe(file: UploadFile = File(...), language: str | None = Form(None)):
         word_timestamps=True,
         beam_size=5,
         vad_filter=False,
+        condition_on_previous_text=False,
     )
     words = []
     parts = []
