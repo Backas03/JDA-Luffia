@@ -44,8 +44,7 @@ public final class TranslationText {
     public static String markdown(@Nullable String value, int maxLength) {
         StringBuilder out = new StringBuilder();
         for (String line : displayLines(value, maxLength)) {
-            if (!out.isEmpty()) out.append('
-');
+            if (!out.isEmpty()) out.append('\n');
             out.append("-# ").append(line);
         }
         return out.toString();
@@ -57,8 +56,7 @@ public final class TranslationText {
         if (spoken != null && !spoken.isBlank()) out.append(DiscordSafe.text(spoken, maxLength));
         String text = translation(value);
         if (!text.isBlank()) {
-            if (!out.isEmpty()) out.append('
-');
+            if (!out.isEmpty()) out.append('\n');
             out.append("-# ").append(DiscordSafe.text(text, maxLength));
         }
         return out.toString();
