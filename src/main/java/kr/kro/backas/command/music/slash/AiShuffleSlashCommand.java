@@ -56,7 +56,7 @@ public class AiShuffleSlashCommand implements SlashCommandSource {
             return;
         }
         if (!controller.getTranslationClient().isEnabled()) {
-            reject(event, member, "AI 서버가 설정되지 않았습니다. TRANSLATOR_URL 에 LLM 서버를 설정해주세요.", false);
+            reject(event, member, "AI 서버가 설정되지 않았습니다. config.yaml 의 llm.endpoints 에 LLM 서버를 설정해주세요.", false);
             return;
         }
         int size = client.getTrackQueue().size();
