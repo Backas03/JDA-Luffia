@@ -12,11 +12,12 @@ public final class LyricsTimestamper {
     public record Result(List<LyricLine> lines, int matched, int total) {
     }
 
-    static final double MIN_SCORE = 0.45;
+    static final double MIN_SCORE = 0.42;
+    private static final double[] WINDOW_SCALES = {0.8, 1.0, 1.25};
     static final double SKIP_PENALTY = 0.35;
     static final int MIN_MATCHED = 4;
     static final double MIN_MATCHED_RATIO = 0.4;
-    static final long MIN_GAP_MS = 200;
+    static final long MIN_GAP_MS = 1_000;
     static final long FILL_GAP_MS = 3_000;
     static final long TAIL_MARGIN_MS = 1_000;
     static final long LINE_LEAD_MS = 300;
@@ -63,8 +64,12 @@ public final class LyricsTimestamper {
                     continue;
                 }
                 int from = tokenIndex.get(j);
-                int to = Math.min(text.length(), from + target.length());
-                double similarity = to - from < target.length() * 0.6 ? 0 : LyricsAligner.similarity(text.substring(from, to), target);
+                double similarity = 0;
+                for (double scale : WINDOW_SCALES) {
+                    int to = Math.min(text.length(), from + (int) Math.round(target.length() * scale));
+                    if (to - from < target.length() * 0.6) continue;
+                    similarity = Math.max(similarity, LyricsAligner.similarity(text.substring(from, to), target));
+                }
                 score[i][j] = similarity >= MIN_SCORE ? similarity : NONE;
             }
         }

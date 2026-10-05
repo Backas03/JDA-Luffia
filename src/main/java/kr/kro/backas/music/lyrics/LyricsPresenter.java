@@ -33,6 +33,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -348,11 +349,19 @@ public final class LyricsPresenter {
         }
 
         @Override
+        public boolean isSuperseded() {
+            return superseded;
+        }
+
+        @Override
         public void requestConversion() {
-            if (converting || convertToken == null) return;
-            converting = true;
-            convertNote = CONVERTING_NOTE;
-            LyricsConverter.convert(client, track, lyrics).whenComplete((result, error) -> {
+            if (converting || superseded || convertToken == null) return;
+            CompletableFuture<Optional<Lyrics>> job = LyricsConverter.convert(client, track, lyrics);
+            if (!job.isDone()) {
+                converting = true;
+                convertNote = CONVERTING_NOTE;
+            }
+            job.whenComplete((result, error) -> {
                 if (error == null && result != null && result.isPresent() && client.isCurrentTrack(track) && !card.isClosed()) {
                     superseded = true;
                     expansions.release(token);
