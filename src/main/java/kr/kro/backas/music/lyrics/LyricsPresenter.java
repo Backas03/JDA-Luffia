@@ -48,6 +48,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 public final class LyricsPresenter {
@@ -61,6 +62,7 @@ public final class LyricsPresenter {
     static final int FULL_PREVIEW_LINES = 6;
     private static final String TRUNCATED_NOTE = "… (이하 생략)";
     private static final String FULL_LYRICS_NOTE = "타임스탬프 가사가 없어 전체 가사로 표시합니다";
+    private static final String AI_AVAILABLE_NOTE = "AI 타임스탬프 가사를 이용할 수 있습니다";
     private static final long CLOCK_INTERVAL_MS = 900;
 
     public static String translationStatus(@Nullable MusicPlayerClient client, @Nullable TranslationClient translator) {
@@ -224,9 +226,10 @@ public final class LyricsPresenter {
                 startSession(client, track, lyrics, LyricsSurface.ofCard(card), offsetMs);
                 return;
             }
-            showFull(client, track, lyrics, null, true,
-                    new CardFullView(client, track, lyrics, card, Main.getLuffia().getMusicPlayerController().getLyricsExpansions(),
-                            Main.getLuffia().getMusicPlayerController().getLyricsConversions()), translator);
+            CardFullView view = new CardFullView(client, track, lyrics, card, Main.getLuffia().getMusicPlayerController().getLyricsExpansions(),
+                    Main.getLuffia().getMusicPlayerController().getLyricsConversions());
+            showFull(client, track, lyrics, null, true, view, translator);
+            view.requestConversion();
         });
     }
 
@@ -277,6 +280,10 @@ public final class LyricsPresenter {
         long channelId();
 
         void dismissWhenTrackEnds(MusicPlayerClient client, AudioTrack track);
+
+        default boolean isLive() {
+            return true;
+        }
     }
 
     private static final class EmbedFullView implements FullView {
@@ -323,6 +330,7 @@ public final class LyricsPresenter {
         private final LyricsConversions conversions;
         private final String token;
         private volatile String convertToken;
+        private final boolean stored;
         private volatile boolean converting;
         private volatile boolean superseded;
         private volatile String convertNote;
@@ -343,6 +351,7 @@ public final class LyricsPresenter {
             card.claim(this);
             boolean convertible = lyrics.hasPlain() && !lyrics.hasSynced() && !lyrics.aiTimed() && LyricsConverter.isAvailable();
             this.convertToken = convertible ? conversions.register(this) : null;
+            this.stored = convertible && AiLyricsStore.defaultStore().get(track.getIdentifier()) != null;
         }
 
         @Override
@@ -353,6 +362,11 @@ public final class LyricsPresenter {
         @Override
         public boolean isSuperseded() {
             return superseded;
+        }
+
+        @Override
+        public boolean isLive() {
+            return !superseded && !card.isClosed() && card.isPresentedBy(this);
         }
 
         private synchronized boolean switchToSynced(Lyrics timed, boolean partial) {
@@ -425,7 +439,7 @@ public final class LyricsPresenter {
             List<Button> buttons = new ArrayList<>();
             if (foldable) buttons.add(LyricsExpansions.button(token, expanded));
             String convert = convertToken;
-            if (convert != null) buttons.add(LyricsConversions.button(convert, converting));
+            if (convert != null) buttons.add(LyricsConversions.button(convert, converting, stored));
             if (!buttons.isEmpty()) body.add(ActionRow.of(buttons));
             return card.frame(body);
         }
@@ -460,7 +474,8 @@ public final class LyricsPresenter {
     private static void showFull(MusicPlayerClient client, AudioTrack track, Lyrics lyrics, @Nullable Member requester, boolean liveWanted,
                                  FullView view, TranslationClient translator) {
         List<String> lines = fullLines(lyrics);
-        String footer = liveWanted ? FULL_LYRICS_NOTE : SharedConstant.RELEASE_VERSION;
+        boolean aiAvailable = lyrics.hasPlain() && !lyrics.hasSynced() && !lyrics.aiTimed() && LyricsConverter.isAvailable();
+        String footer = liveWanted ? (aiAvailable ? AI_AVAILABLE_NOTE : FULL_LYRICS_NOTE) : SharedConstant.RELEASE_VERSION;
         if (requester != null) footer += " · 요청: " + MemberUtil.getName(requester);
         String finalFooter = footer;
         List<LyricLine> asLines = new ArrayList<>();
@@ -483,7 +498,7 @@ public final class LyricsPresenter {
             Map<Integer, String> cache = willTranslate ? translator.cacheFor(cacheKey) : null;
             AtomicReference<TranslationJobs.Job> jobRef = new AtomicReference<>();
             ProgressiveEditor editor = new ProgressiveEditor(view.channelId(),
-                    showClock ? CLOCK_INTERVAL_MS : ProgressiveEditor.MIN_INTERVAL_MS, () -> {
+                    showClock ? CLOCK_INTERVAL_MS : ProgressiveEditor.MIN_INTERVAL_MS, view::isLive, () -> {
                 String note = null;
                 if (willTranslate) {
                     TranslationJobs.Job current = jobRef.get();
@@ -496,7 +511,7 @@ public final class LyricsPresenter {
                         System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS);
             });
             if (showClock) {
-                startClock(client, track, editor, () -> {
+                startClock(client, track, view, editor, () -> {
                     if (willTranslate || dismissOnEnd) return;
                     view.show(track, lines, null, finalFooter, null, System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS)
                             .whenComplete((result, error) -> {
@@ -567,7 +582,7 @@ public final class LyricsPresenter {
         return LyricsSession.playbackClock(client, track) + "\n" + footer;
     }
 
-    private static void startClock(MusicPlayerClient client, AudioTrack track, ProgressiveEditor editor, Runnable onEnd) {
+    private static void startClock(MusicPlayerClient client, AudioTrack track, FullView view, ProgressiveEditor editor, Runnable onEnd) {
         ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getLyricsScheduler();
         AtomicReference<ScheduledFuture<?>> ticker = new AtomicReference<>();
         AtomicReference<String> shown = new AtomicReference<>(LyricsSession.playbackClock(client, track));
@@ -580,6 +595,13 @@ public final class LyricsPresenter {
                     if (self != null) self.cancel(false);
                     editor.cancel();
                     onEnd.run();
+                    return;
+                }
+                if (!view.isLive()) {
+                    if (!ended.compareAndSet(false, true)) return;
+                    ScheduledFuture<?> self = ticker.get();
+                    if (self != null) self.cancel(false);
+                    editor.cancel();
                     return;
                 }
                 String clock = LyricsSession.playbackClock(client, track);
@@ -609,6 +631,7 @@ public final class LyricsPresenter {
         private final long channelId;
         private final long minIntervalMs;
         private final Supplier<CompletableFuture<?>> edit;
+        private final BooleanSupplier live;
         private final ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getLyricsScheduler();
         private long lastEditAt;
         private ScheduledFuture<?> pending;
@@ -616,6 +639,11 @@ public final class LyricsPresenter {
         private boolean cancelled;
 
         ProgressiveEditor(long channelId, long minIntervalMs, Supplier<CompletableFuture<?>> edit) {
+            this(channelId, minIntervalMs, () -> true, edit);
+        }
+
+        ProgressiveEditor(long channelId, long minIntervalMs, BooleanSupplier live, Supplier<CompletableFuture<?>> edit) {
+            this.live = live;
             this.channelId = channelId;
             this.minIntervalMs = minIntervalMs;
             this.edit = edit;
@@ -643,6 +671,10 @@ public final class LyricsPresenter {
             synchronized (this) {
                 pending = null;
                 if (cancelled) return;
+                if (!live.getAsBoolean()) {
+                    cancelled = true;
+                    return;
+                }
                 if (inFlightSince != 0) {
                     if (started - inFlightSince < EditRateLimiter.IN_FLIGHT_TIMEOUT_MS) {
                         pending = scheduler.schedule(this::run, IN_FLIGHT_RETRY_MS, TimeUnit.MILLISECONDS);
