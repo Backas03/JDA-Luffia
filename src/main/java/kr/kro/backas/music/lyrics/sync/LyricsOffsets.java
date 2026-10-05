@@ -7,7 +7,7 @@ public final class LyricsOffsets {
 
     public static final String SOURCE_AUTO = "auto";
     public static final String SOURCE_NONE = "none";
-    public static final int VERSION = 2;
+    public static final int VERSION = 3;
     static final long NONE_RETRY_MS = 6 * 60 * 60 * 1000L;
 
     public record Entry(long offsetMs, String source, long at, int version) {
