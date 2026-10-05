@@ -207,11 +207,11 @@ public final class LyricsPresenter {
             if (error != null) {
                 Throwable cause = error.getCause() == null ? error : error.getCause();
                 LOGGER.warn("lyrics lookup failed for {}", track.getInfo().title, cause);
-                card.close();
+                card.note(LYRICS_LOOKUP_FAILED_NOTE);
                 return;
             }
             if (hasNoLyrics(lyrics)) {
-                card.close();
+                card.note(NO_LYRICS_NOTE);
                 prefetchNext(client);
                 return;
             }
@@ -664,6 +664,8 @@ public final class LyricsPresenter {
 
     public static final int PREFETCH_COUNT = 3;
     static final String CONVERTING_NOTE = "AI 가사 변환 중...";
+    static final String NO_LYRICS_NOTE = "가사를 찾지 못했습니다";
+    static final String LYRICS_LOOKUP_FAILED_NOTE = "가사 조회에 실패했습니다";
     static final String CONVERSION_FAILED_NOTE = "AI 가사 변환에 실패했습니다";
     public static final int PREFETCH_COUNT_FAST = 20;
 
