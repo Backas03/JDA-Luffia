@@ -8,6 +8,7 @@ public final class EditLatency {
     public static final long INITIAL_LEAD_MS = 600;
     public static final long MIN_LEAD_MS = 300;
     public static final long MAX_LEAD_MS = 1500;
+    public static final long RENDER_MARGIN_MS = 250;
     static final long MAX_SAMPLE_MS = 5000;
     static final double ALPHA = 0.3;
     private static final int MAX_CHANNELS = 2000;
@@ -26,7 +27,7 @@ public final class EditLatency {
     public static long leadMs(long channelId) {
         Double average = AVERAGES.get(channelId);
         if (average == null) return INITIAL_LEAD_MS;
-        return Math.max(MIN_LEAD_MS, Math.min(MAX_LEAD_MS, Math.round(average)));
+        return Math.max(MIN_LEAD_MS, Math.min(MAX_LEAD_MS, Math.round(average) + RENDER_MARGIN_MS));
     }
 
     static void reset() {
