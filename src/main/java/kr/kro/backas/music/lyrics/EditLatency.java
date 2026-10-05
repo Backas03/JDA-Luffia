@@ -1,14 +1,15 @@
 package kr.kro.backas.music.lyrics;
 
+import kr.kro.backas.config.Config;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class EditLatency {
 
-    public static final long INITIAL_LEAD_MS = 600;
-    public static final long MIN_LEAD_MS = 300;
-    public static final long MAX_LEAD_MS = 1500;
-    public static final long RENDER_MARGIN_MS = 450;
+    public static final long INITIAL_LEAD_MS = Config.get().lyrics().lead().initialMs();
+    public static final long MIN_LEAD_MS = Config.get().lyrics().lead().minMs();
+    public static final long MAX_LEAD_MS = Config.get().lyrics().lead().maxMs();
+    public static final long RENDER_MARGIN_MS = Config.get().lyrics().lead().renderMarginMs();
     static final long MAX_SAMPLE_MS = 5000;
     static final double ALPHA = 0.3;
     private static final int MAX_CHANNELS = 2000;

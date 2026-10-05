@@ -1,7 +1,7 @@
 package kr.kro.backas.command.music.slash;
 
+import kr.kro.backas.config.Config;
 import kr.kro.backas.Main;
-import kr.kro.backas.SharedConstant;
 import kr.kro.backas.command.api.SlashCommandSource;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.filter.ConfiguredEqualizer;
@@ -71,7 +71,7 @@ public class EqualizerSlashCommand implements SlashCommandSource {
                 .addField("이퀄라이저 설정",
                         before.getName() + " -> " + eq.getName()
                         , false)
-                .setFooter(SharedConstant.RELEASE_VERSION)
+                .setFooter(Config.get().bot().version())
                 .build()
         ).queue();
     }

@@ -1,5 +1,6 @@
 package kr.kro.backas;
 
+import kr.kro.backas.config.Config;
 import kr.kro.backas.certification.CertificationManager;
 import org.slf4j.LoggerFactory;
 import kr.kro.backas.certification.listener.CertificationListener;
@@ -12,7 +13,7 @@ import kr.kro.backas.command.music.slash.*;
 import kr.kro.backas.music.MusicListener;
 import kr.kro.backas.music.MusicPlayerController;
 import kr.kro.backas.music.source.MusicSourceRegistry;
-import kr.kro.backas.secret.BotSecret;
+import kr.kro.backas.config.LuffiaConfig;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.Guild;
@@ -68,23 +69,16 @@ public class Luffia {
 
         this.certificationManager = null; // new CertificationManager(discordAPI);
 
-        String translatorUrl = System.getenv("TRANSLATOR_URL");
-        String translatorSource = "환경변수 TRANSLATOR_URL";
-        if (translatorUrl == null || translatorUrl.isBlank()) {
-            translatorUrl = System.getProperty("translator.url");
-            translatorSource = "-Dtranslator.url";
-        }
-        if (translatorUrl == null || translatorUrl.isBlank()) {
-            translatorUrl = BotSecret.TRANSLATOR_URL;
-            translatorSource = "BotSecret.TRANSLATOR_URL";
-        }
-        LoggerFactory.getLogger(Luffia.class).info("번역/AI 서버 주소 ({}): {}", translatorSource, translatorUrl);
+        LuffiaConfig config = Config.get();
+        String translatorUrl = config.llm().endpointSpec();
+        LoggerFactory.getLogger(Luffia.class).info("번역/AI 서버 주소: {}", translatorUrl);
+        LuffiaConfig.Spotify spotify = config.sources().spotify();
         this.musicPlayerController = new MusicPlayerController(
-                new MusicSourceRegistry(BotSecret.SPOTIFY_CLIENT_ID, BotSecret.SPOTIFY_CLIENT_SECRET, BotSecret.SPOTIFY_REFRESH_TOKEN),
+                new MusicSourceRegistry(spotify.clientId(), spotify.clientSecret(), spotify.refreshToken()),
                 translatorUrl,
-                BotSecret.WHISPER_URL);
+                config.whisper().endpointSpec());
         this.musicPlayerController.register(discordAPI);
-        for (String token : BotSecret.MUSIC_BOT_TOKENS) {
+        for (String token : config.discord().musicBotTokens()) {
             if (token == null || token.isBlank()) continue;
             try {
                 this.musicPlayerController.register(token);
@@ -115,9 +109,9 @@ public class Luffia {
     }
 
     public Guild getPublishedGuild() {
-        return SharedConstant.ON_DEV ?
-                discordAPI.getGuildById(SharedConstant.DEV_GUILD_ID) :
-                discordAPI.getGuildById(SharedConstant.PUBLISHED_GUILD_ID);
+        return Config.get().bot().dev() ?
+                discordAPI.getGuildById(Config.get().discord().guilds().dev()) :
+                discordAPI.getGuildById(Config.get().discord().guilds().main());
     }
 
     public MusicPlayerController getMusicPlayerController() {

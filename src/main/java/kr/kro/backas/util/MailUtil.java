@@ -1,7 +1,7 @@
 package kr.kro.backas.util;
 
-import kr.kro.backas.secret.BotSecret;
 
+import kr.kro.backas.config.Config;
 import javax.mail.*;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
@@ -23,12 +23,12 @@ public class MailUtil {
         Session session = Session.getInstance(props,
                 new Authenticator() {
                     protected PasswordAuthentication getPasswordAuthentication() {
-                        return new PasswordAuthentication(BotSecret.EMAIL, BotSecret.APP_PASSWORD);
+                        return new PasswordAuthentication(Config.get().certification().mail().address(), Config.get().certification().mail().appPassword());
                     }
                 });
 
         Message message = new MimeMessage(session);
-        message.setFrom(new InternetAddress(BotSecret.EMAIL));
+        message.setFrom(new InternetAddress(Config.get().certification().mail().address()));
 
         // 받는 이메일
         message.setRecipients(

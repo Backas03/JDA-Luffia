@@ -1,5 +1,6 @@
 package kr.kro.backas.music;
 
+import kr.kro.backas.config.Config;
 import com.github.natanbc.lavadsp.karaoke.KaraokePcmAudioFilter;
 import com.github.natanbc.lavadsp.timescale.TimescalePcmAudioFilter;
 import com.sedmelluq.discord.lavaplayer.filter.AudioFilter;
@@ -41,11 +42,11 @@ import java.util.Set;
 
 public class MusicPlayerClient {
     private static final Logger LOGGER = LoggerFactory.getLogger(MusicPlayerClient.class);
-    public static final int DEFAULT_VOLUME = 10;
-    public static final float KARAOKE_ECHO_SECONDS = 0.30f;
-    public static final float KARAOKE_ECHO_DECAY = 0.15f;
-    public static final float KARAOKE_CENTER_GAIN = 1.3f;
-    private static final long CONNECT_GRACE_MS = 10_000;
+    public static final int DEFAULT_VOLUME = Config.get().musicPlayer().defaultVolume();
+    public static final float KARAOKE_ECHO_SECONDS = (float) Config.get().musicPlayer().karaoke().echoSeconds();
+    public static final float KARAOKE_ECHO_DECAY = (float) Config.get().musicPlayer().karaoke().echoDecay();
+    public static final float KARAOKE_CENTER_GAIN = (float) Config.get().musicPlayer().karaoke().centerGain();
+    private static final long CONNECT_GRACE_MS = Config.get().musicPlayer().connectGraceSeconds() * 1000L;
 
     private final AudioPlayerManager audioPlayerManager;
     private final JDA musicBot;

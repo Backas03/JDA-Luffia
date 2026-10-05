@@ -1,9 +1,9 @@
 package kr.kro.backas.music.source;
 
+import kr.kro.backas.config.Config;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
-import kr.kro.backas.secret.BotSecret;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -31,10 +31,10 @@ public class SpotifyLoginTool {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     public static void main(String[] args) throws Exception {
-        String clientId = BotSecret.SPOTIFY_CLIENT_ID;
-        String clientSecret = BotSecret.SPOTIFY_CLIENT_SECRET;
+        String clientId = Config.get().sources().spotify().clientId();
+        String clientSecret = Config.get().sources().spotify().clientSecret();
         if (clientId.isBlank() || clientSecret.isBlank()) {
-            System.err.println("BotSecret.SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET 을 먼저 채워주세요.");
+            System.err.println("config.yaml 의 sources.spotify.client-id / client-secret 을 먼저 채워주세요.");
             System.exit(1);
         }
 
@@ -90,7 +90,7 @@ public class SpotifyLoginTool {
             System.out.println("로그인 계정: " + me.path("display_name").asText("?") + " (" + me.path("id").asText("?") + ")");
             System.out.println("허용된 scope: " + token.path("scope").asText(""));
             System.out.println();
-            System.out.println("=== 아래 값을 BotSecret.SPOTIFY_REFRESH_TOKEN 에 넣으세요 ===");
+            System.out.println("=== 아래 값을 config.yaml 의 sources.spotify.refresh-token 에 넣으세요 ===");
             System.out.println(refreshToken);
             System.out.println();
         } finally {

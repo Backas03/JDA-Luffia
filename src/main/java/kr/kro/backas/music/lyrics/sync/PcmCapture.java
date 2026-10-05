@@ -1,5 +1,6 @@
 package kr.kro.backas.music.lyrics.sync;
 
+import kr.kro.backas.config.Config;
 import com.sedmelluq.discord.lavaplayer.filter.FloatPcmAudioFilter;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import org.jetbrains.annotations.Nullable;
@@ -12,7 +13,7 @@ import java.util.concurrent.CompletableFuture;
 public final class PcmCapture {
 
     public static final int TARGET_RATE = 16000;
-    public static final int DEFAULT_SECONDS = 90;
+    public static final int DEFAULT_SECONDS = Math.max(20, Config.get().whisper().autoSync().captureSeconds());
     public static final int MIN_SECONDS = 20;
 
     private final AudioTrack track;

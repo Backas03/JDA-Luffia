@@ -1,5 +1,6 @@
 package kr.kro.backas.music.source;
 
+import kr.kro.backas.config.Config;
 import com.github.topi314.lavasrc.mirror.DefaultMirroringAudioTrackResolver;
 import com.github.topi314.lavasrc.spotify.SpotifySourceManager;
 import com.sedmelluq.discord.lavaplayer.format.StandardAudioDataFormats;
@@ -26,9 +27,9 @@ public final class MusicSourceRegistry {
             "ytmsearch:%QUERY%",
             "ytsearch:%QUERY%"
     };
-    public static final String SPOTIFY_COUNTRY_CODE = "KR";
-    public static final int SPOTIFY_PAGE_LIMIT = 10;
-    public static final int YOUTUBE_PLAYLIST_PAGE_COUNT = 10;
+    public static final String SPOTIFY_COUNTRY_CODE = Config.get().sources().spotify().country();
+    public static final int SPOTIFY_PAGE_LIMIT = Config.get().sources().spotify().pageLimit();
+    public static final int YOUTUBE_PLAYLIST_PAGE_COUNT = Config.get().sources().youtube().playlistPageCount();
 
     private final AudioPlayerManager audioPlayerManager;
     private final boolean spotifyEnabled;
@@ -65,7 +66,7 @@ public final class MusicSourceRegistry {
                                            @Nullable String clientSecret,
                                            @Nullable String refreshToken) {
         if (isBlank(clientId) || isBlank(clientSecret)) {
-            LOGGER.info("BotSecret.SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET 이 비어 있어 스포티파이 소스를 비활성화합니다.");
+            LOGGER.info("config.yaml 의 sources.spotify.client-id / client-secret 이 비어 있어 스포티파이 소스를 비활성화합니다.");
             return false;
         }
         try {

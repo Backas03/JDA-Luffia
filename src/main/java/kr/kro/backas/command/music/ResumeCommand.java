@@ -1,7 +1,7 @@
 package kr.kro.backas.command.music;
 
+import kr.kro.backas.config.Config;
 import kr.kro.backas.Main;
-import kr.kro.backas.SharedConstant;
 import kr.kro.backas.command.api.CommandSource;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
@@ -27,7 +27,7 @@ public class ResumeCommand implements CommandSource {
                     .setAuthor(MemberUtil.getName(member))
                     .setTitle("음악 일시정지를 해제 할 수 없습니다.")
                     .setDescription("음악 일시정지를 해제 하려면 음성채팅방에 먼저 참여해주세요.")
-                    .setFooter(SharedConstant.RELEASE_VERSION);
+                    .setFooter(Config.get().bot().version());
             message.replyEmbeds(builder.build()).queue();
             return;
         }
@@ -39,7 +39,7 @@ public class ResumeCommand implements CommandSource {
                     .setAuthor(MemberUtil.getName(member))
                     .setTitle("음악 일시정지를 해제 할 수 없습니다.")
                     .setDescription("현재 재생중인 곡이 없으므로 일시정지를 해제 할 수 없습니다.")
-                    .setFooter(SharedConstant.RELEASE_VERSION);
+                    .setFooter(Config.get().bot().version());
             message.replyEmbeds(builder.build()).queue();
             return;
         }

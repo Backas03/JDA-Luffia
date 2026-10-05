@@ -1,0 +1,111 @@
+bot:
+  dev: false
+  version: Luffia/3.0.23-SNAPSHOT
+  zone: Asia/Seoul
+  activity: "/도움말 또는 !도움말  명령어를 사용해보세요"
+  github: https://github.com/Backas03/JDA-Luffia
+  license: MIT license
+  shutdown:
+    graceful-seconds: 5
+    forced-seconds: 2
+    halt-after-seconds: 10
+
+discord:
+  token: ""
+  dev-token: ""
+  music-bot-tokens: []
+  guilds:
+    main: 0
+    dev: 0
+    service: []
+
+certification:
+  enabled: false
+  role-id: 0
+  mail:
+    address: ""
+    app-password: ""
+
+riot:
+  api-key: ""
+
+sources:
+  youtube:
+    playlist-page-count: 10
+  spotify:
+    client-id: ""
+    client-secret: ""
+    refresh-token: ""
+    country: KR
+    page-limit: 10
+
+music-player:
+  default-volume: 10
+  connect-grace-seconds: 10
+  karaoke:
+    echo-seconds: 0.30
+    echo-decay: 0.15
+    center-gain: 1.3
+
+autoplay:
+  enabled-by-default: true
+  queue-size: 2
+
+llm:
+  endpoints: []
+  fallback:
+    url: ""
+    label: ""
+    start-command: ""
+    stop-command: ""
+  model-override: ""
+  recheck-seconds: 30
+  translation-cache-size: 200
+
+lyrics:
+  display:
+    tick-ms: 200
+    min-edit-interval-ms: 1200
+    clock-edit-interval-ms: 800
+    post-edit-gap-ms: 500
+    full-preview-lines: 6
+    card-text-budget: 3500
+  lead:
+    initial-ms: 600
+    min-ms: 300
+    max-ms: 1500
+    render-margin-ms: 450
+  rate-limit:
+    edits-per-window: 5
+    window-ms: 5000
+    edit-deadline-ms: 2500
+    in-flight-timeout-ms: 4000
+    extras-pause-ms: 30000
+  prefetch:
+    count: 3
+    count-fast: 20
+    lookup-threads: 3
+
+whisper:
+  endpoints: []
+  retry-failed-seconds: 30
+  auto-sync:
+    enabled: true
+    capture-seconds: 90
+    trust-lyrics-within-fine-ms: 200
+    trust-lyrics-within-coarse-ms: 800
+    none-retry-hours: 6
+  convert:
+    auto: true
+    max-seconds: 900
+    first-pass-seconds: 20
+    pass-step-seconds: 30
+
+cache:
+  dir: cache
+
+scheduler:
+  lyrics-threads: 2
+  watchdog:
+    stall-ms: 5000
+    report-gap-ms: 30000

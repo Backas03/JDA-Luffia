@@ -1,7 +1,7 @@
 package kr.kro.backas.command.music;
 
+import kr.kro.backas.config.Config;
 import kr.kro.backas.Main;
-import kr.kro.backas.SharedConstant;
 import kr.kro.backas.command.api.CommandSource;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
@@ -28,7 +28,7 @@ public class QuitCommand implements CommandSource {
                     .setAuthor(MemberUtil.getName(member))
                     .setTitle("음성 채팅방과 연결을 끊을 수 없습니다.")
                     .setDescription("해당 명령어를 사용하려면 음성채팅방에 먼저 참여해주세요.")
-                    .setFooter(SharedConstant.RELEASE_VERSION);
+                    .setFooter(Config.get().bot().version());
             message.replyEmbeds(builder.build()).queue();
             return;
         }
@@ -41,7 +41,7 @@ public class QuitCommand implements CommandSource {
                     .setTitle("음성 채팅방과 연결을 끊을 수 없습니다.")
                     .setDescription("이미 음성채팅방과 연결이 끊어져 있습니다.")
                     .addField("노래 봇", MusicEmbeds.botName(client == null ? null : client.getGuild()), false)
-                    .setFooter(SharedConstant.RELEASE_VERSION);
+                    .setFooter(Config.get().bot().version());
             message.replyEmbeds(builder.build()).queue();
             return;
         }

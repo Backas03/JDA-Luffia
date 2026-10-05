@@ -1,10 +1,10 @@
 package kr.kro.backas.certification;
 
+import kr.kro.backas.config.Config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import kr.kro.backas.Main;
-import kr.kro.backas.SharedConstant;
 import kr.kro.backas.util.FileUtil;
 import kr.kro.backas.util.MailUtil;
 import kr.kro.backas.util.MemberUtil;
@@ -41,7 +41,7 @@ public class CertificationManager {
 
     public CertificationManager(JDA discordAPI) throws IOException {
         this.role = discordAPI.getRoleById(1120505896297050152L);
-        if (this.role == null && !SharedConstant.ON_DEV) throw new IOException("역할을 찾을 수 없습니다.");
+        if (this.role == null && !Config.get().bot().dev()) throw new IOException("역할을 찾을 수 없습니다.");
         this.emails = new HashMap<>();
         this.codes = new HashMap<>();
         this.failed = new HashSet<>();
@@ -80,7 +80,7 @@ public class CertificationManager {
                             "/인증 [대구대학교 이메일]",
                             "```해당 대구대학교 이메일로 인증 코드를 받습니다\n" +
                                     "ex) /인증 abc123@daegu.ac.kr```", false)
-                    .setFooter(SharedConstant.RELEASE_VERSION)
+                    .setFooter(Config.get().bot().version())
                     .build()
             ).queue();
             return;
@@ -231,7 +231,7 @@ public class CertificationManager {
                                     "비공개"/*email*/,
                                     user.getIdLong(),
                                     new SimpleDateFormat("yyyy-MM-dd hh:mm:ss.SSS")
-                                            .format(Date.from(Instant.now(Clock.system(ZoneId.of(SharedConstant.ZONE_ID))))),
+                                            .format(Date.from(Instant.now(Clock.system(ZoneId.of(Config.get().bot().zone()))))),
                                     info.knownAs(),
                                     info.univCheck()),
                             false)
