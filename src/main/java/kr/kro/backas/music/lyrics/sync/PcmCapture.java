@@ -44,6 +44,10 @@ public final class PcmCapture {
         return count * 1000L / outputRate;
     }
 
+    public synchronized byte[] snapshot() {
+        return toWav(samples, count, outputRate);
+    }
+
     public FloatPcmAudioFilter tap(FloatPcmAudioFilter downstream) {
         return new Tap(downstream);
     }
