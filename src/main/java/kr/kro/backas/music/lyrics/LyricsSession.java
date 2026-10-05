@@ -34,7 +34,7 @@ public class LyricsSession {
     public static final long MIN_EDIT_INTERVAL_MS = 1200;
     private static final long CLOCK_EDIT_INTERVAL_MS = 800;
     private static final long POST_EDIT_GAP_MS = 500;
-    public static final long DEFAULT_OFFSET_MS = 600;
+    public static final long DEFAULT_OFFSET_MS = 0;
     public static final String TRANSLATING_NOTE = "번역 중...";
     private static final String BLANK = "​";
     private static final String WIDTH_FILLER = "⠀".repeat(120);
@@ -205,7 +205,9 @@ public class LyricsSession {
                 return;
             }
             if (client.isPaused()) return;
-            long position = (long) (client.getRealPositionMs() + offsetMs * client.getCurrentPlaySpeed());
+            long channelId = surface.channelId();
+            long position = (long) (client.getRealPositionMs()
+                    + (EditLatency.leadMs(channelId) + offsetMs) * client.getCurrentPlaySpeed());
             int index = indexAt(position);
             String translation = translationFor(index);
             boolean pending = isPendingTranslation(index, translation);
@@ -215,7 +217,6 @@ public class LyricsSession {
             String clock = playbackClock(client, track);
             if (clockOnly && (clock.equals(shownClock) || !hasRoomBeforeNextLine(index, position))) return;
             long now = System.currentTimeMillis();
-            long channelId = surface.channelId();
             if (clockOnly) {
                 if (now - lastEditAt < CLOCK_EDIT_INTERVAL_MS || !EditRateLimiter.extrasAllowed(channelId)) return;
             } else if (now - lastContentEditAt < MIN_EDIT_INTERVAL_MS || now - lastEditAt < POST_EDIT_GAP_MS) {
@@ -240,7 +241,10 @@ public class LyricsSession {
             surface.edit(view(index, translation, null, pending), now + EditRateLimiter.EDIT_DEADLINE_MS)
                     .whenComplete((result, error) -> {
                         editInFlightSince.compareAndSet(now, 0);
-                        if (error == null) return;
+                        if (error == null) {
+                            EditLatency.record(channelId, System.currentTimeMillis() - now);
+                            return;
+                        }
                         if (TrackCard.isGone(error)) {
                             LOGGER.info("lyrics message for {} was deleted, stopping until the next track", track.getInfo().title);
                             halt();
