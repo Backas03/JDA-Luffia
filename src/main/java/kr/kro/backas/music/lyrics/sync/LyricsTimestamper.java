@@ -39,6 +39,10 @@ public final class LyricsTimestamper {
     }
 
     public static Optional<Result> timestamp(List<String> lines, List<WhisperClient.Word> words, long durationMs) {
+        return timestamp(lines, words, durationMs, false);
+    }
+
+    public static Optional<Result> timestamp(List<String> lines, List<WhisperClient.Word> words, long durationMs, boolean partial) {
         List<Integer> tokenIndex = new ArrayList<>();
         List<WhisperClient.Word> tokenWords = new ArrayList<>();
         StringBuilder transcript = new StringBuilder();
@@ -149,7 +153,7 @@ public final class LyricsTimestamper {
             line = nextLine;
             token = nextToken;
         }
-        if (matchedCount < MIN_MATCHED || matchedCount < count * MIN_MATCHED_RATIO) return Optional.empty();
+        if (matchedCount < MIN_MATCHED || (!partial && matchedCount < count * MIN_MATCHED_RATIO)) return Optional.empty();
 
         for (int i = 0; i < count; i++) {
             if (matched[i]) times[i] = Math.max(0, times[i] - LINE_LEAD_MS);

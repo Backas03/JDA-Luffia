@@ -23,6 +23,9 @@ public final class ScratchCapture {
     public record Captured(byte[] wav, long capturedMs) {
     }
 
+    public record Progressive(CompletableFuture<PcmCapture> capture, CompletableFuture<Captured> done) {
+    }
+
     private static final Logger LOGGER = LoggerFactory.getLogger(ScratchCapture.class);
     private static final Semaphore PERMITS = new Semaphore(2);
     private static final long POLL_MS = 500;
@@ -34,11 +37,20 @@ public final class ScratchCapture {
     }
 
     public static CompletableFuture<Captured> capture(AudioPlayerManager manager, AudioTrack track, int seconds) {
-        return CompletableFuture.supplyAsync(() -> decode(manager, track, seconds), TranslationJobs.EXECUTOR);
+        return CompletableFuture.supplyAsync(() -> decode(manager, track, seconds, null), TranslationJobs.EXECUTOR);
+    }
+
+    public static Progressive start(AudioPlayerManager manager, AudioTrack track, int seconds) {
+        CompletableFuture<PcmCapture> capture = new CompletableFuture<>();
+        CompletableFuture<Captured> done = CompletableFuture.supplyAsync(() -> decode(manager, track, seconds, capture), TranslationJobs.EXECUTOR);
+        done.whenComplete((result, error) -> {
+            if (!capture.isDone()) capture.complete(null);
+        });
+        return new Progressive(capture, done);
     }
 
     @Nullable
-    static Captured decode(AudioPlayerManager manager, AudioTrack track, int seconds) {
+    static Captured decode(AudioPlayerManager manager, AudioTrack track, int seconds, @Nullable CompletableFuture<PcmCapture> onCapture) {
         AtomicReference<PcmCapture> holder = new AtomicReference<>();
         AudioPlayer player = manager.createPlayer();
         try {
@@ -46,8 +58,9 @@ public final class ScratchCapture {
             try {
                 player.setFilterFactory((scratchTrack, format, output) -> {
                     PcmCapture capture = new PcmCapture(scratchTrack, format.sampleRate, seconds);
-                    holder.set(capture);
-                    return List.<AudioFilter>of(capture.tap(output));
+                    if (holder.compareAndSet(null, capture) && onCapture != null) onCapture.complete(capture);
+                    PcmCapture current = holder.get();
+                    return List.<AudioFilter>of(current.tap(output));
                 });
                 AudioTrack clone = track.makeClone();
                 if (!player.startTrack(clone, false)) return null;
