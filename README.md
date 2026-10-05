@@ -89,75 +89,45 @@
   }
   ```
 ## 봇 사용방법
-### 1. config.yaml 에 토큰과 서버 주소를 적습니다
-봇 설정은 모두 ``config.yaml`` 파일 하나에서 합니다. 기본값은 jar 안의 [src/main/resources/config.yaml](src/main/resources/config.yaml) 에 있고, 봇을 실행하는 폴더(작업 디렉터리)의 ``config.yaml`` 에 적은 값이 기본값 위에 덮어써집니다. 다른 위치의 파일을 쓰려면 JVM 옵션 ``-Dluffia.config=<경로>`` 를 줍니다.
-- ``config.yaml`` 이 없는 상태로 처음 실행하면 기본값 전체를 복사해 파일을 만들어 줍니다.
-- 디스코드 토큰이 비어 있으면 어떤 키가 비었는지 출력하고 종료합니다 (``bot.dev`` 가 ``false`` 면 ``discord.token``, ``true`` 면 ``discord.dev-token``). 값을 채운 뒤 다시 실행합니다.
-- 파일에 적지 않은 키는 기본값을 쓰므로 바꿀 키만 적어도 됩니다. 하위 항목은 키 단위로 합쳐지고, 목록은 파일에 적은 것으로 통째로 바뀝니다.
-- 프로젝트 루트의 ``config.yaml`` 은 ``.gitignore`` 에 들어 있습니다. 토큰과 API 키가 들어가므로 저장소에 올리지 마세요.
-- 봇이 켜질 때 한 번만 읽으므로 고친 뒤에는 봇을 재시작합니다.
+### 1. config.yaml 작성
+실행 폴더의 ``config.yaml`` 에 설정을 적습니다. 없으면 첫 실행 때 기본값으로 만들어 주고, 적지 않은 키는 [기본값](src/main/resources/config.yaml)을 씁니다. 다른 경로는 ``-Dluffia.config=<경로>`` 로 지정합니다. 토큰이 들어가니 커밋하지 마세요.
 
 ```yaml
-bot:
-  dev: false
-
 discord:
   token: "<봇 토큰>"
-  dev-token: ""
   music-bot-tokens: []
   service-guilds: []
-
 riot:
-  api-key: "<라이엇 API 키>"
-
+  api-key: ""
 sources:
   spotify:
     client-id: ""
     client-secret: ""
     refresh-token: ""
-
 llm:
   endpoints:
     - url: http://127.0.0.1:8765
-
 whisper:
   endpoints: []
 ```
 
 | 키 | 설명 |
 |---|---|
-| ``bot.dev`` | ``true`` 면 ``discord.dev-token`` 으로 로그인합니다 (개발용 봇). 기본 ``false`` |
 | ``discord.token`` | 봇 토큰 (필수) |
-| ``discord.dev-token`` | ``bot.dev`` 가 ``true`` 일 때 쓸 봇 토큰. 개발용 봇을 쓰지 않으면 비워 둡니다 |
-| ``discord.music-bot-tokens`` | 한 서버의 여러 음성채팅방에서 동시에 재생하기 위한 추가 노래봇 토큰 목록 (아래 "뮤직 플레이어 기능" 참고) |
-| ``discord.service-guilds`` | 명령어를 받을 서버 id 목록 (예: ``[123456789012345678]``). 비어 있으면 봇이 초대된 모든 서버에서 받습니다 |
-| ``riot.api-key`` | 롤 전적 검색용 라이엇 API 키 |
-| ``sources.spotify.client-id``<br>``sources.spotify.client-secret`` | 스포티파이 링크/검색 지원용. [Spotify 개발자 대시보드](https://developer.spotify.com/dashboard) 에서 앱을 만들고 발급받습니다. 비워 두면 스포티파이 기능만 꺼지고 유튜브는 정상 동작합니다. 2026년 2월 이후 Development Mode 앱은 소유자 계정에 Spotify Premium 이 필요합니다 |
-| ``sources.spotify.refresh-token`` | 스포티파이 플레이리스트 링크 지원용. 아래 "스포티파이 플레이리스트 설정" 을 참고해 발급받습니다. 비워 두면 플레이리스트만 비활성화됩니다 |
-| ``llm.endpoints``<br>``llm.fallback``<br>``llm.model-override`` | 가사 한국어 번역과 ``/ai``, ``/ai셔플``, 연속 추천에 쓰는 LLM 서버. 아래 "가사 번역 설정" 참고. 비워 두면 번역과 AI 기능만 비활성화됩니다 |
-| ``whisper.endpoints`` | 가사 싱크 자동 보정과 AI 가사 변환에 쓰는 음성 인식 서버. 아래 "Whisper 서버 설정" 참고. 비워 두면 두 기능만 꺼집니다 |
+| ``bot.dev``, ``discord.dev-token`` | ``bot.dev: true`` 면 개발용 토큰으로 로그인 |
+| ``discord.music-bot-tokens`` | 추가 노래봇 토큰 |
+| ``discord.service-guilds`` | 명령어를 받을 서버 id. 비우면 모든 서버 |
+| ``riot.api-key`` | 롤 전적 검색 |
+| ``sources.spotify.*`` | 스포티파이 지원. 비우면 스포티파이만 꺼짐 (앱 소유자 Premium 필요) |
+| ``llm.*`` | 가사 번역·AI 서버. 아래 "가사 번역 설정" |
+| ``whisper.endpoints`` | 가사 싱크 보정·AI 가사 변환. 아래 "Whisper 서버 설정" |
 
-그 밖의 키(볼륨 기본값, 가사 표시 간격, 캐시 위치 등)는 [기본 config.yaml](src/main/resources/config.yaml) 에서 확인할 수 있습니다.
+모든 키는 ``LUFFIA_<경로>`` 환경 변수로 덮어쓸 수 있습니다 (예: ``LUFFIA_DISCORD_TOKEN``, 목록은 쉼표 구분). ``llm.endpoints``, ``whisper.endpoints`` 는 파일에만 적을 수 있습니다.
 
-#### 환경 변수로 덮어쓰기
-모든 키는 ``LUFFIA_`` 뒤에 키 경로를 대문자로 쓰고 ``.`` 과 ``-`` 를 ``_`` 로 바꾼 이름의 환경 변수로 덮어쓸 수 있습니다. 환경 변수가 ``config.yaml`` 보다 우선하고, 목록은 쉼표로 구분합니다. 기본 config.yaml 에 없는 키에 해당하는 환경 변수는 경고만 남기고 무시합니다.
-
-| 키 | 환경 변수 |
-|---|---|
-| ``discord.token`` | ``LUFFIA_DISCORD_TOKEN`` |
-| ``discord.music-bot-tokens`` | ``LUFFIA_DISCORD_MUSIC_BOT_TOKENS=<토큰1>,<토큰2>`` |
-| ``discord.service-guilds`` | ``LUFFIA_DISCORD_SERVICE_GUILDS=<서버 id1>,<서버 id2>`` |
-| ``bot.dev`` | ``LUFFIA_BOT_DEV=true`` |
-| ``llm.model-override`` | ``LUFFIA_LLM_MODEL_OVERRIDE`` |
-| ``llm.fallback.start-command`` | ``LUFFIA_LLM_FALLBACK_START_COMMAND`` |
-
-``llm.endpoints`` 와 ``whisper.endpoints`` 처럼 항목마다 여러 값을 가진 목록은 환경 변수로 넣을 수 없으므로 ``config.yaml`` 에 적습니다.
-
-### 2. 봇을 실행하려면 ```./gradlew run``` 을 입력합니다 </br>
+### 2. 실행
 - JDK 25 이상이 필요합니다. Discord 음성 채널이 2026년 3월부터 DAVE(종단간 암호화)를 필수로 요구하며, 이를 구현한 JDAVE 라이브러리가 Java 25 이상에서만 동작합니다.
-- ```./gradlew run``` 은 필요한 JVM 옵션(--enable-native-access=ALL-UNNAMED)을 자동으로 넣습니다.
-- 서버에 배포할 때는 ```./gradlew fatJar``` 로 ```build/libs/JDA-Luffia-1.0.0-SNAPSHOT-all.jar``` 를 만들고 ```java -Dfile.encoding=UTF-8 -jar JDA-Luffia-1.0.0-SNAPSHOT-all.jar``` 로 실행합니다. (매니페스트에 네이티브 접근 옵션이 포함되어 있습니다)
-- ``config.yaml`` 은 실행한 폴더에서 찾으므로 jar 와 같은 폴더에서 실행하거나 ```java -Dfile.encoding=UTF-8 -Dluffia.config=/경로/config.yaml -jar JDA-Luffia-1.0.0-SNAPSHOT-all.jar``` 처럼 경로를 지정합니다. ``./gradlew run`` 은 프로젝트 루트의 ``config.yaml`` 을 읽습니다.
+- 개발 중에는 ```./gradlew run``` 으로 실행합니다. 필요한 JVM 옵션(--enable-native-access=ALL-UNNAMED)을 자동으로 넣습니다.
+- 서버에 배포할 때는 ```./gradlew fatJar``` 로 ```build/libs/JDA-Luffia-1.0.0-SNAPSHOT-all.jar``` 를 만들고, ``config.yaml`` 이 있는 폴더에서 ```java -Dfile.encoding=UTF-8 -jar JDA-Luffia-1.0.0-SNAPSHOT-all.jar``` 로 실행합니다.
 ## 기능 소개
 ### 1. 이메일 본인인증 기능
  - 이메일로 인증 코드를 받아 본인 인증을 진행 할 수 있습니다
@@ -179,28 +149,14 @@ whisper:
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/8850d664-b12c-4569-b403-59e358bb796c)
 ![image](https://github.com/Backas03/JDA-Luffia/assets/71801733/95db993f-c22c-4c16-86cd-f8f3a28da4b5) </br>
 
-메인 봇 자체가 노래봇 역할을 하므로 별도 설정 없이 초대된 모든 서버에서 서버당 음성채팅방 하나씩 재생됩니다. 한 서버에서 여러 음성채팅방을 동시에 서비스하려면 봇 계정이 채널 수만큼 필요합니다. ``config.yaml`` 의 ``discord.music-bot-tokens`` 에 추가 봇 토큰을 넣고 그 봇들도 서버에 초대하면, 서버마다 초대된 봇 수만큼 음성채팅방을 동시에 쓸 수 있습니다. 로그인에 실패한 토큰은 경고만 남기고 건너뜁니다. </br>
-- config.yaml
-```yaml
-discord:
-  music-bot-tokens:
-    - "<추가 노래봇 1 토큰>"
-    - "<추가 노래봇 2 토큰>"
-```
+메인 봇 자체가 노래봇 역할을 하므로 별도 설정 없이 초대된 모든 서버에서 서버당 음성채팅방 하나씩 재생됩니다. 한 서버에서 여러 음성채팅방을 동시에 서비스하려면 봇 계정이 채널 수만큼 필요합니다. ``discord.music-bot-tokens`` 에 추가 봇 토큰을 넣고 그 봇들도 서버에 초대하면 됩니다. 로그인에 실패한 토큰은 건너뜁니다. </br>
 
 
 #### 스포티파이 플레이리스트 설정
 2026년 2월 Spotify API 개편 이후 플레이리스트 곡 목록은 사용자 로그인 토큰이 있어야만 읽을 수 있습니다. 한 번만 아래 순서로 설정하면 됩니다.
 1. Spotify 개발자 대시보드의 앱 설정에서 Redirect URI 에 ``http://127.0.0.1:8888/callback`` 을 추가합니다.
-2. 프로젝트 루트의 ``config.yaml`` 에 ``sources.spotify.client-id`` 와 ``client-secret`` 을 먼저 채운 뒤 ``./gradlew spotifyLogin`` 을 실행하고, 출력된 주소를 브라우저에서 열어 Spotify 계정으로 로그인합니다.
-3. 터미널에 출력된 refresh token 을 ``config.yaml`` 의 ``sources.spotify.refresh-token`` 에 넣고 봇을 다시 시작합니다.
-```yaml
-sources:
-  spotify:
-    client-id: "<클라이언트 ID>"
-    client-secret: "<클라이언트 시크릿>"
-    refresh-token: "<발급받은 refresh token>"
-```
+2. ``sources.spotify.client-id`` / ``client-secret`` 을 채운 뒤 ``./gradlew spotifyLogin`` 을 실행하고, 출력된 주소에서 Spotify 계정으로 로그인합니다.
+3. 출력된 refresh token 을 ``sources.spotify.refresh-token`` 에 넣고 봇을 재시작합니다.
 
 로그인한 계정이 만들었거나 라이브러리에 저장한 플레이리스트만 읽을 수 있습니다. 다른 사람의 플레이리스트를 재생하려면 해당 계정에서 먼저 저장해 두어야 합니다.
 
@@ -210,67 +166,40 @@ sources:
 **A. LLM (권장, 품질 좋음)**: llama.cpp + Tri-7B(트릴리온랩스, 한·영·일 특화) 4비트. RAM 약 6GB, 6코어 CPU 기준 5줄에 10초 안팎. 일본어·영어 가사를 자연스러운 한국어로 옮깁니다. 다른 GGUF 를 쓰려면 ``MODEL_URL``/``MODEL_FILE`` 환경변수로 바꿀 수 있습니다.
 1. ``translator/llm/setup.sh`` 실행 (llama.cpp 바이너리 17MB + 모델 4.7GB 다운로드, 한 번만)
 2. ``translator/llm/run.sh`` 로 실행 (기본 127.0.0.1:8765, ``TRANSLATOR_PORT`` 로 변경, ``LLM_THREADS`` 로 생성 스레드(기본 6, 물리 코어 수), ``LLM_THREADS_BATCH`` 로 프롬프트 처리 스레드(기본 12) 조정. ``nice`` 우선순위 10으로 실행되어 같은 머신의 다른 서버에 CPU 를 양보하며 ``LLM_NICE`` 로 조정. llama-server 의 호스트 메모리 프롬프트 캐시는 곡마다 프롬프트가 달라 쓸모가 없고 기본값 8GB 까지 계속 쌓이므로 ``--cache-ram 0`` 으로 꺼 두었으며 ``LLM_CACHE_RAM`` 으로 MiB 단위 조정 가능)
-3. ``config.yaml`` 의 ``llm.endpoints`` 에 ``http://127.0.0.1:8765`` 를 넣고 봇 재시작
-```yaml
-llm:
-  endpoints:
-    - url: http://127.0.0.1:8765
-```
+3. ``llm.endpoints`` 에 ``url: http://127.0.0.1:8765`` 를 넣고 봇 재시작
 
-**GPU PC 를 같이 쓰는 경우**: ``llm.endpoints`` 에 GPU 서버들을 적으면 모두 **동시에** 쓰이고, ``llm.fallback.url`` 에 적은 CPU 예비 서버는 GPU 가 모두 꺼졌을 때만 씁니다. ``llm.fallback.url`` 을 비워 두면 ``llm.endpoints`` 가 2개 이상일 때 마지막 항목이 CPU 예비 서버가 됩니다. 꺼져 있거나 연결이 끊긴 서버는 30초 동안 건너뛰고, 번역 중에 끊기면 같은 요청을 다른 서버로 다시 보냅니다. 끊겼던 서버는 요청이 없어도 ``llm.recheck-seconds``(기본 30초)마다 다시 확인해, 살아나면 바로 다시 쓰고 속도를 측정한 적이 없으면 한 번 측정합니다. 서버를 적는 형식과 분배 방식은 아래 "여러 GPU 서버 동시 사용" 을 참고하세요.
-```yaml
-llm:
-  endpoints:
-    - url: http://gpu-pc:8765
-  fallback:
-    url: http://127.0.0.1:8765
-```
+**GPU PC 를 같이 쓰는 경우**: ``llm.endpoints`` 의 GPU 서버들은 동시에 쓰고, CPU 예비 서버(``llm.fallback.url``)는 GPU 가 모두 꺼졌을 때만 씁니다. 끊긴 서버는 30초 건너뛰고, 번역 중에 끊기면 다른 서버로 다시 보냅니다. 형식은 아래 "여러 GPU 서버 동시 사용" 참고.
 
 GPU PC(Windows) 쪽은 llama.cpp 릴리스에서 ``llama-*-bin-win-cuda-*-x64.zip`` 과 같은 릴리스의 ``cudart-*.zip`` 을 받아 ``translator/llm/bin`` 에 풀고, 모델을 ``translator/llm/models`` 에 둔 뒤 ``translator/llm/run-gpu.bat`` 로 실행합니다. 이 스크립트는 ``--host 0.0.0.0`` 과 ``-ngl 99`` 로 띄우므로 Windows 방화벽에서 8765 포트 인바운드를 허용해야 하고, 공유기 포트포워딩은 하지 않습니다. 공유기에서 GPU PC 의 IP 를 고정해 두고 절전 모드를 끄세요.
 
 **B. NLLB (가볍지만 가사 품질 낮음)**: Meta NLLB-200 을 CTranslate2 로 실행. Python 3.10 이상 필요.
 1. ``translator/setup.sh`` 실행 (모델 다운로드와 int8 변환, 한 번만)
 2. ``translator/run.sh`` 로 실행
-3. ``config.yaml`` 의 ``llm.endpoints`` 에 같은 주소를 넣고 봇 재시작
+3. ``llm.endpoints`` 에 같은 주소를 넣고 봇 재시작
 
 **C. Ollama (GPU 권장, 가장 빠름)**: GPU 가 있는 머신에서 Ollama 로 실행. VRAM 16GB 기준 ``gemma4:12b`` 권장.
 1. [Ollama 설치](https://ollama.com/download) 후 ``ollama pull gemma4:12b`` (약 7.6GB, 한 번만)
 2. 환경변수 ``OLLAMA_CONTEXT_LENGTH=8192``, ``OLLAMA_KEEP_ALIVE=1h`` 를 설정하고 Ollama 재시작 (기본 컨텍스트가 짧아 긴 가사가 잘릴 수 있고, 유휴 시 모델이 내려가는 것을 방지)
-3. ``config.yaml`` 의 ``llm.endpoints`` 에 ``http://127.0.0.1:11434`` 를 넣고 봇 재시작 (봇이 다른 머신에 있으면 Ollama 쪽에 ``OLLAMA_HOST=0.0.0.0`` 설정 후 해당 머신 주소 사용)
+3. ``llm.endpoints`` 에 ``url: http://127.0.0.1:11434`` 를 넣고 봇 재시작 (봇이 다른 머신에 있으면 Ollama 쪽에 ``OLLAMA_HOST=0.0.0.0`` 설정 후 해당 머신 주소 사용)
 
-모델이 여러 개 설치되어 있으면 ``llm.model-override`` 로 사용할 모델을 고정할 수 있습니다. 서버마다 다른 모델을 쓰려면 ``llm.endpoints`` 항목의 ``model`` 을 적으며, ``model`` 이 ``model-override`` 보다 우선합니다. 둘 다 비어 있거나 ``model-override`` 에 적은 모델이 그 서버에 없으면 서버가 알려주는 첫 번째 모델을 사용합니다.
-```yaml
-llm:
-  endpoints:
-    - url: http://127.0.0.1:11434
-  model-override: gemma4:12b
-```
+모델이 여러 개 설치되어 있으면 ``llm.model-override`` (예: ``gemma4:12b``) 로 고정합니다. 서버별 ``model`` 이 있으면 그쪽이 우선이고, 둘 다 없으면 서버의 첫 모델을 씁니다.
 
 #### 여러 GPU 서버 동시 사용
-``llm.endpoints`` 에 서버마다 항목을 하나씩 적습니다. ``url`` 만 필수이고 나머지는 생략할 수 있으며, 서버마다 모델이 달라도 됩니다.
-
-| 항목 | 설명 |
-|---|---|
-| ``url`` | 서버 주소 |
-| ``label`` | ``/ai관리 상태`` 와 번역 상태 줄에 보일 표시이름. 생략하면 주소의 호스트 이름 |
-| ``model`` | 이 서버에서 쓸 모델명. 생략하면 ``llm.model-override`` 또는 서버의 첫 모델 |
-| ``slots`` | 자리수. 생략하면 1 |
-
-CPU 예비 서버는 ``llm.fallback`` 에 따로 적습니다. ``url`` 과 ``label`` 만 받고, 모델은 ``llm.model-override`` 또는 서버의 첫 모델을 씁니다.
+``llm.endpoints`` 항목마다 ``url`` (필수), ``label`` (표시이름, 기본 호스트명), ``model``, ``slots`` (자리수, 기본 1) 를 적습니다.
 ```yaml
 llm:
   endpoints:
     - url: http://gpu-pc-1:11434
-      label: NVIDIA GeForce RTX 5080
+      label: RTX 5080
       model: luffia
       slots: 4
     - url: http://gpu-pc-2:11434
-      label: AMD Radeon RX 7800 XT
-      model: luffia
-      slots: 1
+      label: RX 7800 XT
   fallback:
     url: http://127.0.0.1:8765
-    label: AMD Ryzen 5 5600G
+    label: CPU
+    start-command: /home/<사용자>/JDA-Luffia/translator/llm/run.sh
+    stop-command: pkill -f llama-server
 ```
 - **자리수** (``slots``): 그 서버에 동시에 넣을 요청 수 (1~8). Ollama 의 ``OLLAMA_NUM_PARALLEL`` 과 같은 값으로 맞춥니다. ``OLLAMA_NUM_PARALLEL`` 을 설정하지 않은 Ollama 는 요청을 한 번에 하나씩 처리하므로 1 로 둡니다. 자리수를 올리면 동시 요청마다 컨텍스트 메모리가 추가되므로 ``ollama ps`` 에서 ``100% GPU`` 로 표시되는지 확인하세요. 일부가 CPU 로 넘어가면 오히려 크게 느려집니다
 
@@ -284,7 +213,7 @@ llm:
   | 4 | 10GB | 74 | 각 68~76, 합계 약 140 | 각 75, 합계 약 210 | 각 70, 합계 약 260 |
 
   자리수 4 에서 12줄짜리 곡 6개 미리 번역: 자리수 1 일 때 44.9초 → 19.4초
-- **CPU 예비 서버**: ``llm.fallback.url`` 을 적으면 그 서버가 예비가 되고, ``llm.endpoints`` 의 서버는 모두 GPU 로 취급합니다. ``llm.fallback.url`` 이 비어 있으면 ``llm.endpoints`` 가 2개 이상일 때 마지막 항목이 예비이고, 1개뿐이면 예비 서버 없이 그 서버만 씁니다. 예비 서버는 GPU 가 하나라도 살아 있으면 쓰지 않습니다
+- **CPU 예비 서버**: ``llm.fallback.url``. 비우면 ``llm.endpoints`` 가 2개 이상일 때 마지막 항목이 예비가 됩니다. GPU 가 하나라도 살아 있으면 쓰지 않습니다
 - **분배 방식**: 봇이 켜질 때 GPU 마다 짧은 요청으로 혼자일 때의 속도와 자리수만큼 동시에 보냈을 때의 속도를 재고, 이후 요청이 끝날 때마다 "동시 요청 수별 token/s" 를 학습합니다. 새 요청은 "이 요청이 걸릴 시간 + 이미 돌고 있는 요청들이 느려지는 시간" 이 가장 작은 GPU 로 보냅니다. 예) 5080 에 1개가 돌고 있고 7800 XT 가 비어 있으면, 5080 에 겹쳐 둘 다 느려지는 것보다 7800 XT 로 보내는 쪽을 고릅니다
 - **우선순위**: 현재 곡 가사 번역과 ``/ai``·``/ai셔플`` 은 사용자 앞 작업, 다음 곡 미리 번역과 연속 추천 선별은 백그라운드 작업입니다. 백그라운드는 사용자 앞 작업을 30% 넘게 느리게 만드는 자리에는 들어가지 않고 기다립니다. 자리가 모두 백그라운드로 차 있을 때 사용자 앞 작업이 오면 백그라운드 하나를 중단시키고 자리를 넘기며, 중단된 번역은 이어서 다시 진행됩니다
 - ``/ai셔플``, ``/ai`` 의 곡 분류는 대기열 앞에서부터 GPU 당 300곡까지 분석합니다 (GPU 2대면 600곡, 넘는 곡은 뒤에 무작위로 둠). 20곡씩 묶어 살아 있는 GPU 들에 묶음을 번갈아 똑같이 나눠 주고, GPU 마다 자기 자리 수만큼 동시에 처리합니다. 맡은 GPU 가 도중에 꺼지면 그 묶음은 다른 서버로 넘깁니다. 미리 번역은 대기열 곡들을 전체 자리 수만큼 동시에 처리합니다
@@ -298,15 +227,7 @@ PARAMETER num_ctx 8192
 
 Linux GPU 서버에서 systemd 서비스 대신 tmux 로 띄우려면 ``sudo systemctl disable --now ollama`` 로 서비스를 끄고 ``bash translator/ollama/run.sh`` 를 실행합니다. ``ollama`` 라는 tmux 세션을 만들어 왼쪽에는 홈 디렉터리 셸, 오른쪽에는 ``ollama serve`` 를 띄우고 바로 붙으며, 이미 떠 있으면 붙기만 합니다 (``Ctrl+B`` 다음 ``D`` 로 빠져나옴). 위 권장 설정을 기본값으로 넣고 (``OLLAMA_HOST=0.0.0.0:11434``, ``OLLAMA_CONTEXT_LENGTH=8192``, ``OLLAMA_KEEP_ALIVE=-1``, ``OLLAMA_NUM_PARALLEL=1``, ``OLLAMA_MAX_LOADED_MODELS=1``), 같은 이름의 환경변수로 값을 바꿀 수 있습니다 (예: ``OLLAMA_NUM_PARALLEL=4 bash translator/ollama/run.sh``). 서비스로 받아 둔 모델은 ``ollama`` 계정 아래에 있어 보이지 않으므로 띄운 뒤 ``ollama pull`` 을 한 번 더 해야 합니다. 끌 때는 ``bash translator/ollama/run.sh stop``, 재부팅 후 자동 실행은 ``crontab -e`` 에 ``@reboot bash /경로/translator/ollama/run.sh`` 를 추가합니다.
 
-**CPU 폴백 서버 자동 관리**: CPU 예비 서버가 있을 때 ``llm.fallback.start-command`` 에 CPU llama-server 실행 명령(예: ``/home/<사용자>/JDA-Luffia/translator/llm/run.sh``)을 넣어두면, 봇이 30초마다 GPU 서버들을 확인해 하나라도 살아 있으면 CPU 서버를 꺼서 코어를 돌려주고, GPU 가 모두 죽으면 CPU 서버를 자동으로 띄웁니다. 봇이 직접 띄우지 않은 기존 CPU 서버까지 끄려면 ``llm.fallback.stop-command`` 에 종료 명령(예: ``pkill -f llama-server``)을 추가로 지정합니다. ``start-command`` 가 비어 있으면 이 기능은 꺼져 있습니다. 명령은 ``/bin/sh -c`` 로 실행하므로 봇이 Linux 같은 유닉스 계열 OS 에서 돌 때만 동작합니다. GPU 장애 시 CPU 서버가 모델을 로드하는 동안(수십 초)은 번역이 잠시 실패할 수 있고, 로드가 끝나면 자동으로 이어집니다.
-```yaml
-llm:
-  fallback:
-    url: http://127.0.0.1:8765
-    label: CPU
-    start-command: /home/<사용자>/JDA-Luffia/translator/llm/run.sh
-    stop-command: pkill -f llama-server
-```
+**CPU 폴백 서버 자동 관리**: ``llm.fallback.start-command`` 를 적으면 봇이 30초마다 GPU 를 확인해, 살아 있으면 CPU 서버를 끄고 모두 죽으면 띄웁니다. 봇이 띄우지 않은 CPU 서버까지 끄려면 ``stop-command`` 도 적습니다. Linux 전용이며, CPU 서버가 모델을 로드하는 수십 초 동안은 번역이 잠시 실패할 수 있습니다.
 
 가사 하단에는 ``곡 제목 · 표시이름 | N token/s | 진행% (완료곡/전체곡)`` 형태로 현재 번역 상태가 표시됩니다. GPU 여러 대가 함께 일하고 있으면 GPU 마다 ``표시이름 | N token/s`` 를 한 줄씩 보여 주고, 진행률은 마지막 줄 끝에 붙습니다. 진행률은 현재 곡과 미리 번역해 두는 대기열 곡들을 곡당 같은 비중으로 합산한 값으로, 곡 안에서는 번역된 줄 수만큼 소수점으로 올라갑니다. 미리 번역은 GPU 가 하나라도 살아 있으면 대기열 앞 20곡, CPU 예비 서버만 남았으면 3곡까지 해 둡니다.
 
@@ -321,27 +242,15 @@ llm:
 영어 추임새·의성어·이모티콘만 있는 줄(``Oh, woo yeah``, ``Mwah!``, ``La la la``, ``:-D`` 등)은 한글로 옮기지 않고 번역 줄에도 영어 그대로 보여 줍니다. 처음 번역에서 영어 그대로 돌아온 줄만 모아 LLM 에 "소리뿐인 줄인지, 뜻이 있는 줄인지" 를 물어 보고, 소리뿐인 줄은 그대로 두고 뜻이 있는 줄은 다시 번역시킵니다(같은 줄은 한 번만 보냅니다). 그래도 한글 없이 돌아온 영어 줄은 영어 그대로 표시합니다. 뜻이 있는 영어 문장 속 추임새는 영어로 남깁니다(``Oh baby, 지금 떠나지 마``). 원문에서 같은 말이 반복되는 횟수(``はい はい はい``, ``ああああ``)와 번역의 반복 횟수가 다르면 원문 횟수에 맞춥니다. 한 줄에 여러 언어로 같은 말이 들어 있으면(``Merci 고마워 Thank you``) 부분마다 번역해 같은 횟수로 표시하고(``고마워 고마워 고마워``), 번역이 같은 말의 반복으로 나왔는데 횟수가 원문의 쉼표로 나뉜 부분 수나 문자 종류가 바뀌는 구간 수와 다르면 그 수에 맞춥니다. 번역 규칙이 바뀌어 이전 버전으로 저장된 번역 캐시(``cache/translations``)는 쓰지 않고 다시 번역합니다.
 
 #### Whisper 서버 설정
-``config.yaml`` 의 ``whisper.endpoints`` 에 음성 인식(Whisper) 서버를 적으면 가사 싱크 자동 보정과 AI 가사 변환이 켜집니다. 비어 있으면(기본값) 두 기능만 꺼지고 나머지 가사 기능은 그대로 동작합니다.
-- 서버는 OpenAI 호환 ``POST /v1/audio/transcriptions`` 로 wav 파일(``file``)과 언어(``language``)를 받아, 단어마다 ``word``·``start``·``end``(초 단위)가 들어 있는 ``words`` 배열을 JSON 으로 돌려줘야 합니다.
-- 서버마다 ``url`` 과 ``label``(로그에 보일 이름, 생략하면 주소의 호스트 이름)을 적습니다. 적은 순서대로 시도하고, 실패한 서버는 ``whisper.retry-failed-seconds``(기본 30초) 동안 건너뛰고 다음 서버로 넘어갑니다.
-```yaml
-whisper:
-  endpoints:
-    - url: http://gpu-pc:8000
-      label: GPU PC
-    - url: http://127.0.0.1:8000
-      label: CPU
-```
-- **싱크 자동 보정** (``whisper.auto-sync.enabled``, 기본 켜짐): 타임스탬프 가사가 있는 곡의 앞부분 오디오(``whisper.auto-sync.capture-seconds``, 기본 90초)를 받아 적어 가사 줄 시각과 맞춰 보고, 어긋난 만큼 오프셋을 자동으로 적용합니다. 결과는 곡마다 저장하고, 맞는 위치를 찾지 못한 곡은 ``whisper.auto-sync.none-retry-hours``(기본 6시간) 동안 다시 시도하지 않습니다.
-- **AI 가사 변환**: 타임스탬프 없이 전체 가사만 있는 곡의 오디오를 받아 적어, 줄마다 시각을 붙인 실시간 가사로 바꿉니다. ``whisper.convert.auto``(기본 켜짐)면 전체 가사를 표시할 때 자동으로 시작하고, 곡 카드의 ``AI 가사 변환`` 버튼으로도 시작할 수 있습니다. 곡 길이만큼, 최대 ``whisper.convert.max-seconds``(기본 900초)까지 받아 적습니다.
+``whisper.endpoints`` 에 서버(``url``, ``label``)를 적으면 가사 싱크 자동 보정과 AI 가사 변환(타임스탬프 없는 가사에 시각 붙이기)이 켜집니다. 앞에서부터 시도하고, 실패한 서버는 30초 건너뜁니다. 서버는 OpenAI 호환 ``/v1/audio/transcriptions`` 로 단어별 타임스탬프(``words``)를 돌려줘야 합니다.
 
 #### 디스크 캐시
-봇 실행 폴더 아래 ``cache/`` 에 결과를 저장해 재시작 후에도 바로 씁니다. 위치는 ``config.yaml`` 의 ``cache.dir`` 로 바꿀 수 있고(JVM 옵션 ``-Dluffia.cache.dir=경로`` 를 주면 그 값이 우선), 폴더를 지우면 캐시가 초기화됩니다.
+봇 실행 폴더 아래 ``cache/`` 에 결과를 저장해 재시작 후에도 바로 씁니다. 위치는 ``cache.dir`` 로 바꿀 수 있고, 폴더를 지우면 캐시가 초기화됩니다.
 - ``cache/translations/`` : 가사 번역 (원문 가사의 SHA-256 기준, 번역한 모델 이름 포함). 곡 번역이 끝나거나 중단될 때 저장
 - ``cache/lyrics/`` : LRCLIB 가사 조회 결과
 - ``cache/ai-classify.json``, ``cache/ai-tags.json`` : ``/ai`` 곡 분류와 ``/ai셔플`` 곡 태그 (각 2만 개까지). 바뀐 것이 있을 때 1분마다, 그리고 봇 종료 시 저장
 - ``cache/llm/speeds.json`` : 번역 서버별로 학습한 "동시 요청 수별 token/s" (서버 주소와 모델 이름 기준). 바뀐 것이 있을 때 30초마다 저장. 봇이 켜지면 이 값으로 바로 분배를 시작하고, 서버가 연결될 때마다 다시 측정한 값을 섞어 보정합니다. 저장된 모델과 설정한 모델명이 다르면 쓰지 않습니다
-- ``cache/lyrics-offsets/``, ``cache/ai-lyrics/`` : Whisper 싱크 자동 보정 결과와 AI 가사 변환 결과
+- ``cache/lyrics-offsets/``, ``cache/ai-lyrics/`` : Whisper 싱크 보정·AI 가사 변환 결과
 타임스탬프가 없어 전체 가사로 표시되는 곡은 원문을 먼저 띄운 뒤 번역이 끝나면 같은 메시지를 수정해 각 줄 아래에 번역을 끼워 넣습니다. (임베드 글자 제한을 넘는 뒷부분은 생략 표시)</br>
 </br>
 **본 데모 영상은 6코어 CPU로 LLM 모델을 돌리는 영상으로, GPU 사용 시 더 나은 퍼포먼스를 기대할 수 있습니다**
@@ -362,48 +271,7 @@ https://github.com/user-attachments/assets/5cb94339-9e2c-490b-86a9-42d63d0af4d4
 - !메이플정보 [닉네임] 으로 정보를 검색할 수 있습니다 (unstable ~~지원 중단~~) </br>
 
 ## 명령어 비활성화 방법
-Luffia.java 에서 끄려는 명령어의 ``registerSlashCommand`` / ``registerCommand`` 줄을 주석 처리하면 됩니다. 예를 들어 롤 전적 검색을 끄려면 ``this.commandManager.registerSlashCommand(new LOLUserInfoSlashCommand());`` 줄 앞에 ``//`` 를 붙입니다.
-- kr/kro/backas/Luffia.java
-```java
-public Luffia(JDA discordAPI) throws IOException, InterruptedException {
-    this.discordAPI = discordAPI;
+Luffia.java 에서 끄려는 명령어의 ``registerSlashCommand`` / ``registerCommand`` 줄을 주석 처리합니다.
 
-    this.commandManager = new CommandManager("!", this);
-
-    this.commandManager.registerSlashCommand(new PlaySlashCommand());
-    this.commandManager.registerSlashCommand(new QueueSlashCommand());
-    this.commandManager.registerSlashCommand(new QuitSlashCommand());
-    this.commandManager.registerSlashCommand(new SetRepeatModeSlashCommand());
-    this.commandManager.registerSlashCommand(new PlaySpeedSlashCommand());
-    this.commandManager.registerSlashCommand(new VolumeSlashCommand());
-    this.commandManager.registerSlashCommand(new LyricsSlashCommand());
-    this.commandManager.registerSlashCommand(new PauseOrResumeSlashCommand());
-    this.commandManager.registerSlashCommand(new SkipSlashCommand());
-    this.commandManager.registerSlashCommand(new ShuffleSlashCommand());
-    this.commandManager.registerSlashCommand(new AiSlashCommand());
-    this.commandManager.registerSlashCommand(new AiShuffleSlashCommand());
-    this.commandManager.registerSlashCommand(new AiAdminSlashCommand());
-    this.commandManager.registerSlashCommand(new EqualizerSlashCommand());
-    this.commandManager.registerSlashCommand(new KaraokeModeSlashCommand());
-    this.commandManager.registerSlashCommand(new LOLUserInfoSlashCommand());
-    this.commandManager.registerSlashCommand(new HelpSlashCommand());
-    this.commandManager.commitSlashCommands();
-
-    this.commandManager.registerCommand("도움말", new HelpCommand());
-    this.commandManager.registerCommand("메이플정보", new MapleUserInfoCommand());
-
-    LuffiaConfig config = Config.get();
-    ...
-}
-```
 ## 커멘드 prefix 변경방법
-Luffia.java 에서 ``this.commandManager = new CommandManager("!", this);`` 의 ``"!"`` 부분을 원하는 prefix 로 바꾸면 됩니다. 아래처럼 ``"&&"`` 로 바꾸면 ``!도움말`` 이 ``&&도움말`` 이 됩니다. 슬래시 명령어에는 영향이 없습니다.
-- kr/kro/backas/Luffia.java
-```java
-public Luffia(JDA discordAPI) throws IOException, InterruptedException {
-    this.discordAPI = discordAPI;
-
-    this.commandManager = new CommandManager("&&", this);
-    ...
-}
-```
+Luffia.java 의 ``new CommandManager("!", this)`` 에서 ``"!"`` 를 원하는 prefix 로 바꿉니다. 슬래시 명령어에는 영향이 없습니다.
