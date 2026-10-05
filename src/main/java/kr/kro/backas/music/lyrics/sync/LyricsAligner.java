@@ -18,7 +18,7 @@ public final class LyricsAligner {
 
     static final double MIN_SCORE = 0.55;
     static final int MIN_MATCHES = 3;
-    static final long MAX_SPREAD_MS = 600;
+    static final long MAX_DEVIATION_MS = 700;
     static final int MIN_LINE_CHARS = 4;
     static final long EDGE_MARGIN_MS = 1500;
     static final int MAX_LINES = 10;
@@ -70,16 +70,14 @@ public final class LyricsAligner {
 
         offsets.sort(Long::compare);
         long median = median(offsets);
-        long spread = offsets.get(offsets.size() - 1) - offsets.get(0);
-        if (spread > MAX_SPREAD_MS && offsets.size() >= 4) {
-            long first = Math.abs(offsets.get(0) - median);
-            long last = Math.abs(offsets.get(offsets.size() - 1) - median);
-            offsets.remove(first > last ? 0 : offsets.size() - 1);
-            median = median(offsets);
-            spread = offsets.get(offsets.size() - 1) - offsets.get(0);
+        List<Long> agreeing = new ArrayList<>();
+        for (long offset : offsets) {
+            if (Math.abs(offset - median) <= MAX_DEVIATION_MS) agreeing.add(offset);
         }
-        if (spread > MAX_SPREAD_MS) return Optional.empty();
-        return Optional.of(new Alignment(Math.round(median / 10.0) * 10, offsets.size(), spread));
+        if (agreeing.size() < required) return Optional.empty();
+        long refined = median(agreeing);
+        long spread = agreeing.get(agreeing.size() - 1) - agreeing.get(0);
+        return Optional.of(new Alignment(Math.round(refined / 10.0) * 10, agreeing.size(), spread));
     }
 
     private static long median(List<Long> sorted) {
