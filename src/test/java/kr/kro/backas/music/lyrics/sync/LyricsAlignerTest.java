@@ -89,10 +89,27 @@ class LyricsAlignerTest {
     }
 
     @Test
-    void ignoresLinesBeyondTheCapturedAudio() {
-        Optional<LyricsAligner.Alignment> result = LyricsAligner.align(sung(ENGLISH, 1_000), ENGLISH, 14_000);
+    void onlyExpectsMatchesForLinesThatFallInsideTheCapturedAudio() {
+        List<WhisperClient.Word> heard = new ArrayList<>();
+        for (WhisperClient.Word word : sung(ENGLISH, 1_000)) {
+            if (word.startMs() < 14_000) heard.add(word);
+        }
+        Optional<LyricsAligner.Alignment> result = LyricsAligner.align(heard, ENGLISH, 14_000);
         assertTrue(result.isPresent());
         assertEquals(3, result.get().matchedLines());
+        assertEquals(-1_000, result.get().offsetMs());
+    }
+
+    @Test
+    void acceptsTwoAgreeingLinesWhenTheVocalsStartLateInTheCapture() {
+        List<WhisperClient.Word> heard = new ArrayList<>();
+        for (WhisperClient.Word word : sung(ENGLISH, 13_000)) {
+            if (word.startMs() < 24_000) heard.add(word);
+        }
+        Optional<LyricsAligner.Alignment> result = LyricsAligner.align(heard, ENGLISH, 25_000);
+        assertTrue(result.isPresent());
+        assertEquals(-13_000, result.get().offsetMs());
+        assertEquals(2, result.get().matchedLines());
     }
 
     @Test

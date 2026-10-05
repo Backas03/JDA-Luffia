@@ -30,4 +30,18 @@ class LyricsOffsetsTest {
         assertEquals(LyricsOffsets.SOURCE_NONE, none.source());
         assertNull(store.get("other"));
     }
+
+    @Test
+    void ignoresEntriesWrittenByOlderAlignersOrStaleNoMatchResults() {
+        DiskCache cache = new DiskCache(tempDir);
+        LyricsOffsets store = new LyricsOffsets(cache);
+        cache.write("lyrics-offsets/old.json", new LyricsOffsets.Entry(-1_000, LyricsOffsets.SOURCE_AUTO, System.currentTimeMillis(), LyricsOffsets.VERSION - 1));
+        assertNull(store.get("old"));
+        cache.write("lyrics-offsets/stale.json", new LyricsOffsets.Entry(0, LyricsOffsets.SOURCE_NONE,
+                System.currentTimeMillis() - LyricsOffsets.NONE_RETRY_MS - 1, LyricsOffsets.VERSION));
+        assertNull(store.get("stale"));
+        cache.write("lyrics-offsets/fresh.json", new LyricsOffsets.Entry(0, LyricsOffsets.SOURCE_NONE,
+                System.currentTimeMillis(), LyricsOffsets.VERSION));
+        assertNotNull(store.get("fresh"));
+    }
 }
