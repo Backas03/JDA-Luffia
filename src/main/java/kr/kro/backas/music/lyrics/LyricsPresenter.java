@@ -7,11 +7,14 @@ import kr.kro.backas.music.ArtworkColors;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
+import kr.kro.backas.music.lyrics.sync.AiLyricsStore;
+import kr.kro.backas.music.lyrics.sync.LyricsConverter;
 import kr.kro.backas.music.TrackCard;
 import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.components.container.Container;
 import net.dv8tion.jda.api.components.container.ContainerChildComponent;
 import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
@@ -30,6 +33,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -157,7 +161,7 @@ public final class LyricsPresenter {
         MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
         return CompletableFuture.supplyAsync(() -> {
             try {
-                return controller.getLyricsClient().find(track.getInfo());
+                return AiLyricsStore.defaultStore().enrich(track.getIdentifier(), controller.getLyricsClient().find(track.getInfo()));
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -174,10 +178,25 @@ public final class LyricsPresenter {
         else client.stopLyrics("새 가사 표시로 대체되었습니다");
     }
 
+    public static void presentPlain(MusicPlayerClient client, AudioTrack track, TrackCard card, Lyrics lyrics) {
+        MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
+        Lyrics plain = new Lyrics(lyrics.trackName(), lyrics.artistName(), lyrics.plain(), List.of(), lyrics.instrumental());
+        showFull(client, track, plain, null, true,
+                new CardFullView(client, track, plain, card, controller.getLyricsExpansions(), controller.getLyricsConversions()),
+                controller.getTranslationClient());
+    }
+
+    public static void presentSynced(MusicPlayerClient client, AudioTrack track, TrackCard card, Lyrics lyrics) {
+        replaceSession(client, track);
+        startSession(client, track, lyrics, LyricsSurface.ofCard(card), client.getLyricsOffsetMs());
+    }
+
     private static void startSession(MusicPlayerClient client, AudioTrack track, Lyrics lyrics, LyricsSurface surface, long offsetMs) {
         MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
         LyricsSession session = new LyricsSession(client, track, lyrics, surface,
-                controller.getScheduler(), controller.getTranslationClient(), offsetMs);
+                controller.getLyricsScheduler(), controller.getTranslationClient(), offsetMs);
+        TrackCard card = surface.card();
+        if (card != null) card.claim(session);
         client.setLyricsSession(session);
         session.start();
     }
@@ -188,11 +207,11 @@ public final class LyricsPresenter {
             if (error != null) {
                 Throwable cause = error.getCause() == null ? error : error.getCause();
                 LOGGER.warn("lyrics lookup failed for {}", track.getInfo().title, cause);
-                card.close();
+                card.note(LYRICS_LOOKUP_FAILED_NOTE);
                 return;
             }
             if (hasNoLyrics(lyrics)) {
-                card.close();
+                card.note(NO_LYRICS_NOTE);
                 prefetchNext(client);
                 return;
             }
@@ -206,7 +225,8 @@ public final class LyricsPresenter {
                 return;
             }
             showFull(client, track, lyrics, null, true,
-                    new CardFullView(card, Main.getLuffia().getMusicPlayerController().getLyricsExpansions()), translator);
+                    new CardFullView(client, track, lyrics, card, Main.getLuffia().getMusicPlayerController().getLyricsExpansions(),
+                            Main.getLuffia().getMusicPlayerController().getLyricsConversions()), translator);
         });
     }
 
@@ -294,49 +314,130 @@ public final class LyricsPresenter {
         }
     }
 
-    private static final class CardFullView implements FullView, LyricsExpansions.Expandable {
+    private static final class CardFullView implements FullView, LyricsExpansions.Expandable, LyricsConversions.Convertible {
+        private final MusicPlayerClient client;
+        private final AudioTrack track;
+        private final Lyrics lyrics;
         private final TrackCard card;
         private final LyricsExpansions expansions;
+        private final LyricsConversions conversions;
         private final String token;
-        private volatile boolean expanded;
+        private volatile String convertToken;
+        private volatile boolean converting;
+        private volatile boolean superseded;
+        private volatile String convertNote;
         private volatile List<String> lines = List.of();
         private volatile Map<Integer, String> translations;
         private volatile String footer = "";
         private volatile String note;
 
-        private CardFullView(TrackCard card, LyricsExpansions expansions) {
+        private CardFullView(MusicPlayerClient client, AudioTrack track, Lyrics lyrics, TrackCard card,
+                             LyricsExpansions expansions, LyricsConversions conversions) {
+            this.client = client;
+            this.track = track;
+            this.lyrics = lyrics;
             this.card = card;
             this.expansions = expansions;
+            this.conversions = conversions;
             this.token = expansions.register(this);
+            card.claim(this);
+            boolean convertible = lyrics.hasPlain() && !lyrics.hasSynced() && !lyrics.aiTimed() && LyricsConverter.isAvailable();
+            this.convertToken = convertible ? conversions.register(this) : null;
+        }
+
+        @Override
+        public boolean isConverting() {
+            return converting;
+        }
+
+        @Override
+        public boolean isSuperseded() {
+            return superseded;
+        }
+
+        private synchronized boolean switchToSynced(Lyrics timed, boolean partial) {
+            if (superseded) {
+                LyricsSession current = client.getLyricsSession();
+                if (current != null && current.isForTrack(track)) {
+                    current.updateLyrics(timed);
+                    current.setConvertingPartial(partial);
+                }
+                return true;
+            }
+            if (!client.isCurrentTrack(track) || card.isClosed()) return false;
+            superseded = true;
+            expansions.release(token);
+            if (convertToken != null) conversions.release(convertToken);
+            presentSynced(client, track, card, timed);
+            LyricsSession session = client.getLyricsSession();
+            if (session != null && session.isForTrack(track)) session.setConvertingPartial(partial);
+            return true;
+        }
+
+        @Override
+        public void requestConversion() {
+            if (converting || superseded || convertToken == null) return;
+            CompletableFuture<Optional<Lyrics>> job = LyricsConverter.convert(client, track, lyrics, partialLyrics -> switchToSynced(partialLyrics, true));
+            if (!job.isDone()) {
+                converting = true;
+                convertNote = CONVERTING_NOTE;
+            }
+            job.whenComplete((result, error) -> {
+                if (error == null && result != null && result.isPresent()) {
+                    if (switchToSynced(result.get(), false)) return;
+                }
+                if (superseded) {
+                    LyricsSession current = client.getLyricsSession();
+                    if (current != null && current.isForTrack(track)) current.setConvertingPartial(false);
+                    return;
+                }
+                converting = false;
+                convertNote = CONVERSION_FAILED_NOTE;
+                conversions.release(convertToken);
+                convertToken = null;
+                card.edit(render(), System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS)
+                        .whenComplete((sent, editError) -> {
+                            if (editError != null) LOGGER.debug("failed to show conversion failure", editError);
+                        });
+            });
         }
 
         @Override
         public boolean isExpanded() {
-            return expanded;
+            return card.isLyricsExpanded();
         }
 
         @Override
         public void setExpanded(boolean expanded) {
-            this.expanded = expanded;
+            card.setLyricsExpanded(expanded);
         }
 
         @Override
         public Container render() {
             List<String> all = lines;
+            boolean expanded = card.isLyricsExpanded();
             boolean foldable = all.size() > FULL_PREVIEW_LINES;
             List<String> shown = foldable && !expanded ? all.subList(0, FULL_PREVIEW_LINES) : all;
             String hint = foldable && !expanded ? "\n-# 외 " + (all.size() - FULL_PREVIEW_LINES) + "줄" : "";
             List<ContainerChildComponent> body = new ArrayList<>();
-            body.add(TextDisplay.of(fullBody(shown, translations, footer, note, CARD_TEXT_BUDGET, hint)));
-            if (foldable) body.add(ActionRow.of(LyricsExpansions.button(token, expanded)));
+            String shownNote = convertNote != null ? convertNote : note;
+            body.add(TextDisplay.of(fullBody(shown, translations, footer, shownNote, CARD_TEXT_BUDGET, hint)));
+            List<Button> buttons = new ArrayList<>();
+            if (foldable) buttons.add(LyricsExpansions.button(token, expanded));
+            String convert = convertToken;
+            if (convert != null) buttons.add(LyricsConversions.button(convert, converting));
+            if (!buttons.isEmpty()) body.add(ActionRow.of(buttons));
             return card.frame(body);
         }
 
         @Override
         public CompletableFuture<?> show(AudioTrack track, List<String> lines, @Nullable Map<Integer, String> translations,
                                          String footer, @Nullable String note, long deadlineAt) {
+            if (superseded || !card.isPresentedBy(this)) return CompletableFuture.completedFuture(null);
             if (card.isClosed()) {
                 expansions.release(token);
+                String convert = convertToken;
+                if (convert != null) conversions.release(convert);
                 return CompletableFuture.completedFuture(null);
             }
             this.lines = lines;
@@ -410,7 +511,7 @@ public final class LyricsPresenter {
                         (index, text) -> editor.requestEdit(), TranslationJobs.songContext(track));
                 jobRef.set(job);
                 reportSongJob(client, track, job);
-                ScheduledFuture<?> heartbeat = Main.getLuffia().getMusicPlayerController().getScheduler()
+                ScheduledFuture<?> heartbeat = Main.getLuffia().getMusicPlayerController().getLyricsScheduler()
                         .scheduleAtFixedRate(() -> {
                             if (isDebugDisplay()) editor.requestIdleRefresh(5000);
                         }, 2, 1, TimeUnit.SECONDS);
@@ -467,7 +568,7 @@ public final class LyricsPresenter {
     }
 
     private static void startClock(MusicPlayerClient client, AudioTrack track, ProgressiveEditor editor, Runnable onEnd) {
-        ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getScheduler();
+        ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getLyricsScheduler();
         AtomicReference<ScheduledFuture<?>> ticker = new AtomicReference<>();
         AtomicReference<String> shown = new AtomicReference<>(LyricsSession.playbackClock(client, track));
         AtomicBoolean ended = new AtomicBoolean(false);
@@ -490,7 +591,7 @@ public final class LyricsPresenter {
     }
 
     private static void deleteWhenTrackEnds(MusicPlayerClient client, AudioTrack track, Message message) {
-        ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getScheduler();
+        ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getLyricsScheduler();
         AtomicBoolean deleted = new AtomicBoolean(false);
         AtomicReference<ScheduledFuture<?>> watcher = new AtomicReference<>();
         watcher.set(scheduler.scheduleAtFixedRate(() -> {
@@ -508,7 +609,7 @@ public final class LyricsPresenter {
         private final long channelId;
         private final long minIntervalMs;
         private final Supplier<CompletableFuture<?>> edit;
-        private final ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getScheduler();
+        private final ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getLyricsScheduler();
         private long lastEditAt;
         private ScheduledFuture<?> pending;
         private long inFlightSince;
@@ -582,6 +683,10 @@ public final class LyricsPresenter {
     private static final Set<String> PREFETCHING = ConcurrentHashMap.newKeySet();
 
     public static final int PREFETCH_COUNT = 3;
+    static final String CONVERTING_NOTE = "AI 가사 변환 중...";
+    static final String NO_LYRICS_NOTE = "가사를 찾지 못했습니다";
+    static final String LYRICS_LOOKUP_FAILED_NOTE = "가사 조회에 실패했습니다";
+    static final String CONVERSION_FAILED_NOTE = "AI 가사 변환에 실패했습니다";
     public static final int PREFETCH_COUNT_FAST = 20;
 
     private static final Map<MusicPlayerClient, Boolean> PREFETCH_RERUN = new ConcurrentHashMap<>();
@@ -677,7 +782,7 @@ public final class LyricsPresenter {
         if (!PREFETCHING.add(key)) return;
         try {
             LOGGER.info("prefetching lyrics translation for {}", next.getInfo().title);
-            Lyrics lyrics = controller.getLyricsClient().find(next.getInfo());
+            Lyrics lyrics = AiLyricsStore.defaultStore().enrich(next.getIdentifier(), controller.getLyricsClient().find(next.getInfo()));
             if (lyrics == null || lyrics.instrumental()) {
                 LOGGER.info("no lyrics to prefetch for {}", next.getInfo().title);
                 reportSongComplete(client, next);

@@ -2,9 +2,11 @@ package kr.kro.backas.music.lyrics;
 
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import kr.kro.backas.music.TrackCard;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.container.Container;
 import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.entities.Message;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -15,7 +17,16 @@ interface LyricsSurface {
 
     boolean showsSong();
 
-    Container frame(TextDisplay body);
+    Container frame(TextDisplay body, @Nullable ActionRow actions);
+
+    default Container frame(TextDisplay body) {
+        return frame(body, null);
+    }
+
+    @Nullable
+    default TrackCard card() {
+        return null;
+    }
 
     CompletableFuture<?> edit(Container view, long deadlineAt);
 
@@ -49,7 +60,7 @@ interface LyricsSurface {
         }
 
         @Override
-        public Container frame(TextDisplay body) {
+        public Container frame(TextDisplay body, @Nullable ActionRow actions) {
             return LyricsSession.hookFrame(track, body);
         }
 
@@ -82,8 +93,13 @@ interface LyricsSurface {
         }
 
         @Override
-        public Container frame(TextDisplay body) {
-            return card.frame(List.of(body));
+        public Container frame(TextDisplay body, @Nullable ActionRow actions) {
+            return card.frame(actions == null ? List.of(body) : List.of(body, actions));
+        }
+
+        @Override
+        public TrackCard card() {
+            return card;
         }
 
         @Override

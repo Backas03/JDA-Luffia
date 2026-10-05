@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <charset>UTF-8</charset>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} -- %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <logger name="net.dv8tion.jda" level="INFO"/>
+    <logger name="net.dv8tion.jda.internal.requests" level="WARN"/>
+    <logger name="com.sedmelluq" level="INFO"/>
+    <logger name="dev.lavalink" level="INFO"/>
+    <logger name="dev.arbjerg" level="INFO"/>
+    <logger name="com.github.topi314" level="INFO"/>
+    <logger name="org.apache.http" level="WARN"/>
+    <logger name="io.netty" level="WARN"/>
+    <logger name="kr.kro.backas" level="INFO"/>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

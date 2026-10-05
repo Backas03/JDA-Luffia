@@ -36,7 +36,7 @@ public class LyricsSlashCommand implements SlashCommandSource {
                                 .addChoice("전체", MODE_FULL)
                                 .addChoice("끄기", MODE_OFF),
                         new OptionData(OptionType.INTEGER, OFFSET_ARGUMENT,
-                                "가사가 빠르면 올리고 느리면 내리세요 (밀리초, 기본 " + LyricsSession.DEFAULT_OFFSET_MS + ")", false)
+                                "가사가 늦게 뜨면 올리고 일찍 뜨면 내리세요 (밀리초, 표시 지연은 자동 보정)", false)
                                 .setRequiredRange(-10000, 10000)
                 );
     }

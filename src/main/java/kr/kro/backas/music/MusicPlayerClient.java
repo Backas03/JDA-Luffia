@@ -58,6 +58,9 @@ public class MusicPlayerClient {
     private final Deque<double[]> bufferedSpeeds = new ArrayDeque<>();
     private volatile KaraokeMode karaokeMode = KaraokeMode.OFF;
     private volatile double realPositionMs;
+    private volatile int framesSinceSyncCheck;
+    private volatile long syncBasePositionMs;
+    private volatile double syncBaseRealMs;
     private volatile ConfiguredEqualizer currentEqualizer = ConfiguredEqualizer.NORMAL;
     private volatile LyricsSession lyricsSession;
     private volatile MessageChannel lyricsChannel;
@@ -80,6 +83,7 @@ public class MusicPlayerClient {
                     bufferedSpeeds.clear();
                 }
                 realPositionMs = track.getPosition();
+                markSyncBase(track.getPosition(), realPositionMs);
                 onTrackStarted(track);
                 autoplay.onTrackStarted(track);
             }
@@ -135,6 +139,8 @@ public class MusicPlayerClient {
             this.currentPlaySpeed = speed;
         }
         updateFilter();
+        AudioTrack playing = audioPlayer.getPlayingTrack();
+        if (playing != null) markSyncBase(playing.getPosition(), realPositionMs);
         refreshTrackCard();
     }
 
@@ -454,6 +460,35 @@ public class MusicPlayerClient {
             }
         }
         realPositionMs = realPositionMs + 20 * speed;
+        if (++framesSinceSyncCheck >= PositionSync.CHECK_EVERY_FRAMES) resyncPosition();
+    }
+
+    private void resyncPosition() {
+        AudioTrack track = audioPlayer.getPlayingTrack();
+        if (track == null) return;
+        long position = track.getPosition();
+        double real = realPositionMs;
+        double speed;
+        boolean steady;
+        synchronized (speedLock) {
+            speed = currentPlaySpeed;
+            steady = bufferedSpeeds.isEmpty();
+        }
+        if (steady) {
+            double correction = PositionSync.correction(real, position, speed, syncBasePositionMs, syncBaseRealMs);
+            if (correction != 0) {
+                real += correction;
+                realPositionMs = real;
+                LOGGER.info("resynced playback position by {}ms for {}", Math.round(correction), track.getInfo().title);
+            }
+        }
+        markSyncBase(position, real);
+    }
+
+    private void markSyncBase(long positionMs, double realMs) {
+        syncBasePositionMs = positionMs;
+        syncBaseRealMs = realMs;
+        framesSinceSyncCheck = 0;
     }
 
     public String getRepeatModeName() {
