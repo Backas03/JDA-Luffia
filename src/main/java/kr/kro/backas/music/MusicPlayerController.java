@@ -13,6 +13,7 @@ import kr.kro.backas.music.ai.AiTrackTagger;
 import kr.kro.backas.music.lyrics.LrcLibClient;
 import kr.kro.backas.music.lyrics.LyricsExpansions;
 import kr.kro.backas.music.lyrics.TranslationClient;
+import kr.kro.backas.music.lyrics.sync.WhisperClient;
 import kr.kro.backas.music.source.MusicSourceRegistry;
 import kr.kro.backas.util.BotShutdown;
 import kr.kro.backas.util.MemberUtil;
@@ -63,6 +64,7 @@ public class MusicPlayerController extends ListenerAdapter {
     private final ScheduledExecutorService scheduler;
     private final LrcLibClient lyricsClient;
     private final TranslationClient translationClient;
+    private final WhisperClient whisperClient;
     private final AiShuffleClassifier aiShuffleClassifier;
     private final AiTrackTagger aiTrackTagger;
     private final AiPlaylistBuilder aiPlaylistBuilder;
@@ -72,9 +74,15 @@ public class MusicPlayerController extends ListenerAdapter {
     private final AiRemovalConfirmations aiRemovalConfirmations = new AiRemovalConfirmations();
     private final LyricsExpansions lyricsExpansions = new LyricsExpansions();
 
-    public MusicPlayerController(MusicSourceRegistry sourceRegistry, String translatorUrl) {
+    public MusicPlayerController(MusicSourceRegistry sourceRegistry, String translatorUrl, @Nullable String whisperUrl) {
         this.sourceRegistry = sourceRegistry;
         this.translationClient = new TranslationClient(translatorUrl);
+        this.whisperClient = new WhisperClient(whisperUrl);
+        if (whisperClient.isConfigured()) {
+            LOGGER.info("가사 자동 보정용 whisper 서버 {}개 등록", whisperClient.endpoints().size());
+        } else {
+            LOGGER.info("BotSecret.WHISPER_URL 이 비어 있어 가사 자동 보정을 비활성화합니다.");
+        }
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread thread = new Thread(r, "music-scheduler");
             thread.setDaemon(true);
@@ -123,6 +131,10 @@ public class MusicPlayerController extends ListenerAdapter {
 
     public LrcLibClient getLyricsClient() {
         return lyricsClient;
+    }
+
+    public WhisperClient getWhisperClient() {
+        return whisperClient;
     }
 
     public TranslationClient getTranslationClient() {

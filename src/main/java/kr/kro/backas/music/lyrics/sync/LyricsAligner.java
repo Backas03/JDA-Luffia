@@ -1,0 +1,141 @@
+package kr.kro.backas.music.lyrics.sync;
+
+import kr.kro.backas.music.lyrics.LyricLine;
+import org.jetbrains.annotations.Nullable;
+
+import java.text.Normalizer;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+
+public final class LyricsAligner {
+
+    public record Alignment(long offsetMs, int matchedLines, long spreadMs) {
+    }
+
+    static final double MIN_SCORE = 0.55;
+    static final int MIN_MATCHES = 3;
+    static final long MAX_SPREAD_MS = 600;
+    static final int MIN_LINE_CHARS = 4;
+    static final long EDGE_MARGIN_MS = 1500;
+    static final int MAX_LINES = 10;
+
+    private LyricsAligner() {
+    }
+
+    public static Optional<Alignment> align(List<WhisperClient.Word> words, List<LyricLine> lines, long capturedMs) {
+        List<Integer> tokenIndex = new ArrayList<>();
+        List<Long> tokenStarts = new ArrayList<>();
+        StringBuilder transcript = new StringBuilder();
+        for (WhisperClient.Word word : words) {
+            String normalized = normalize(word.text());
+            if (normalized.isEmpty()) continue;
+            tokenIndex.add(transcript.length());
+            tokenStarts.add(word.startMs());
+            transcript.append(normalized);
+        }
+        if (transcript.length() < MIN_LINE_CHARS) return Optional.empty();
+        String text = transcript.toString();
+
+        List<Long> offsets = new ArrayList<>();
+        int eligible = 0;
+        int lastToken = -1;
+        for (int i = 0; i < lines.size() && eligible < MAX_LINES; i++) {
+            LyricLine line = lines.get(i);
+            if (line.timeMs() > capturedMs - EDGE_MARGIN_MS) break;
+            String target = normalize(line.text());
+            if (target.length() < MIN_LINE_CHARS) continue;
+            eligible++;
+            double bestScore = 0;
+            int bestToken = -1;
+            for (int token = lastToken + 1; token < tokenIndex.size(); token++) {
+                int from = tokenIndex.get(token);
+                int to = Math.min(text.length(), from + target.length());
+                if (to - from < target.length() * 0.6) break;
+                double score = similarity(text.substring(from, to), target);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestToken = token;
+                }
+            }
+            if (bestScore < MIN_SCORE) continue;
+            lastToken = bestToken;
+            offsets.add(line.timeMs() - tokenStarts.get(bestToken));
+        }
+        int required = Math.max(2, Math.min(MIN_MATCHES, eligible));
+        if (offsets.size() < required) return Optional.empty();
+
+        offsets.sort(Long::compare);
+        long median = median(offsets);
+        long spread = offsets.get(offsets.size() - 1) - offsets.get(0);
+        if (spread > MAX_SPREAD_MS && offsets.size() >= 4) {
+            long first = Math.abs(offsets.get(0) - median);
+            long last = Math.abs(offsets.get(offsets.size() - 1) - median);
+            offsets.remove(first > last ? 0 : offsets.size() - 1);
+            median = median(offsets);
+            spread = offsets.get(offsets.size() - 1) - offsets.get(0);
+        }
+        if (spread > MAX_SPREAD_MS) return Optional.empty();
+        return Optional.of(new Alignment(Math.round(median / 10.0) * 10, offsets.size(), spread));
+    }
+
+    private static long median(List<Long> sorted) {
+        int size = sorted.size();
+        return size % 2 == 1 ? sorted.get(size / 2) : (sorted.get(size / 2 - 1) + sorted.get(size / 2)) / 2;
+    }
+
+    static String normalize(String text) {
+        String folded = Normalizer.normalize(text, Normalizer.Form.NFKC).toLowerCase(Locale.ROOT);
+        StringBuilder out = new StringBuilder(folded.length());
+        for (int i = 0; i < folded.length(); ) {
+            int cp = folded.codePointAt(i);
+            i += Character.charCount(cp);
+            if (!Character.isLetterOrDigit(cp)) continue;
+            if (cp >= 0x30A1 && cp <= 0x30F6) cp -= 0x60;
+            out.appendCodePoint(cp);
+        }
+        return out.toString();
+    }
+
+    static double similarity(String a, String b) {
+        if (a.length() < 2 || b.length() < 2) return a.equals(b) ? 1 : 0;
+        Map<String, Integer> counts = new HashMap<>();
+        for (int i = 0; i + 1 < a.length(); i++) counts.merge(a.substring(i, i + 2), 1, Integer::sum);
+        int overlap = 0;
+        for (int i = 0; i + 1 < b.length(); i++) {
+            String bigram = b.substring(i, i + 2);
+            Integer left = counts.get(bigram);
+            if (left != null && left > 0) {
+                counts.put(bigram, left - 1);
+                overlap++;
+            }
+        }
+        return 2.0 * overlap / ((a.length() - 1) + (b.length() - 1));
+    }
+
+    @Nullable
+    public static String languageHint(List<LyricLine> lines) {
+        int kana = 0;
+        int hangul = 0;
+        int han = 0;
+        int latin = 0;
+        for (LyricLine line : lines) {
+            String text = line.text();
+            for (int i = 0; i < text.length(); ) {
+                int cp = text.codePointAt(i);
+                i += Character.charCount(cp);
+                if (cp >= 0x3040 && cp <= 0x30FF) kana++;
+                else if ((cp >= 0xAC00 && cp <= 0xD7A3) || (cp >= 0x1100 && cp <= 0x11FF) || (cp >= 0x3130 && cp <= 0x318F)) hangul++;
+                else if (cp >= 0x4E00 && cp <= 0x9FFF) han++;
+                else if (cp < 0x80 && Character.isLetter(cp)) latin++;
+            }
+        }
+        if (kana > 0 && kana >= hangul) return "ja";
+        if (hangul > 0) return "ko";
+        if (han > 0) return null;
+        return latin > 0 ? "en" : null;
+    }
+}

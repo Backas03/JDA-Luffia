@@ -4,6 +4,7 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import kr.kro.backas.music.ArtworkColors;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
+import kr.kro.backas.music.lyrics.sync.LyricsAutoSync;
 import kr.kro.backas.music.TrackCard;
 import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.DurationUtil;
@@ -18,6 +19,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -35,6 +37,7 @@ public class LyricsSession {
     private static final long CLOCK_EDIT_INTERVAL_MS = 800;
     private static final long POST_EDIT_GAP_MS = 500;
     public static final long DEFAULT_OFFSET_MS = 0;
+    static final long AUTO_NOTE_MIN_MS = 100;
     public static final String TRANSLATING_NOTE = "번역 중...";
     private static final String BLANK = "​";
     private static final String WIDTH_FILLER = "⠀".repeat(120);
@@ -54,6 +57,7 @@ public class LyricsSession {
     private final boolean translatable;
     private final long leadMs;
     private volatile long offsetMs;
+    private volatile long autoOffsetMs;
     private volatile boolean translating;
     private volatile TranslationJobs.Job job;
     private ScheduledFuture<?> ticker;
@@ -92,6 +96,22 @@ public class LyricsSession {
         ticker = scheduler.scheduleAtFixedRate(this::tick, 0, TICK_MS, TimeUnit.MILLISECONDS);
         startTranslation();
         LyricsPresenter.prefetchNext(client);
+        LyricsAutoSync.apply(client, track, lyrics, this);
+    }
+
+    public void setAutoOffsetMs(long autoOffsetMs) {
+        this.autoOffsetMs = autoOffsetMs;
+    }
+
+    public long getAutoOffsetMs() {
+        return autoOffsetMs;
+    }
+
+    @Nullable
+    private String autoNote() {
+        long offset = autoOffsetMs;
+        if (Math.abs(offset) < AUTO_NOTE_MIN_MS) return null;
+        return String.format(Locale.ROOT, "자동 보정 %+.1f초", offset / 1000.0);
     }
 
     public void setOffsetMs(long offsetMs) {
@@ -196,7 +216,7 @@ public class LyricsSession {
     }
 
     private Container view(int index, @Nullable String translation, @Nullable String footer, boolean pending) {
-        return surface.frame(body(client, track, lyrics, index, translation, footer, translator, pending, surface.showsSong()));
+        return surface.frame(body(client, track, lyrics, index, translation, footer, translator, pending, surface.showsSong(), autoNote()));
     }
 
     private void tick() {
@@ -208,7 +228,7 @@ public class LyricsSession {
             }
             if (client.isPaused()) return;
             long channelId = surface.channelId();
-            long position = (long) (client.getRealPositionMs() + (leadMs + offsetMs) * client.getCurrentPlaySpeed());
+            long position = (long) (client.getRealPositionMs() + (leadMs + offsetMs + autoOffsetMs) * client.getCurrentPlaySpeed());
             int index = indexAt(position);
             String translation = translationFor(index);
             boolean pending = isPendingTranslation(index, translation);
@@ -292,7 +312,7 @@ public class LyricsSession {
     }
 
     public static Container buildView(AudioTrack track, Lyrics lyrics, int index, @Nullable String translation, @Nullable String footer) {
-        return hookFrame(track, body(null, track, lyrics, index, translation, footer, null, false, true));
+        return hookFrame(track, body(null, track, lyrics, index, translation, footer, null, false, true, null));
     }
 
     static Container hookFrame(AudioTrack track, TextDisplay body) {
@@ -305,7 +325,7 @@ public class LyricsSession {
 
     static TextDisplay body(@Nullable MusicPlayerClient client, AudioTrack track, Lyrics lyrics, int index,
                             @Nullable String translation, @Nullable String footer, @Nullable TranslationClient translator,
-                            boolean pendingTranslation, boolean withSong) {
+                            boolean pendingTranslation, boolean withSong, @Nullable String autoNote) {
         List<LyricLine> lines = lyrics.synced();
         String previous = lineText(lines, index - 1);
         String current = lineText(lines, index);
@@ -325,7 +345,10 @@ public class LyricsSession {
             text.append("\n-# ").append(DiscordSafe.text(track.getInfo().author + " - " + track.getInfo().title, MAX_SONG_LENGTH));
         }
         if (footer != null) text.append("\n-# ").append(footer);
-        else if (client != null) text.append("\n-# ").append(playbackClock(client, track));
+        else if (client != null) {
+            text.append("\n-# ").append(playbackClock(client, track));
+            if (autoNote != null) text.append(" · ").append(autoNote);
+        }
         if ((translation != null && !translation.isBlank()) || pendingTranslation) {
             String note = LyricsPresenter.translationStatus(client, translator);
             if (!note.isBlank()) {
