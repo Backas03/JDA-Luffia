@@ -1,6 +1,6 @@
 package kr.kro.backas.command.music.slash;
 
-import kr.kro.backas.config.Config;
+import kr.kro.backas.BuildInfo;
 import kr.kro.backas.Main;
 import kr.kro.backas.command.api.SlashCommandSource;
 import kr.kro.backas.music.MusicEmbeds;
@@ -77,7 +77,7 @@ public class AiAdminSlashCommand implements SlashCommandSource {
             builder.addField(status.label() + (status.fallback() ? " (CPU 예비)" : ""), describe(status), false);
         }
         builder.addField("디버그 표시", guard.isDebug() ? "켜짐 (가사 하단에 GPU, token/s, 진행률 표시)" : "꺼짐", false);
-        event.replyEmbeds(builder.setFooter(Config.get().bot().version()).build()).setEphemeral(true).queue();
+        event.replyEmbeds(builder.setFooter(BuildInfo.VERSION).build()).setEphemeral(true).queue();
     }
 
     private static String describe(LlmScheduler.EndpointStatus status) {

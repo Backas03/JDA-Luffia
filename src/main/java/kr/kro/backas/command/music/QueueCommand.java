@@ -1,6 +1,6 @@
 package kr.kro.backas.command.music;
 
-import kr.kro.backas.config.Config;
+import kr.kro.backas.BuildInfo;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import kr.kro.backas.Main;
@@ -34,7 +34,7 @@ public class QueueCommand implements CommandSource {
                     .setAuthor(MemberUtil.getName(member))
                     .setTitle("대기열 정보를 확인할 수 없습니다.")
                     .setDescription("대기열을 확인하려면 음성채팅방에 먼저 참여해주세요.")
-                    .setFooter(Config.get().bot().version());
+                    .setFooter(BuildInfo.VERSION);
             message.replyEmbeds(builder.build()).queue();
             return;
         }
@@ -45,7 +45,7 @@ public class QueueCommand implements CommandSource {
                     .setColor(Color.decode("#f1554a"))
                     .setAuthor(MemberUtil.getName(member))
                     .setTitle("해당 채널에서 음악을 재생중인 노래 봇이 없습니다")
-                    .setFooter(Config.get().bot().version());
+                    .setFooter(BuildInfo.VERSION);
             message.replyEmbeds(builder.build()).queue();
             return;
         }
@@ -55,7 +55,7 @@ public class QueueCommand implements CommandSource {
                     .setAuthor(MemberUtil.getName(member))
                     .setTitle("현재 재생 대기 목록이 비어있습니다.")
                     .addField("노래 봇", MusicEmbeds.botName(client.getGuild()), false)
-                    .setFooter(Config.get().bot().version());
+                    .setFooter(BuildInfo.VERSION);
             message.replyEmbeds(builder.build()).queue();
             return;
         }

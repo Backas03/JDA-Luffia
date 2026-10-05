@@ -1,6 +1,6 @@
 package kr.kro.backas.command.music.slash;
 
-import kr.kro.backas.config.Config;
+import kr.kro.backas.BuildInfo;
 import kr.kro.backas.Main;
 import kr.kro.backas.command.api.SlashCommandSource;
 import kr.kro.backas.music.MusicPlayerClient;
@@ -74,7 +74,7 @@ public class PlaySpeedSlashCommand implements SlashCommandSource {
                 .addField("재생속도",
                          originSpeed + "배속 -> " + speed + "배속"
                         , false)
-                .setFooter(Config.get().bot().version())
+                .setFooter(BuildInfo.VERSION)
                 .build()
         ).queue();
     }

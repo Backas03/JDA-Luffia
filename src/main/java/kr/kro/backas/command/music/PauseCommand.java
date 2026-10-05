@@ -1,6 +1,6 @@
 package kr.kro.backas.command.music;
 
-import kr.kro.backas.config.Config;
+import kr.kro.backas.BuildInfo;
 import kr.kro.backas.Main;
 import kr.kro.backas.command.api.CommandSource;
 import kr.kro.backas.music.MusicPlayerClient;
@@ -27,7 +27,7 @@ public class PauseCommand implements CommandSource {
                     .setAuthor(MemberUtil.getName(member))
                     .setTitle("음악을 일시정지 할 수 없습니다.")
                     .setDescription("음악을 일시정지 하려면 음성채팅방에 먼저 참여해주세요.")
-                    .setFooter(Config.get().bot().version());
+                    .setFooter(BuildInfo.VERSION);
             message.replyEmbeds(builder.build()).queue();
             return;
         }
@@ -39,7 +39,7 @@ public class PauseCommand implements CommandSource {
                     .setAuthor(MemberUtil.getName(member))
                     .setTitle("음악을 일시정지 할 수 없습니다.")
                     .setDescription("현재 재생중인 곡이 없으므로 일시정지 할 수 없습니다.")
-                    .setFooter(Config.get().bot().version());
+                    .setFooter(BuildInfo.VERSION);
             message.replyEmbeds(builder.build()).queue();
             return;
         }

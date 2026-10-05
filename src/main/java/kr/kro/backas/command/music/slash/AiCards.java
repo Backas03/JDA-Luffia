@@ -1,6 +1,6 @@
 package kr.kro.backas.command.music.slash;
 
-import kr.kro.backas.config.Config;
+import kr.kro.backas.BuildInfo;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
@@ -75,7 +75,7 @@ final class AiCards {
         List<ContainerChildComponent> children = new ArrayList<>();
         children.add(TextDisplay.of("### " + title + (description == null || description.isBlank() ? "" : "\n" + description)));
         children.add(divider());
-        children.add(TextDisplay.of(member == null ? "-# " + Config.get().bot().version() : footer(member, null)));
+        children.add(TextDisplay.of(member == null ? "-# " + BuildInfo.VERSION : footer(member, null)));
         return Container.of(children).withAccentColor(MusicEmbeds.ERROR);
     }
 
@@ -119,7 +119,7 @@ final class AiCards {
     static String footer(Member member, @Nullable String botName) {
         StringBuilder text = new StringBuilder("-# ").append(DiscordSafe.escaped(MemberUtil.getName(member), 40));
         if (botName != null) text.append(" · 노래 봇 ").append(botName);
-        return text.append(" · ").append(Config.get().bot().version()).toString();
+        return text.append(" · ").append(BuildInfo.VERSION).toString();
     }
 
     private static Separator divider() {
