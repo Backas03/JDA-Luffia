@@ -393,6 +393,6 @@ public class LyricsSession {
 
     private static String lineText(List<LyricLine> lines, int index) {
         if (index < 0 || index >= lines.size()) return "";
-        return DiscordSafe.text(lines.get(index).text(), MAX_LINE_LENGTH);
+        return DiscordSafe.text(lines.get(index).text().strip(), MAX_LINE_LENGTH);
     }
 }

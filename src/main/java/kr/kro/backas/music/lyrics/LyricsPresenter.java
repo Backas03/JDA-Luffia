@@ -194,7 +194,7 @@ public final class LyricsPresenter {
     private static void startSession(MusicPlayerClient client, AudioTrack track, Lyrics lyrics, LyricsSurface surface, long offsetMs) {
         MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
         LyricsSession session = new LyricsSession(client, track, lyrics, surface,
-                controller.getScheduler(), controller.getTranslationClient(), offsetMs);
+                controller.getLyricsScheduler(), controller.getTranslationClient(), offsetMs);
         TrackCard card = surface.card();
         if (card != null) card.claim(session);
         client.setLyricsSession(session);
@@ -491,7 +491,7 @@ public final class LyricsPresenter {
                         (index, text) -> editor.requestEdit(), TranslationJobs.songContext(track));
                 jobRef.set(job);
                 reportSongJob(client, track, job);
-                ScheduledFuture<?> heartbeat = Main.getLuffia().getMusicPlayerController().getScheduler()
+                ScheduledFuture<?> heartbeat = Main.getLuffia().getMusicPlayerController().getLyricsScheduler()
                         .scheduleAtFixedRate(() -> {
                             if (isDebugDisplay()) editor.requestIdleRefresh(5000);
                         }, 2, 1, TimeUnit.SECONDS);
@@ -548,7 +548,7 @@ public final class LyricsPresenter {
     }
 
     private static void startClock(MusicPlayerClient client, AudioTrack track, ProgressiveEditor editor, Runnable onEnd) {
-        ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getScheduler();
+        ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getLyricsScheduler();
         AtomicReference<ScheduledFuture<?>> ticker = new AtomicReference<>();
         AtomicReference<String> shown = new AtomicReference<>(LyricsSession.playbackClock(client, track));
         AtomicBoolean ended = new AtomicBoolean(false);
@@ -571,7 +571,7 @@ public final class LyricsPresenter {
     }
 
     private static void deleteWhenTrackEnds(MusicPlayerClient client, AudioTrack track, Message message) {
-        ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getScheduler();
+        ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getLyricsScheduler();
         AtomicBoolean deleted = new AtomicBoolean(false);
         AtomicReference<ScheduledFuture<?>> watcher = new AtomicReference<>();
         watcher.set(scheduler.scheduleAtFixedRate(() -> {
@@ -589,7 +589,7 @@ public final class LyricsPresenter {
         private final long channelId;
         private final long minIntervalMs;
         private final Supplier<CompletableFuture<?>> edit;
-        private final ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getScheduler();
+        private final ScheduledExecutorService scheduler = Main.getLuffia().getMusicPlayerController().getLyricsScheduler();
         private long lastEditAt;
         private ScheduledFuture<?> pending;
         private long inFlightSince;
