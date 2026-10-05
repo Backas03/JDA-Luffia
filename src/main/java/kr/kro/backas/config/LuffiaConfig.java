@@ -20,7 +20,7 @@ public record LuffiaConfig(Bot bot,
         return service == null || service.isEmpty() || service.contains(guildId);
     }
 
-    public record Bot(boolean dev, String version, String zone, String activity, String github, String license, Shutdown shutdown) {
+    public record Bot(boolean dev, String zone, String activity, String github, String license, Shutdown shutdown) {
     }
 
     public record Shutdown(int gracefulSeconds, int forcedSeconds, int haltAfterSeconds) {

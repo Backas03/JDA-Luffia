@@ -1,6 +1,6 @@
 package kr.kro.backas.music;
 
-import kr.kro.backas.config.Config;
+import kr.kro.backas.BuildInfo;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import kr.kro.backas.Main;
@@ -300,7 +300,7 @@ public final class TrackCard {
 
     static String footerText(String botName, long finishedAt) {
         String first = finishedAt > 0 ? botName + " <t:" + finishedAt / 1000 + ":t> " + PLAYED_NOTE : botName;
-        return "-# " + first + "\n-# " + Config.get().bot().version();
+        return "-# " + first + "\n-# " + BuildInfo.VERSION;
     }
 
     public static String settingsLine(MusicPlayerClient client) {

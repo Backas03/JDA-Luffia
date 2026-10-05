@@ -1,6 +1,6 @@
 package kr.kro.backas.command.music.slash;
 
-import kr.kro.backas.config.Config;
+import kr.kro.backas.BuildInfo;
 import kr.kro.backas.Main;
 import kr.kro.backas.command.api.SlashCommandSource;
 import kr.kro.backas.music.MusicPlayerClient;
@@ -65,7 +65,7 @@ public class SetRepeatModeSlashCommand implements SlashCommandSource {
                     .setAuthor(MemberUtil.getName(member))
                     .setTitle("반복재생 모드를 설정할 수 없습니다.")
                     .setDescription("반복재생 모드를 설정하려면 음성채팅방에 먼저 참여해주세요.")
-                    .setFooter(Config.get().bot().version());
+                    .setFooter(BuildInfo.VERSION);
             event.replyEmbeds(builder.build()).queue();
             return;
         }
@@ -77,7 +77,7 @@ public class SetRepeatModeSlashCommand implements SlashCommandSource {
                     .setAuthor(MemberUtil.getName(member))
                     .setTitle("반복재생 모드를 설정할 수 없습니다.")
                     .setDescription("현재 재생중인 곡이 없으므로 반복재생 모드를 설정할 수 없습니다")
-                    .setFooter(Config.get().bot().version());
+                    .setFooter(BuildInfo.VERSION);
             event.replyEmbeds(builder.build()).queue();
             return;
         }

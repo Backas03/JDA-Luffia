@@ -1,6 +1,6 @@
 package kr.kro.backas.music;
 
-import kr.kro.backas.config.Config;
+import kr.kro.backas.BuildInfo;
 import com.github.topi314.lavasrc.ExtendedAudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.source.AudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
@@ -175,7 +175,7 @@ public final class MusicEmbeds {
         EmbedBuilder builder = new EmbedBuilder()
                 .setColor(ERROR)
                 .setTitle(title)
-                .setFooter(Config.get().bot().version());
+                .setFooter(BuildInfo.VERSION);
         if (member != null) builder.setAuthor(MemberUtil.getName(member));
         if (description != null) builder.setDescription(description);
         return builder;

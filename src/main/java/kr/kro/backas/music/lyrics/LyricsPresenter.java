@@ -1,5 +1,6 @@
 package kr.kro.backas.music.lyrics;
 
+import kr.kro.backas.BuildInfo;
 import kr.kro.backas.config.Config;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import kr.kro.backas.Main;
@@ -475,7 +476,7 @@ public final class LyricsPresenter {
                                  FullView view, TranslationClient translator) {
         List<String> lines = fullLines(lyrics);
         boolean aiAvailable = lyrics.hasPlain() && !lyrics.hasSynced() && !lyrics.aiTimed() && LyricsConverter.isAvailable();
-        String footer = liveWanted ? (aiAvailable ? AI_AVAILABLE_NOTE : FULL_LYRICS_NOTE) : Config.get().bot().version();
+        String footer = liveWanted ? (aiAvailable ? AI_AVAILABLE_NOTE : FULL_LYRICS_NOTE) : BuildInfo.VERSION;
         if (requester != null) footer += " · 요청: " + MemberUtil.getName(requester);
         String finalFooter = footer;
         List<LyricLine> asLines = new ArrayList<>();

@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "kr.kro.backas"
-version = "1.0.0-SNAPSHOT"
+version = "3.1.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -47,7 +47,16 @@ tasks.test {
     useJUnitPlatform()
 }
 
+tasks.processResources {
+    val projectVersion = version.toString()
+    inputs.property("version", projectVersion)
+    filesMatching("version.properties") {
+        expand(mapOf("version" to projectVersion))
+    }
+}
+
 tasks.register<Jar>("fatJar") {
+    archiveFileName.set("JDA-Luffia-1.0.0-SNAPSHOT-all.jar")
     group = "build"
     description = "의존성을 모두 포함한 단일 실행 jar (java -jar)"
     archiveClassifier.set("all")

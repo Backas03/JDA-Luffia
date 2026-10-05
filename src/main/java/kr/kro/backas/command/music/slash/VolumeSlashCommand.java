@@ -1,6 +1,6 @@
 package kr.kro.backas.command.music.slash;
 
-import kr.kro.backas.config.Config;
+import kr.kro.backas.BuildInfo;
 import kr.kro.backas.Main;
 import kr.kro.backas.command.api.SlashCommandSource;
 import kr.kro.backas.music.MusicEmbeds;
@@ -55,7 +55,7 @@ public class VolumeSlashCommand implements SlashCommandSource {
                     .setTitle("현재 볼륨")
                     .setDescription(client.getVolume() + "%")
                     .addField("노래 봇", MusicEmbeds.botName(client.getGuild()), false)
-                    .setFooter(Config.get().bot().version())
+                    .setFooter(BuildInfo.VERSION)
                     .build()).queue();
             return;
         }
@@ -68,7 +68,7 @@ public class VolumeSlashCommand implements SlashCommandSource {
                 .setTitle("볼륨을 변경했습니다")
                 .addField("볼륨", before + "% -> " + volume + "%", false)
                 .addField("노래 봇", MusicEmbeds.botName(client.getGuild()), false)
-                .setFooter(Config.get().bot().version())
+                .setFooter(BuildInfo.VERSION)
                 .build()).queue();
     }
 

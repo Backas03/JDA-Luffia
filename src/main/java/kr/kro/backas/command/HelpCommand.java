@@ -1,5 +1,6 @@
 package kr.kro.backas.command;
 
+import kr.kro.backas.BuildInfo;
 import kr.kro.backas.config.Config;
 import kr.kro.backas.Main;
 import kr.kro.backas.command.api.CommandManager;
@@ -90,7 +91,7 @@ public class HelpCommand implements CommandSource {
                 Config.get().bot().github()
         );
 
-        builder.setFooter(Config.get().bot().version());
+        builder.setFooter(BuildInfo.VERSION);
         event.getMessage().replyEmbeds(builder.build()).queue();
     }
 

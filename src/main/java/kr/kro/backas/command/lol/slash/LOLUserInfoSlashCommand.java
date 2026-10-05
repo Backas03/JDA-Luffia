@@ -1,6 +1,6 @@
 package kr.kro.backas.command.lol.slash;
 
-import kr.kro.backas.config.Config;
+import kr.kro.backas.BuildInfo;
 import kr.kro.backas.command.api.SlashCommandSource;
 import kr.kro.backas.game.lol.LOLUserInfo;
 import net.dv8tion.jda.api.EmbedBuilder;
@@ -48,7 +48,7 @@ public class LOLUserInfoSlashCommand implements SlashCommandSource {
                         .setAuthor(event.getMember().getNickname())
                         .setTitle("\"" + nickname + "#" + tag + "\" 소환사를 찾을 수 없습니다.")
                         .setDescription("닉네임 또는 태그를 다시한번 확인해주세요.")
-                        .setFooter(Config.get().bot().version()).build()
+                        .setFooter(BuildInfo.VERSION).build()
             ).queue();
             return;
         }

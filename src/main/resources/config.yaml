@@ -1,6 +1,5 @@
 bot:
   dev: false
-  version: Luffia/3.0.23-SNAPSHOT
   zone: Asia/Seoul
   activity: "/도움말 또는 !도움말  명령어를 사용해보세요"
   github: https://github.com/Backas03/JDA-Luffia
