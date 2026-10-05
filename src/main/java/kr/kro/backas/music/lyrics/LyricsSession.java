@@ -339,12 +339,12 @@ public class LyricsSession {
         String previous = lineText(lines, index - 1);
         String current = lineText(lines, index);
         String next = lineText(lines, index + 1);
-        translation = translation == null ? null : DiscordSafe.text(translation, MAX_LINE_LENGTH);
+        String translationBlock = translation == null ? "" : TranslationText.markdown(translation, MAX_LINE_LENGTH);
         StringBuilder text = new StringBuilder();
         text.append(previous.isBlank() ? BLANK : "*" + previous + "*").append('\n');
         text.append("## ").append(current.isBlank() ? REST : current).append('\n');
-        if (translation != null && !translation.isBlank()) {
-            text.append("-# ").append(translation).append('\n').append(BLANK).append('\n');
+        if (!translationBlock.isBlank()) {
+            text.append(translationBlock).append('\n').append(BLANK).append('\n');
         } else if (pendingTranslation) {
             text.append("-# ").append(TRANSLATING_NOTE).append('\n').append(BLANK).append('\n');
         }
