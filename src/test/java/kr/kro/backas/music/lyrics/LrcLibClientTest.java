@@ -83,4 +83,14 @@ class LrcLibClientTest {
         assertEquals(LrcLibClient.matchKey("MyGO!!!!!"), LrcLibClient.matchKey("ｍｙｇｏ"));
         assertEquals("", LrcLibClient.matchKey("「」！？"));
     }
+
+    @Test
+    void offsetTagShiftsEveryTimestampAndNeverGoesNegative() {
+        var shifted = LrcLibClient.parseLrc("[offset:+500]\n[00:00.30]첫 줄\n[00:10.00]둘째 줄");
+        assertEquals(0, shifted.get(0).timeMs());
+        assertEquals(9_500, shifted.get(1).timeMs());
+        var delayed = LrcLibClient.parseLrc("[offset:-250]\n[00:10.00]둘째 줄");
+        assertEquals(10_250, delayed.get(0).timeMs());
+        assertEquals(0, LrcLibClient.lrcOffsetMs("[00:10.00]둘째 줄"));
+    }
 }

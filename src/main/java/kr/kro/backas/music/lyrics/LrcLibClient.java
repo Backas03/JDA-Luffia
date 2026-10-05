@@ -42,6 +42,7 @@ public class LrcLibClient {
     private static final int TIMEOUT_RETRIES = 1;
     private static final int MAX_FAILED_REQUESTS = 2;
     private static final Pattern LRC_LINE = Pattern.compile("\\[(\\d{1,2}):(\\d{2})(?:[.:](\\d{1,3}))?](.*)");
+    private static final Pattern LRC_OFFSET = Pattern.compile("\\[offset:\\s*([+-]?\\d+)\\s*]", Pattern.CASE_INSENSITIVE);
     private static final Pattern TITLE_NOISE = Pattern.compile(
             "(?i)\\s*[\\[(【].*?(official|mv|m/v|music video|lyric|audio|visualizer|ver\\.?|version|remaster|가사|자막|한글|번역|공식|뮤직비디오|4k|8k|hd).*?[\\])】]\\s*|\\s*[|_]\\s*(mv|m/v|official.*)$");
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -397,6 +398,7 @@ public class LrcLibClient {
     static List<LyricLine> parseLrc(String lrc) {
         List<LyricLine> lines = new ArrayList<>();
         if (lrc == null || lrc.isBlank()) return lines;
+        long offsetMs = lrcOffsetMs(lrc);
         for (String raw : lrc.split("\\r?\\n")) {
             Matcher matcher = LRC_LINE.matcher(raw.trim());
             if (!matcher.matches()) continue;
@@ -409,10 +411,15 @@ public class LrcLibClient {
             }
             String text = matcher.group(4).trim();
             if (CREDIT_LINE.matcher(text).matches()) continue;
-            lines.add(new LyricLine((minutes * 60 + seconds) * 1000 + millis, text));
+            lines.add(new LyricLine(Math.max(0, (minutes * 60 + seconds) * 1000 + millis - offsetMs), text));
         }
         lines.sort((a, b) -> Long.compare(a.timeMs(), b.timeMs()));
         return dropDuplicateTimestampTranslations(lines);
+    }
+
+    static long lrcOffsetMs(String lrc) {
+        Matcher matcher = LRC_OFFSET.matcher(lrc);
+        return matcher.find() ? Long.parseLong(matcher.group(1)) : 0;
     }
 
     private static List<LyricLine> dropDuplicateTimestampTranslations(List<LyricLine> lines) {
