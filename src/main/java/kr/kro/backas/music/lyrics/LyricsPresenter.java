@@ -7,6 +7,7 @@ import kr.kro.backas.music.ArtworkColors;
 import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
+import kr.kro.backas.music.lyrics.sync.LyricsAutoSync;
 import kr.kro.backas.music.TrackCard;
 import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.MemberUtil;
@@ -608,15 +609,21 @@ public final class LyricsPresenter {
                 }
             }));
 
-    private static void warmLyrics(MusicPlayerController controller, List<AudioTrack> tracks) {
+    private static void warmLyrics(MusicPlayerClient client, MusicPlayerController controller, List<AudioTrack> tracks) {
+        int position = 0;
         for (AudioTrack track : tracks) {
             ArtworkColors.warm(MusicEmbeds.thumbnailOf(track));
             ArtworkColors.warm(MusicEmbeds.bannerOf(track));
+            boolean preload = position++ < LyricsAutoSync.PRELOAD_COUNT && LyricsAutoSync.isEnabled();
             String identifier = track.getIdentifier();
-            if (!WARMED.add(identifier)) continue;
+            if (!WARMED.add(identifier)) {
+                if (preload) preloadAlignment(client, controller, track);
+                continue;
+            }
             LOOKUP_EXECUTOR.execute(() -> {
                 try {
-                    controller.getLyricsClient().find(track.getInfo());
+                    Lyrics lyrics = controller.getLyricsClient().find(track.getInfo());
+                    if (preload && lyrics != null && lyrics.hasSynced()) LyricsAutoSync.preload(client, track, lyrics);
                 } catch (IOException | RuntimeException e) {
                     WARMED.remove(identifier);
                     LOGGER.debug("lyrics lookup ahead of time failed for {}", track.getInfo().title, e);
@@ -625,12 +632,23 @@ public final class LyricsPresenter {
         }
     }
 
+    private static void preloadAlignment(MusicPlayerClient client, MusicPlayerController controller, AudioTrack track) {
+        LOOKUP_EXECUTOR.execute(() -> {
+            try {
+                Lyrics lyrics = controller.getLyricsClient().find(track.getInfo());
+                if (lyrics != null && lyrics.hasSynced()) LyricsAutoSync.preload(client, track, lyrics);
+            } catch (IOException | RuntimeException e) {
+                LOGGER.debug("lyrics alignment preload skipped for {}", track.getInfo().title, e);
+            }
+        });
+    }
+
     public static void prefetchNext(MusicPlayerClient client) {
         MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
         TranslationClient translator = controller.getTranslationClient();
         List<AudioTrack> queue = client.getUpcomingTracks();
         boolean llmIsSlow = translator != null && translator.isEnabled() && !translator.hasUsableGpu();
-        warmLyrics(controller, queue.subList(0, Math.min(llmIsSlow ? PREFETCH_COUNT : PREFETCH_COUNT_FAST, queue.size())));
+        warmLyrics(client, controller, queue.subList(0, Math.min(llmIsSlow ? PREFETCH_COUNT : PREFETCH_COUNT_FAST, queue.size())));
         if (translator == null || !translator.isEnabled()) {
             LOGGER.info("lyrics prefetch skipped: translator disabled");
             return;

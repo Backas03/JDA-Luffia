@@ -23,7 +23,6 @@ public class MusicTrackHandler extends AudioEventAdapter {
 
     @Override
     public void onTrackEnd(AudioPlayer player, AudioTrack track, AudioTrackEndReason endReason) {
-        client.onTrackEnded(track);
         if (!endReason.mayStartNext) return;
         if (endReason == AudioTrackEndReason.LOAD_FAILED) {
             musicTrack.playNextTrack(null, false);
