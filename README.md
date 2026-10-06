@@ -127,7 +127,7 @@ PARAMETER num_ctx 8192
 ```
 
 ### Whisper
-``whisper.endpoints`` 에 서버(``url``, ``label``)를 적으면 가사 싱크 자동 보정과 AI 가사 변환(타임스탬프 없는 가사에 시각 붙이기)이 켜집니다. 서버는 OpenAI 호환 ``/v1/audio/transcriptions`` 로 단어별 타임스탬프(``words``)를 돌려줘야 합니다.
+``whisper.endpoints`` 에 서버(``url``, ``label``)를 적으면 가사 싱크 자동 보정과 AI 가사 변환(타임스탬프 없는 가사에 시각 붙이기)이 켜집니다. 서버는 OpenAI 호환 ``/v1/audio/transcriptions`` 로 단어별 타임스탬프(``words``)를 돌려줘야 합니다. whisper.cpp 서버는 ``url`` 에 ``/inference`` 까지 적습니다 (예: ``http://gpu-pc-2:8178/inference``).
 
 ### 캐시
 번역, 가사, AI 태그, 서버 속도 등을 ``cache/`` 에 저장해 재시작 후에도 씁니다. 위치는 ``cache.dir`` 로 바꾸고, 폴더를 지우면 초기화됩니다.
