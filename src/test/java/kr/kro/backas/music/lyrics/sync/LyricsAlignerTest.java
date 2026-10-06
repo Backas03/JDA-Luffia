@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -118,6 +119,92 @@ class LyricsAlignerTest {
         assertTrue(result.isPresent());
         assertEquals(-13_000, result.get().offsetMs());
         assertEquals(2, result.get().matchedLines());
+    }
+
+    private static final List<LyricLine> CHERRY_POP = List.of(
+            new LyricLine(0, ""),
+            new LyricLine(1_080, "ちぇ"),
+            new LyricLine(1_750, "わーどきどき　ねーすきすき？"),
+            new LyricLine(4_250, "あーズキズキ　ちねちねちねちね"),
+            new LyricLine(6_740, "わーどきどき　ねーすきすき？"),
+            new LyricLine(9_170, "あーズキズキ　ちねちねちねちね"),
+            new LyricLine(11_090, "あたし一等賞がほしいのよ"),
+            new LyricLine(13_440, "二番なんて望んでない"),
+            new LyricLine(16_000, "みんなめんどくせって離れるの"),
+            new LyricLine(18_540, "重い子って不人気なん　なんなん"),
+            new LyricLine(21_160, "あたし迷子　迷子で損な感じ"),
+            new LyricLine(23_660, "本命になれないマン　死んじまうわ！"),
+            new LyricLine(26_380, "サイコ？　サイコはどっちどっち"),
+            new LyricLine(28_490, "おまえのことは顔しか　信じらんない！"),
+            new LyricLine(31_430, "やってないね　やってらんないね"),
+            new LyricLine(33_910, "一生ぼっち　好意ありがとさん"),
+            new LyricLine(36_570, "やってられるか～ったかたったった！"),
+            new LyricLine(38_960, "愛していい感　すきすき？"),
+            new LyricLine(40_170, "恋していい感　すきすき？"),
+            new LyricLine(41_460, "どれみが怖いぞ　チェリーチェリー"),
+            new LyricLine(43_910, "そうでもない感　むりむり？"),
+            new LyricLine(45_190, "どうでもいい感　むりむり？"),
+            new LyricLine(46_550, "トゲみが怖いぞ　ベイビーベイビー"),
+            new LyricLine(48_930, "愛していい感　すきすき？"),
+            new LyricLine(50_210, "恋していい感　すきすき？"),
+            new LyricLine(51_410, "都合が良くてよ　チェリーチェリー"),
+            new LyricLine(53_920, "そうでもない感　むりむり？"),
+            new LyricLine(55_190, "どうでもいい感　むりむり？"),
+            new LyricLine(56_440, "出直してきなよ　ベイビーベイビー"),
+            new LyricLine(59_160, "いやーほんと…"),
+            new LyricLine(60_450, "わーどきどき　ねーすきすき？"),
+            new LyricLine(62_940, "あーズキズキ　ちねちねちねちね"),
+            new LyricLine(65_440, "わーどきどき　ねーすきすき？"),
+            new LyricLine(68_000, "あーズキズキ　ちねちねちねちね"),
+            new LyricLine(69_780, "あたし一等賞がほしいのよ"),
+            new LyricLine(72_120, "二番なんて望んでない"),
+            new LyricLine(74_840, "時に先生　好きとはなんですか"),
+            new LyricLine(77_260, "辞書にないやつをください"),
+            new LyricLine(79_720, "怒りぐっとこらえて言う「ごめんね」"),
+            new LyricLine(82_130, "おまえのすきはすきじゃない　吐いちまうわ！"),
+            new LyricLine(85_160, "終わったおバカはどっかいって"),
+            new LyricLine(87_390, "あたしは王子様を待っているの"));
+
+    private static List<WhisperClient.Word> heard(List<LyricLine> lines, long shiftMs, long untilMs, Map<String, String> misheard,
+                                                  long misheardBeforeMs) {
+        List<WhisperClient.Word> words = new ArrayList<>();
+        for (LyricLine line : lines) {
+            if (line.timeMs() + shiftMs >= untilMs) break;
+            String text = line.timeMs() < misheardBeforeMs ? misheard.getOrDefault(line.text(), line.text()) : line.text();
+            long at = line.timeMs() + shiftMs;
+            for (String word : text.split("[　 ]")) {
+                if (word.isEmpty()) continue;
+                words.add(new WhisperClient.Word(word, at, at + 250));
+                at += 300;
+            }
+        }
+        return words;
+    }
+
+    @Test
+    void doesNotLockOntoALaterRepeatOfTheIntroThatWhisperHeardMoreClearly() {
+        Map<String, String> misheard = Map.of(
+                "わーどきどき　ねーすきすき？", "わあドキドキ　ねえ好き好き",
+                "あーズキズキ　ちねちねちねちね", "ああズキズキ　死ね死ね死ね死ね");
+        Optional<LyricsAligner.Alignment> result = LyricsAligner.align(heard(CHERRY_POP, 0, 90_000, misheard, 10_000), CHERRY_POP, 90_000);
+        assertTrue(result.isPresent());
+        assertEquals(0, result.get().offsetMs());
+
+        Optional<LyricsAligner.Alignment> late = LyricsAligner.align(heard(CHERRY_POP, 2_500, 90_000, misheard, 10_000), CHERRY_POP, 90_000);
+        assertTrue(late.isPresent());
+        assertEquals(-2_500, late.get().offsetMs());
+    }
+
+    @Test
+    void refusesWhenARepeatedSectionFitsTwoOffsetsEqually() {
+        List<LyricLine> lines = List.of(
+                new LyricLine(2_000, "Hello darkness my old friend"),
+                new LyricLine(6_000, "I've come to talk with you again"),
+                new LyricLine(10_000, "Because a vision softly creeping"),
+                new LyricLine(30_000, "Hello darkness my old friend"),
+                new LyricLine(34_000, "I've come to talk with you again"),
+                new LyricLine(38_000, "Because a vision softly creeping"));
+        assertTrue(LyricsAligner.align(sung(lines.subList(3, 6), 0), lines, 45_000).isEmpty());
     }
 
     @Test

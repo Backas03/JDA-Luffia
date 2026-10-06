@@ -38,6 +38,8 @@ public class LrcLibClient {
     private static final String API_BASE = "https://lrclib.net/api/";
     private static final String USER_AGENT = "JDA-Luffia/1.0 (https://github.com/Backas03/JDA-Luffia)";
     private static final long DURATION_TOLERANCE_SEC = 5;
+    private static final double MIN_SYNCED_COVERAGE = 0.6;
+    private static final long TRUNCATED_PENALTY = DURATION_TOLERANCE_SEC + 2;
     private static final int MIN_ARTIST_KEY_LENGTH = 3;
     private static final int RETRY_ATTEMPTS = 4;
     private static final long RETRY_BASE_DELAY_MS = 1000;
@@ -49,7 +51,7 @@ public class LrcLibClient {
     private static final Pattern LRC_LINE = Pattern.compile("\\[(\\d{1,2}):(\\d{2})(?:[.:](\\d{1,3}))?](.*)");
     private static final Pattern LRC_OFFSET = Pattern.compile("\\[offset:\\s*([+-]?\\d+)\\s*]", Pattern.CASE_INSENSITIVE);
     private static final Pattern TITLE_NOISE = Pattern.compile(
-            "(?i)\\s*[\\[(【].*?(official|mv|m/v|music video|lyric|audio|visualizer|ver\\.?|version|remaster|가사|자막|한글|번역|공식|뮤직비디오|4k|8k|hd).*?[\\])】]\\s*|\\s*[|_]\\s*(mv|m/v|official.*)$");
+            "(?i)\\s*[\\[(【].*?(official|mv|m/v|music video|lyric|audio|visualizer|ver\\.?|version|remaster|가사|자막|한글|번역|공식|뮤직비디오|4k|8k|hd).*?[\\])】]\\s*|\\s*[\\[(【]\\s*from\\s.*?[\\])】]\\s*|\\s*[|_]\\s*(mv|m/v|official.*)$");
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private static final int CACHE_SIZE = 300;
@@ -96,7 +98,7 @@ public class LrcLibClient {
                 if (cached != null) return cached.orElse(null);
                 Long missedAt = MISSES.get(identifier);
                 if (missedAt != null && System.currentTimeMillis() - missedAt < MISS_TTL_MS) return null;
-                String diskPath = "lyrics/" + TranslationJobs.sha256(identifier) + ".json";
+                String diskPath = "lyrics-v2/" + TranslationJobs.sha256(identifier) + ".json";
                 Lyrics found = DiskCache.defaultCache().read(diskPath, Lyrics.class);
                 boolean fromDisk = found != null;
                 if (!fromDisk) found = lookup(info);
@@ -392,7 +394,7 @@ public class LrcLibClient {
     }
 
     @Nullable
-    private static JsonNode pickBest(@Nullable JsonNode results, long durationSec) {
+    static JsonNode pickBest(@Nullable JsonNode results, long durationSec) {
         if (results == null || !results.isArray()) return null;
         JsonNode best = null;
         long bestDiff = Long.MAX_VALUE;
@@ -402,7 +404,7 @@ public class LrcLibClient {
             if (!hasLyrics) continue;
             long diff = Math.abs(candidate.path("duration").asLong(0) - durationSec);
             boolean synced = !candidate.path("syncedLyrics").asText("").isBlank();
-            long score = diff - (synced ? 1 : 0);
+            long score = diff - (synced ? 1 : 0) + (synced && endsEarly(candidate, durationSec) ? TRUNCATED_PENALTY : 0);
             if (score < bestDiff || (score == bestDiff && best != null
                     && candidate.path("id").asLong(Long.MAX_VALUE) < best.path("id").asLong(Long.MAX_VALUE))) {
                 bestDiff = score;
@@ -416,6 +418,13 @@ public class LrcLibClient {
             return null;
         }
         return best;
+    }
+
+    static boolean endsEarly(JsonNode candidate, long durationSec) {
+        if (durationSec <= 0) return false;
+        List<LyricLine> lines = parseLrc(candidate.path("syncedLyrics").asText(""));
+        if (lines.isEmpty()) return false;
+        return lines.get(lines.size() - 1).timeMs() < durationSec * 1000 * MIN_SYNCED_COVERAGE;
     }
 
     private static Lyrics toLyrics(JsonNode node) {
