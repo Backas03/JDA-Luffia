@@ -44,33 +44,38 @@ public final class LyricsAligner {
         if (transcript.length() < MIN_LINE_CHARS) return Optional.empty();
         String text = transcript.toString();
 
-        List<Long> offsets = new ArrayList<>();
         List<Long> eligibleTimes = new ArrayList<>();
-        int lastToken = -1;
+        List<List<Candidate>> candidates = new ArrayList<>();
         for (int i = 0; i < lines.size() && eligibleTimes.size() < MAX_LINES; i++) {
             LyricLine line = lines.get(i);
             if (line.timeMs() > capturedMs + OFFSET_SLACK_MS) break;
             String target = normalize(line.text());
             if (target.length() < MIN_LINE_CHARS) continue;
             eligibleTimes.add(line.timeMs());
-            double bestScore = 0;
-            int bestToken = -1;
-            for (int token = lastToken + 1; token < tokenIndex.size(); token++) {
-                int from = tokenIndex.get(token);
-                int to = Math.min(text.length(), from + target.length());
-                if (to - from < target.length() * 0.6) break;
-                double score = similarity(text.substring(from, to), target);
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestToken = token;
-                }
-            }
-            if (bestScore < MIN_SCORE) continue;
-            lastToken = bestToken;
-            offsets.add(line.timeMs() - onsetMs(tokenWords.get(bestToken)));
+            List<Candidate> found = occurrences(text, tokenIndex, tokenWords, target, line.timeMs());
+            if (!found.isEmpty()) candidates.add(found);
         }
-        if (offsets.size() < 2) return Optional.empty();
 
+        List<Long> centers = new ArrayList<>();
+        List<Support> supports = new ArrayList<>();
+        int best = -1;
+        for (List<Candidate> found : candidates) {
+            for (Candidate candidate : found) {
+                Support support = support(candidates, candidate.offsetMs());
+                centers.add(candidate.offsetMs());
+                supports.add(support);
+                if (best < 0 || support.beats(supports.get(best))) best = supports.size() - 1;
+            }
+        }
+        if (best < 0 || supports.get(best).offsets().size() < 2) return Optional.empty();
+        int bestCount = supports.get(best).offsets().size();
+        for (int i = 0; i < supports.size(); i++) {
+            if (supports.get(i).offsets().size() == bestCount && Math.abs(centers.get(i) - centers.get(best)) > 2 * MAX_DEVIATION_MS) {
+                return Optional.empty();
+            }
+        }
+
+        List<Long> offsets = new ArrayList<>(supports.get(best).offsets());
         offsets.sort(Long::compare);
         long median = median(offsets);
         List<Long> agreeing = new ArrayList<>();
@@ -87,6 +92,62 @@ public final class LyricsAligner {
         long refined = median(agreeing);
         long spread = agreeing.get(agreeing.size() - 1) - agreeing.get(0);
         return Optional.of(new Alignment(Math.round(refined / 10.0) * 10, agreeing.size(), spread));
+    }
+
+    private record Candidate(long offsetMs, double score) {
+    }
+
+    private record Support(List<Long> offsets, double score) {
+        boolean beats(Support other) {
+            if (offsets.size() != other.offsets.size()) return offsets.size() > other.offsets.size();
+            return score > other.score;
+        }
+    }
+
+    private static List<Candidate> occurrences(String text, List<Integer> tokenIndex, List<WhisperClient.Word> tokenWords,
+                                               String target, long lineMs) {
+        double[] scores = new double[tokenIndex.size()];
+        int scored = 0;
+        for (int token = 0; token < tokenIndex.size(); token++) {
+            int from = tokenIndex.get(token);
+            int to = Math.min(text.length(), from + target.length());
+            if (to - from < target.length() * 0.6) break;
+            scores[token] = similarity(text.substring(from, to), target);
+            scored++;
+        }
+        List<Candidate> found = new ArrayList<>();
+        for (int token = 0; token < scored; token++) {
+            if (scores[token] < MIN_SCORE || !isPeak(scores, scored, tokenIndex, token, target.length())) continue;
+            found.add(new Candidate(lineMs - onsetMs(tokenWords.get(token)), scores[token]));
+        }
+        return found;
+    }
+
+    private static boolean isPeak(double[] scores, int scored, List<Integer> tokenIndex, int token, int radius) {
+        int at = tokenIndex.get(token);
+        for (int other = token - 1; other >= 0 && at - tokenIndex.get(other) < radius; other--) {
+            if (scores[other] >= scores[token]) return false;
+        }
+        for (int other = token + 1; other < scored && tokenIndex.get(other) - at < radius; other++) {
+            if (scores[other] > scores[token]) return false;
+        }
+        return true;
+    }
+
+    private static Support support(List<List<Candidate>> candidates, long centerMs) {
+        List<Long> offsets = new ArrayList<>();
+        double total = 0;
+        for (List<Candidate> found : candidates) {
+            Candidate pick = null;
+            for (Candidate candidate : found) {
+                if (Math.abs(candidate.offsetMs() - centerMs) > MAX_DEVIATION_MS) continue;
+                if (pick == null || candidate.score() > pick.score()) pick = candidate;
+            }
+            if (pick == null) continue;
+            offsets.add(pick.offsetMs());
+            total += pick.score();
+        }
+        return new Support(offsets, total);
     }
 
     static long onsetMs(WhisperClient.Word word) {

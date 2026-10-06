@@ -79,6 +79,28 @@ class LrcLibClientTest {
     }
 
     @Test
+    void dropsTheSourceTagThatCoverTitlesCarry() {
+        assertEquals("Dan Dan Kokoro Hikareteku", LrcLibClient.cleanTitle("Dan Dan Kokoro Hikareteku (From \"Dragon Ball GT\")"));
+        assertEquals("Let It Go", LrcLibClient.cleanTitle("Let It Go [From \"Frozen\"]"));
+        assertEquals("Love from Paris", LrcLibClient.cleanTitle("Love from Paris"));
+    }
+
+    @Test
+    void passesOverSyncedLyricsThatStopHalfwayThroughTheSong() throws Exception {
+        JsonNode results = MAPPER.readTree("""
+                [{"id": 18969551, "trackName": "Dan Dan", "artistName": "PelleK", "duration": 215.0,
+                  "syncedLyrics": "[00:03.70] DAN DAN 心魅かれてく\\n[01:36.54] Hold your hand\\n[01:43.21] "},
+                 {"id": 10709636, "trackName": "Dan Dan", "artistName": "Miura Jam", "duration": 211.0,
+                  "syncedLyrics": "[00:03.46] DAN DAN 心魅かれてく\\n[03:11.59] 海の彼方へ 飛び出そうよ Hold my hand\\n[03:22.35] "}]""");
+        assertTrue(LrcLibClient.endsEarly(results.get(0), 214));
+        assertFalse(LrcLibClient.endsEarly(results.get(1), 214));
+        assertEquals(10709636, LrcLibClient.pickBest(results, 214).path("id").asInt());
+
+        ArrayNode onlyShort = MAPPER.createArrayNode().add(results.get(0));
+        assertEquals(18969551, LrcLibClient.pickBest(onlyShort, 214).path("id").asInt());
+    }
+
+    @Test
     void comparesNamesIgnoringWidthCaseAndPunctuation() {
         assertEquals(LrcLibClient.matchKey("MyGO!!!!!"), LrcLibClient.matchKey("ｍｙｇｏ"));
         assertEquals("", LrcLibClient.matchKey("「」！？"));
