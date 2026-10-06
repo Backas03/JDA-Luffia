@@ -107,7 +107,7 @@ public final class WhisperClient {
 
     private List<Word> request(Endpoint endpoint, byte[] wav, @Nullable String language) throws IOException, InterruptedException {
         String boundary = "luffia-" + UUID.randomUUID();
-        HttpRequest request = HttpRequest.newBuilder(URI.create(endpoint.baseUrl() + "/v1/audio/transcriptions"))
+        HttpRequest request = HttpRequest.newBuilder(URI.create(transcriptionUrl(endpoint.baseUrl())))
                 .timeout(REQUEST_TIMEOUT)
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(multipart(boundary, wav, language)))
@@ -117,6 +117,11 @@ public final class WhisperClient {
             throw new IOException("whisper " + response.statusCode() + ": " + abbreviate(response.body()));
         }
         return parseWords(response.body());
+    }
+
+    static String transcriptionUrl(String base) {
+        String path = URI.create(base).getPath();
+        return path == null || path.isEmpty() || path.equals("/") ? base + "/v1/audio/transcriptions" : base;
     }
 
     static byte[] multipart(String boundary, byte[] wav, @Nullable String language) throws IOException {
@@ -129,6 +134,8 @@ public final class WhisperClient {
             out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"language\"\r\n\r\n" + language + "\r\n")
                     .getBytes(StandardCharsets.UTF_8));
         }
+        out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\nverbose_json\r\n")
+                .getBytes(StandardCharsets.UTF_8));
         out.write(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
         return out.toByteArray();
     }
@@ -136,14 +143,21 @@ public final class WhisperClient {
     static List<Word> parseWords(String json) throws IOException {
         JsonNode root = MAPPER.readTree(json);
         List<Word> words = new ArrayList<>();
-        for (JsonNode node : root.path("words")) {
-            String text = node.path("word").asText("");
+        addWords(root.path("words"), words);
+        if (words.isEmpty()) {
+            for (JsonNode segment : root.path("segments")) addWords(segment.path("words"), words);
+        }
+        return words;
+    }
+
+    private static void addWords(JsonNode nodes, List<Word> words) {
+        for (JsonNode node : nodes) {
+            String text = node.path("word").asText("").replace("�", "");
             if (text.isBlank()) continue;
             long start = Math.round(node.path("start").asDouble(0) * 1000);
             long end = Math.round(node.path("end").asDouble(0) * 1000);
             words.add(new Word(text.trim(), start, Math.max(start, end)));
         }
-        return words;
     }
 
     private static String abbreviate(String body) {
