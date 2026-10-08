@@ -18,6 +18,7 @@ public final class LyricsAligner {
 
     static final double MIN_SCORE = 0.45;
     static final int MIN_MATCHES = 3;
+    static final double MIN_MATCHED_SHARE = 0.5;
     static final long MAX_DEVIATION_MS = 700;
     static final int MIN_LINE_CHARS = 4;
     static final long EDGE_MARGIN_MS = 1500;
@@ -95,7 +96,7 @@ public final class LyricsAligner {
             long expectedAt = time - median;
             if (expectedAt >= 0 && expectedAt <= capturedMs - EDGE_MARGIN_MS) expectedInCapture++;
         }
-        int required = Math.max(2, Math.min(MIN_MATCHES, expectedInCapture));
+        int required = Math.max(Math.max(2, Math.min(MIN_MATCHES, expectedInCapture)), (int) Math.ceil(expectedInCapture * MIN_MATCHED_SHARE));
         if (agreeing.size() < required) return Optional.empty();
         long refined = median(agreeing);
         long spread = agreeing.get(agreeing.size() - 1) - agreeing.get(0);
