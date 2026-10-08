@@ -31,6 +31,14 @@ public final class LyricsAligner {
     }
 
     public static Optional<Alignment> align(List<WhisperClient.Word> words, List<LyricLine> lines, long capturedMs) {
+        List<String> texts = texts(lines);
+        if (Romaji.looksLike(texts)) {
+            List<String> romanized = Romaji.lines(texts);
+            List<LyricLine> converted = new ArrayList<>(lines.size());
+            for (int i = 0; i < lines.size(); i++) converted.add(new LyricLine(lines.get(i).timeMs(), romanized.get(i)));
+            lines = converted;
+            words = Romaji.words(words);
+        }
         List<Integer> tokenIndex = new ArrayList<>();
         List<WhisperClient.Word> tokenWords = new ArrayList<>();
         StringBuilder transcript = new StringBuilder();
@@ -219,6 +227,13 @@ public final class LyricsAligner {
         if (kana > 0 && kana >= hangul) return "ja";
         if (hangul > 0) return "ko";
         if (han > 0) return null;
-        return latin > 0 ? "en" : null;
+        if (latin == 0) return null;
+        return Romaji.looksLike(texts(lines)) ? "ja" : "en";
+    }
+
+    private static List<String> texts(List<LyricLine> lines) {
+        List<String> texts = new ArrayList<>(lines.size());
+        for (LyricLine line : lines) texts.add(line.text());
+        return texts;
     }
 }

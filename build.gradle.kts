@@ -36,6 +36,7 @@ dependencies {
     implementation("com.google.api-client:google-api-client:2.2.0")
     implementation("com.github.meraki-analytics.orianna:orianna:master-SNAPSHOT")
     implementation("org.jsoup:jsoup:1.15.3")
+    implementation("com.atilika.kuromoji:kuromoji-ipadic:0.9.0")
 }
 
 application {
