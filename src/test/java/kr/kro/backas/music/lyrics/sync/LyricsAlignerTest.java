@@ -121,49 +121,49 @@ class LyricsAlignerTest {
         assertEquals(2, result.get().matchedLines());
     }
 
-    private static final List<LyricLine> CHERRY_POP = List.of(
+    private static final List<LyricLine> REPEATING_INTRO = List.of(
             new LyricLine(0, ""),
-            new LyricLine(1_080, "ちぇ"),
-            new LyricLine(1_750, "わーどきどき　ねーすきすき？"),
-            new LyricLine(4_250, "あーズキズキ　ちねちねちねちね"),
-            new LyricLine(6_740, "わーどきどき　ねーすきすき？"),
-            new LyricLine(9_170, "あーズキズキ　ちねちねちねちね"),
-            new LyricLine(11_090, "あたし一等賞がほしいのよ"),
-            new LyricLine(13_440, "二番なんて望んでない"),
-            new LyricLine(16_000, "みんなめんどくせって離れるの"),
-            new LyricLine(18_540, "重い子って不人気なん　なんなん"),
-            new LyricLine(21_160, "あたし迷子　迷子で損な感じ"),
-            new LyricLine(23_660, "本命になれないマン　死んじまうわ！"),
-            new LyricLine(26_380, "サイコ？　サイコはどっちどっち"),
-            new LyricLine(28_490, "おまえのことは顔しか　信じらんない！"),
-            new LyricLine(31_430, "やってないね　やってらんないね"),
-            new LyricLine(33_910, "一生ぼっち　好意ありがとさん"),
-            new LyricLine(36_570, "やってられるか～ったかたったった！"),
-            new LyricLine(38_960, "愛していい感　すきすき？"),
-            new LyricLine(40_170, "恋していい感　すきすき？"),
-            new LyricLine(41_460, "どれみが怖いぞ　チェリーチェリー"),
-            new LyricLine(43_910, "そうでもない感　むりむり？"),
-            new LyricLine(45_190, "どうでもいい感　むりむり？"),
-            new LyricLine(46_550, "トゲみが怖いぞ　ベイビーベイビー"),
-            new LyricLine(48_930, "愛していい感　すきすき？"),
-            new LyricLine(50_210, "恋していい感　すきすき？"),
-            new LyricLine(51_410, "都合が良くてよ　チェリーチェリー"),
-            new LyricLine(53_920, "そうでもない感　むりむり？"),
-            new LyricLine(55_190, "どうでもいい感　むりむり？"),
-            new LyricLine(56_440, "出直してきなよ　ベイビーベイビー"),
-            new LyricLine(59_160, "いやーほんと…"),
-            new LyricLine(60_450, "わーどきどき　ねーすきすき？"),
-            new LyricLine(62_940, "あーズキズキ　ちねちねちねちね"),
-            new LyricLine(65_440, "わーどきどき　ねーすきすき？"),
-            new LyricLine(68_000, "あーズキズキ　ちねちねちねちね"),
-            new LyricLine(69_780, "あたし一等賞がほしいのよ"),
-            new LyricLine(72_120, "二番なんて望んでない"),
-            new LyricLine(74_840, "時に先生　好きとはなんですか"),
-            new LyricLine(77_260, "辞書にないやつをください"),
-            new LyricLine(79_720, "怒りぐっとこらえて言う「ごめんね」"),
-            new LyricLine(82_130, "おまえのすきはすきじゃない　吐いちまうわ！"),
-            new LyricLine(85_160, "終わったおバカはどっかいって"),
-            new LyricLine(87_390, "あたしは王子様を待っているの"));
+            new LyricLine(1_080, "ねえ"),
+            new LyricLine(1_750, "ふわふわ　ゆらゆら　ねえきいて？"),
+            new LyricLine(4_250, "どきどき　ぐるぐる　まわるまわる"),
+            new LyricLine(6_740, "ふわふわ　ゆらゆら　ねえきいて？"),
+            new LyricLine(9_170, "どきどき　ぐるぐる　まわるまわる"),
+            new LyricLine(11_090, "あの日の空を覚えているかな"),
+            new LyricLine(13_440, "二人で歩いた坂道の先"),
+            new LyricLine(16_000, "小さな声で名前を呼んだ"),
+            new LyricLine(18_540, "夕焼け色に　染まる街角"),
+            new LyricLine(21_160, "遠くの汽笛が　聞こえた気がした"),
+            new LyricLine(23_660, "明日になれば　何か変わるかな"),
+            new LyricLine(26_380, "冷たい風が　頬をかすめて"),
+            new LyricLine(28_490, "それでも僕は　ここで待ってる"),
+            new LyricLine(31_430, "光の中で　手を伸ばして"),
+            new LyricLine(33_910, "君の名前を　もう一度呼ぶよ"),
+            new LyricLine(36_570, "忘れないでと　笑ってみせた"),
+            new LyricLine(38_960, "星を数えて　夜を越えて"),
+            new LyricLine(40_170, "月を見上げて　朝を待って"),
+            new LyricLine(41_460, "揺れる心は　まだ止まらない"),
+            new LyricLine(43_910, "言葉にならない　想いを抱いて"),
+            new LyricLine(45_190, "眠れないまま　窓を開けたら"),
+            new LyricLine(46_550, "知らない歌が　流れてきたんだ"),
+            new LyricLine(48_930, "星を数えて　夜を越えて"),
+            new LyricLine(50_210, "月を見上げて　朝を待って"),
+            new LyricLine(51_410, "震える指で　扉を叩く"),
+            new LyricLine(53_920, "言葉にならない　想いを抱いて"),
+            new LyricLine(55_190, "眠れないまま　窓を開けたら"),
+            new LyricLine(56_440, "最後の歌を　君に届ける"),
+            new LyricLine(59_160, "そうだね…"),
+            new LyricLine(60_450, "ふわふわ　ゆらゆら　ねえきいて？"),
+            new LyricLine(62_940, "どきどき　ぐるぐる　まわるまわる"),
+            new LyricLine(65_440, "ふわふわ　ゆらゆら　ねえきいて？"),
+            new LyricLine(68_000, "どきどき　ぐるぐる　まわるまわる"),
+            new LyricLine(69_780, "あの日の空を覚えているかな"),
+            new LyricLine(72_120, "二人で歩いた坂道の先"),
+            new LyricLine(74_840, "雨上がりの道　水たまり跳ねて"),
+            new LyricLine(77_260, "傘を閉じたら　虹が見えたよ"),
+            new LyricLine(79_720, "ありがとうって　言えなかったけど"),
+            new LyricLine(82_130, "今ならきっと　伝えられるはず"),
+            new LyricLine(85_160, "季節が巡って　また春が来て"),
+            new LyricLine(87_390, "僕らはずっと　ここにいるから"));
 
     private static List<WhisperClient.Word> heard(List<LyricLine> lines, long shiftMs, long untilMs, Map<String, String> misheard,
                                                   long misheardBeforeMs) {
@@ -184,26 +184,23 @@ class LyricsAlignerTest {
     @Test
     void doesNotLockOntoALaterRepeatOfTheIntroThatWhisperHeardMoreClearly() {
         Map<String, String> misheard = Map.of(
-                "わーどきどき　ねーすきすき？", "わあドキドキ　ねえ好き好き",
-                "あーズキズキ　ちねちねちねちね", "ああズキズキ　死ね死ね死ね死ね");
-        Optional<LyricsAligner.Alignment> result = LyricsAligner.align(heard(CHERRY_POP, 0, 90_000, misheard, 10_000), CHERRY_POP, 90_000);
+                "ふわふわ　ゆらゆら　ねえきいて？", "フワフワ揺ら揺ら　ねえ聞いて",
+                "どきどき　ぐるぐる　まわるまわる", "ドキドキぐるぐる　回る回る");
+        Optional<LyricsAligner.Alignment> result = LyricsAligner.align(heard(REPEATING_INTRO, 0, 90_000, misheard, 10_000), REPEATING_INTRO, 90_000);
         assertTrue(result.isPresent());
         assertEquals(0, result.get().offsetMs());
 
-        Optional<LyricsAligner.Alignment> late = LyricsAligner.align(heard(CHERRY_POP, 2_500, 90_000, misheard, 10_000), CHERRY_POP, 90_000);
+        Optional<LyricsAligner.Alignment> late = LyricsAligner.align(heard(REPEATING_INTRO, 2_500, 90_000, misheard, 10_000), REPEATING_INTRO, 90_000);
         assertTrue(late.isPresent());
         assertEquals(-2_500, late.get().offsetMs());
     }
 
     @Test
     void refusesWhenARepeatedSectionFitsTwoOffsetsEqually() {
-        List<LyricLine> lines = List.of(
-                new LyricLine(2_000, "Hello darkness my old friend"),
-                new LyricLine(6_000, "I've come to talk with you again"),
-                new LyricLine(10_000, "Because a vision softly creeping"),
-                new LyricLine(30_000, "Hello darkness my old friend"),
-                new LyricLine(34_000, "I've come to talk with you again"),
-                new LyricLine(38_000, "Because a vision softly creeping"));
+        List<LyricLine> lines = new ArrayList<>();
+        for (int pass = 0; pass < 2; pass++) {
+            for (int i = 0; i < 3; i++) lines.add(new LyricLine(2_000 + 28_000L * pass + 4_000L * i, ENGLISH.get(i).text()));
+        }
         assertTrue(LyricsAligner.align(sung(lines.subList(3, 6), 0), lines, 45_000).isEmpty());
     }
 
