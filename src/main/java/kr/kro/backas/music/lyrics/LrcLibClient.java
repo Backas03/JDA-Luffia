@@ -40,6 +40,8 @@ public class LrcLibClient {
     private static final long DURATION_TOLERANCE_SEC = 5;
     private static final double MIN_SYNCED_COVERAGE = 0.6;
     private static final long TRUNCATED_PENALTY = DURATION_TOLERANCE_SEC + 2;
+    private static final int MIN_CROWDED_LINES = 10;
+    private static final long MIN_LINE_GAP_MS = 1000;
     private static final int MIN_ARTIST_KEY_LENGTH = 3;
     private static final int RETRY_ATTEMPTS = 4;
     private static final long RETRY_BASE_DELAY_MS = 1000;
@@ -98,7 +100,7 @@ public class LrcLibClient {
                 if (cached != null) return cached.orElse(null);
                 Long missedAt = MISSES.get(identifier);
                 if (missedAt != null && System.currentTimeMillis() - missedAt < MISS_TTL_MS) return null;
-                String diskPath = "lyrics-v2/" + TranslationJobs.sha256(identifier) + ".json";
+                String diskPath = "lyrics-v3/" + TranslationJobs.sha256(identifier) + ".json";
                 Lyrics found = DiskCache.defaultCache().read(diskPath, Lyrics.class);
                 boolean fromDisk = found != null;
                 if (!fromDisk) found = lookup(info);
@@ -131,7 +133,8 @@ public class LrcLibClient {
             if (exactPaths.size() >= MAX_PARALLEL_EXACT) break;
             exactPaths.add("get?track_name=" + encode(candidate[1]) + "&artist_name=" + encode(candidate[0]) + "&duration=" + durationSec);
         }
-        JsonNode node = firstSuccess(failures, exactPaths, resolved, found -> found);
+        JsonNode exact = firstSuccess(failures, exactPaths, resolved, found -> found);
+        JsonNode node = exact == null || unreliableSync(exact, durationSec) ? null : exact;
         if (node == null) {
             List<String> searchPaths = new ArrayList<>();
             for (String[] candidate : candidates) {
@@ -150,9 +153,10 @@ public class LrcLibClient {
                 break;
             }
         }
-        if (node != null) return toLyrics(node);
+        if (node != null) return usable(node, durationSec);
         Lyrics byResolver = resolved == null ? null : resolved.join();
         if (byResolver != null) return byResolver;
+        if (exact != null) return usable(exact, durationSec);
         if (failures.last != null) throw failures.last;
         return null;
     }
@@ -199,12 +203,10 @@ public class LrcLibClient {
             if (song == null) return null;
             long durationSec = info.length / 1000;
             Failures failures = new Failures();
-            JsonNode node = null;
+            JsonNode exact = song.artist().isBlank() ? null
+                    : tryGet(failures, "get?track_name=" + encode(song.title()) + "&artist_name=" + encode(song.artist()) + "&duration=" + durationSec);
+            JsonNode node = exact == null || unreliableSync(exact, durationSec) ? null : exact;
             boolean lengthDiffers = false;
-            if (!song.artist().isBlank()) {
-                node = tryGet(failures, "get?track_name=" + encode(song.title()) + "&artist_name=" + encode(song.artist())
-                        + "&duration=" + durationSec);
-            }
             if (node == null) {
                 JsonNode results = song.artist().isBlank() ? null
                         : tryGet(failures, "search?track_name=" + encode(song.title()) + "&artist_name=" + encode(song.artist()));
@@ -216,8 +218,9 @@ public class LrcLibClient {
                     lengthDiffers = node != null;
                 }
             }
+            if (node == null) node = exact;
             if (node == null) return null;
-            Lyrics lyrics = toLyrics(node);
+            Lyrics lyrics = usable(node, durationSec);
             return lengthDiffers ? plainOnly(lyrics) : lyrics;
         } catch (IOException | RuntimeException e) {
             LOGGER.debug("lyrics lookup by resolved song failed for {}", info.title, e);
@@ -404,7 +407,7 @@ public class LrcLibClient {
             if (!hasLyrics) continue;
             long diff = Math.abs(candidate.path("duration").asLong(0) - durationSec);
             boolean synced = !candidate.path("syncedLyrics").asText("").isBlank();
-            long score = diff - (synced ? 1 : 0) + (synced && endsEarly(candidate, durationSec) ? TRUNCATED_PENALTY : 0);
+            long score = diff - (synced ? 1 : 0) + (synced && unreliableSync(candidate, durationSec) ? TRUNCATED_PENALTY : 0);
             if (score < bestDiff || (score == bestDiff && best != null
                     && candidate.path("id").asLong(Long.MAX_VALUE) < best.path("id").asLong(Long.MAX_VALUE))) {
                 bestDiff = score;
@@ -420,11 +423,25 @@ public class LrcLibClient {
         return best;
     }
 
-    static boolean endsEarly(JsonNode candidate, long durationSec) {
-        if (durationSec <= 0) return false;
+    static boolean unreliableSync(JsonNode candidate, long durationSec) {
         List<LyricLine> lines = parseLrc(candidate.path("syncedLyrics").asText(""));
         if (lines.isEmpty()) return false;
-        return lines.get(lines.size() - 1).timeMs() < durationSec * 1000 * MIN_SYNCED_COVERAGE;
+        long last = lines.get(lines.size() - 1).timeMs();
+        if (durationSec > 0 && last < durationSec * 1000 * MIN_SYNCED_COVERAGE) return true;
+        int sung = 0;
+        long firstSung = 0;
+        long lastSung = 0;
+        for (LyricLine line : lines) {
+            if (line.text().isBlank()) continue;
+            if (sung++ == 0) firstSung = line.timeMs();
+            lastSung = line.timeMs();
+        }
+        return sung >= MIN_CROWDED_LINES && lastSung - firstSung < sung * MIN_LINE_GAP_MS;
+    }
+
+    private static Lyrics usable(JsonNode node, long durationSec) {
+        Lyrics lyrics = toLyrics(node);
+        return unreliableSync(node, durationSec) ? plainOnly(lyrics) : lyrics;
     }
 
     private static Lyrics toLyrics(JsonNode node) {

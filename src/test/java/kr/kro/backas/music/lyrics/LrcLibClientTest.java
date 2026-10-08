@@ -17,6 +17,10 @@ class LrcLibClientTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    private static String lrcLine(long ms, String text) {
+        return String.format("[%02d:%02d.%02d] %s\\n", ms / 60_000, ms / 1000 % 60, ms / 10 % 100, text);
+    }
+
     private static boolean hasPair(List<String[]> pairs, String artist, String title) {
         for (String[] pair : pairs) {
             if (pair[0].equals(artist) && pair[1].equals(title)) return true;
@@ -88,16 +92,30 @@ class LrcLibClientTest {
     @Test
     void passesOverSyncedLyricsThatStopHalfwayThroughTheSong() throws Exception {
         JsonNode results = MAPPER.readTree("""
-                [{"id": 18969551, "trackName": "Dan Dan", "artistName": "PelleK", "duration": 215.0,
-                  "syncedLyrics": "[00:03.70] DAN DAN 心魅かれてく\\n[01:36.54] Hold your hand\\n[01:43.21] "},
-                 {"id": 10709636, "trackName": "Dan Dan", "artistName": "Miura Jam", "duration": 211.0,
-                  "syncedLyrics": "[00:03.46] DAN DAN 心魅かれてく\\n[03:11.59] 海の彼方へ 飛び出そうよ Hold my hand\\n[03:22.35] "}]""");
-        assertTrue(LrcLibClient.endsEarly(results.get(0), 214));
-        assertFalse(LrcLibClient.endsEarly(results.get(1), 214));
-        assertEquals(10709636, LrcLibClient.pickBest(results, 214).path("id").asInt());
+                [{"id": 1, "trackName": "Sample Song", "artistName": "Cover Singer", "duration": 215.0,
+                  "syncedLyrics": "[00:03.70] first line\\n[01:36.54] last short line\\n[01:43.21] "},
+                 {"id": 2, "trackName": "Sample Song", "artistName": "Other Singer", "duration": 211.0,
+                  "syncedLyrics": "[00:03.46] first line\\n[03:11.59] last full line\\n[03:22.35] "}]""");
+        assertTrue(LrcLibClient.unreliableSync(results.get(0), 214));
+        assertFalse(LrcLibClient.unreliableSync(results.get(1), 214));
+        assertEquals(2, LrcLibClient.pickBest(results, 214).path("id").asInt());
 
         ArrayNode onlyShort = MAPPER.createArrayNode().add(results.get(0));
-        assertEquals(18969551, LrcLibClient.pickBest(onlyShort, 214).path("id").asInt());
+        assertEquals(1, LrcLibClient.pickBest(onlyShort, 214).path("id").asInt());
+    }
+
+    @Test
+    void distrustsSyncedLyricsSqueezedIntoAFewSeconds() throws Exception {
+        StringBuilder crowded = new StringBuilder();
+        StringBuilder spread = new StringBuilder();
+        for (int i = 0; i < 30; i++) {
+            crowded.append(lrcLine(50_000 + i * 500L, "line " + i));
+            spread.append(lrcLine(5_000 + i * 6_000L, "line " + i));
+        }
+        JsonNode squeezed = MAPPER.readTree("{\"syncedLyrics\": \"" + crowded + "[03:10.00] \"}");
+        JsonNode normal = MAPPER.readTree("{\"syncedLyrics\": \"" + spread + "[03:10.00] \"}");
+        assertTrue(LrcLibClient.unreliableSync(squeezed, 0));
+        assertFalse(LrcLibClient.unreliableSync(normal, 202));
     }
 
     @Test
