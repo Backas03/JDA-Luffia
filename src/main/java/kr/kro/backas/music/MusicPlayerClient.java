@@ -21,7 +21,7 @@ import kr.kro.backas.music.lyrics.LyricsPresenter;
 import kr.kro.backas.music.lyrics.LyricsSession;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import org.jetbrains.annotations.Nullable;
-import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.components.container.Container;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.audio.hooks.ConnectionListener;
 import net.dv8tion.jda.api.audio.hooks.ConnectionStatus;
@@ -287,7 +287,7 @@ public class MusicPlayerClient {
         InteractionHook hook = selection == null ? null : selection.takeReplyHook();
         boolean mirrored = home != null && home.getIdLong() != live.getIdLong();
         if (hook != null && mirrored) {
-            hook.editOriginalEmbeds(MusicEmbeds.play(track, getGuild()).build())
+            hook.editOriginalComponents(MusicEmbeds.playCard(track, getGuild())).useComponentsV2(true).setReplace(true)
                     .queue(null, e -> LOGGER.debug("failed to answer the play request", e));
         }
         TrackCard card = mirrored || home == null
@@ -384,10 +384,10 @@ public class MusicPlayerClient {
     }
 
     @Nullable
-    public EmbedBuilder enqueue(MusicSelection selection, @NotNull VoiceChannel memberChannel) {
+    public Container enqueue(MusicSelection selection, @NotNull VoiceChannel memberChannel) {
         boolean enqueued = enqueueOrPlay(selection, memberChannel);
         if (!enqueued) return null;
-        return MusicEmbeds.enqueue(selection.getSelectedTrack(), getGuild(), musicTrack.getTrackQueue().size());
+        return MusicEmbeds.enqueueCard(selection.getSelectedTrack(), getGuild(), musicTrack.getTrackQueue().size());
     }
 
     public List<AudioTrack> getTrackQueue() {

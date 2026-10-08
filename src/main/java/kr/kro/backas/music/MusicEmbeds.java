@@ -11,6 +11,12 @@ import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.DurationUtil;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.components.container.Container;
+import net.dv8tion.jda.api.components.container.ContainerChildComponent;
+import net.dv8tion.jda.api.components.section.Section;
+import net.dv8tion.jda.api.components.separator.Separator;
+import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
+import net.dv8tion.jda.api.components.thumbnail.Thumbnail;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import org.jetbrains.annotations.Nullable;
@@ -64,50 +70,44 @@ public final class MusicEmbeds {
     }
 
     public static String titleLink(AudioTrackInfo info) {
-        String title = DiscordSafe.escaped(info.title, MAX_LINK_TITLE).replace('[', '(').replace(']', ')');
-        if (info.uri == null || info.uri.isBlank()) return title;
-        return "[" + title + "](" + info.uri + ")";
+        return link(info.title, info.uri);
     }
 
-    private static EmbedBuilder trackBase(AudioTrack track, Guild guild) {
+    private static String link(String title, @Nullable String url) {
+        String text = DiscordSafe.escaped(title, MAX_LINK_TITLE).replace('[', '(').replace(']', ')');
+        if (url == null || url.isBlank()) return text;
+        return "[" + text + "](" + url + ")";
+    }
+
+    public static Container playCard(AudioTrack track, Guild guild) {
+        return trackCard(track, guild, "음악을 재생합니다");
+    }
+
+    public static Container enqueueCard(AudioTrack track, Guild guild, int position) {
+        return trackCard(track, guild, "대기열 " + position + "번째에 추가했습니다");
+    }
+
+    private static Container trackCard(AudioTrack track, Guild guild, String status) {
         MusicSelection selection = track.getUserData(MusicSelection.class);
-        AudioTrackInfo info = track.getInfo();
-        EmbedBuilder builder = new EmbedBuilder()
-                .setColor(PRIMARY)
-                .setTitle(info.title, info.uri)
-                .setThumbnail(thumbnailOf(track));
-        if (info.author != null && !info.author.isBlank()) {
-            builder.setAuthor(info.author);
-        }
-        builder.addField("노래 봇", botName(guild), true)
-                .addField("재생 시간", durationOf(info), true)
-                .addField("출처", sourceLabel(track), true);
+        String requester = null;
         if (selection != null) {
-            String requester = MemberUtil.getName(selection.getRequestedMember());
             String prefix = selection.isAutoplay() ? "AI 자동 추천 · " : selection.isAiRecommended() ? "AI 추천 · " : "";
-            builder.setFooter(prefix + requester);
+            requester = prefix + MemberUtil.getName(selection.getRequestedMember());
         }
-        return builder;
+        String artwork = thumbnailOf(track);
+        TextDisplay header = TextDisplay.of(TrackCard.headerText(track.getInfo(), sourceLabel(track), null) + "\n" + status);
+        return Container.of(withArtwork(header, artwork), Separator.createDivider(Separator.Spacing.SMALL), footer(guild, requester))
+                .withAccentColor(ArtworkColors.of(artwork));
     }
 
-    public static EmbedBuilder play(AudioTrack track, Guild guild) {
-        return trackBase(track, guild).setDescription("음악을 재생합니다");
-    }
-
-    public static EmbedBuilder enqueue(AudioTrack track, Guild guild, int position) {
-        return trackBase(track, guild)
-                .setDescription("해당 음악이 대기열 " + position + "번째에 추가되었습니다");
-    }
-
-    public static EmbedBuilder playlistEnqueued(AudioPlaylist playlist,
-                                                List<AudioTrack> added,
-                                                int total,
-                                                boolean startedPlaying,
-                                                Guild guild,
-                                                Member requester) {
+    public static Container playlistCard(AudioPlaylist playlist,
+                                         List<AudioTrack> added,
+                                         int total,
+                                         boolean startedPlaying,
+                                         Guild guild,
+                                         Member requester) {
         AudioTrack first = added.get(0);
         long totalMs = added.stream().mapToLong(t -> t.getInfo().length).sum();
-
         String url = null;
         String artwork = null;
         String author = null;
@@ -117,30 +117,42 @@ public final class MusicEmbeds {
             author = extended.getAuthor();
         }
         if (artwork == null) artwork = thumbnailOf(first);
+        String header = playlistText(playlist.getName(), url, author, totalMs, sourceLabel(first), added.size(), total, startedPlaying);
+        return Container.of(withArtwork(TextDisplay.of(header), artwork),
+                        Separator.createDivider(Separator.Spacing.SMALL),
+                        TextDisplay.of(firstTrackText(first.getInfo())),
+                        Separator.createDivider(Separator.Spacing.SMALL),
+                        footer(guild, MemberUtil.getName(requester)))
+                .withAccentColor(ArtworkColors.of(artwork));
+    }
 
-        StringBuilder description = new StringBuilder();
-        description.append(added.size()).append(startedPlaying ? "곡을 대기열에 추가 & 재생합니다" : "곡을 대기열에 추가했습니다");
-        if (total > added.size()) {
-            description.append("\n(전체 ").append(total).append("곡 중 ")
-                    .append(added.size()).append("곡이 추가되었습니다)");
-        }
+    static String playlistText(String name, @Nullable String url, @Nullable String author, long totalMs, String source,
+                               int added, int total, boolean startedPlaying) {
+        StringBuilder text = new StringBuilder("### ").append(link(name, url)).append('\n');
+        if (author != null && !author.isBlank()) text.append("-# ").append(DiscordSafe.escaped(author, MAX_LINK_TITLE)).append('\n');
+        text.append("-# 총 ").append(DurationUtil.formatDuration((int) (totalMs / 1000))).append(" · ").append(source).append('\n');
+        text.append(added).append(startedPlaying ? "곡을 대기열에 추가 & 재생합니다" : "곡을 대기열에 추가했습니다");
+        if (total > added) text.append("\n-# 전체 ").append(total).append("곡 중 ").append(added).append("곡이 추가되었습니다");
+        return text.toString();
+    }
 
-        EmbedBuilder builder = new EmbedBuilder()
-                .setColor(PRIMARY)
-                .setTitle(playlist.getName(), url)
-                .setThumbnail(artwork)
-                .setDescription(description)
-                .addField("노래 봇", botName(guild), true)
-                .addField("총 재생 시간", DurationUtil.formatDuration((int) (totalMs / 1000)), true)
-                .addField("출처", sourceLabel(first), true)
-                .addField("첫 곡", "[" + first.getInfo().title + "](" + first.getInfo().uri + ")", true)
-                .addField("아티스트", first.getInfo().author == null || first.getInfo().author.isBlank() ? "-" : first.getInfo().author, true)
-                .addField("재생 시간", durationOf(first.getInfo()), true)
-                .setFooter(MemberUtil.getName(requester));
-        if (author != null && !author.isBlank()) {
-            builder.setAuthor(author);
-        }
-        return builder;
+    static String firstTrackText(AudioTrackInfo info) {
+        StringBuilder text = new StringBuilder("**첫 곡** ").append(titleLink(info)).append("\n-# ");
+        if (info.author != null && !info.author.isBlank()) text.append(DiscordSafe.escaped(info.author, MAX_LINK_TITLE)).append(" · ");
+        return text.append(info.isStream ? "라이브" : DurationUtil.formatClock(info.length / 1000)).toString();
+    }
+
+    static String footerText(String botName, @Nullable String requester) {
+        String first = requester == null ? botName : botName + " · " + DiscordSafe.escaped(requester, MAX_LINK_TITLE);
+        return "-# " + first + "\n-# " + BuildInfo.VERSION;
+    }
+
+    private static ContainerChildComponent withArtwork(TextDisplay text, @Nullable String artwork) {
+        return artwork == null || artwork.isBlank() ? text : Section.of(Thumbnail.fromUrl(artwork), text);
+    }
+
+    private static TextDisplay footer(Guild guild, @Nullable String requester) {
+        return TextDisplay.of(footerText(botName(guild), requester));
     }
 
     public static EmbedBuilder trackFailed(AudioTrack track, Guild guild, @Nullable String reason) {

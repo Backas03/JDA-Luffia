@@ -32,6 +32,18 @@ class TrackCardTest {
     }
 
     @Test
+    void playlistCardSummarisesWhatWasQueued() {
+        assertEquals("### [그 플리](https://open.spotify.com/playlist/x)\n-# 김말이\n-# 총 1시간 2분 3초 · Spotify\n"
+                        + "438곡을 대기열에 추가했습니다\n-# 전체 440곡 중 438곡이 추가되었습니다",
+                MusicEmbeds.playlistText("그 플리", "https://open.spotify.com/playlist/x", "김말이", 3_723_000, "Spotify", 438, 440, false));
+        assertEquals("### 믹스\n-# 총 3분 · YouTube\n2곡을 대기열에 추가 & 재생합니다",
+                MusicEmbeds.playlistText("믹스", null, null, 180_000, "YouTube", 2, 2, true));
+        assertEquals("**첫 곡** [Song](https://youtu.be/id)\n-# Artist · 3:34", MusicEmbeds.firstTrackText(info("Song", "Artist", 214_000, false)));
+        assertEquals("-# 김노래#6163 · AI 추천 · 박카스\n-# " + BuildInfo.VERSION, MusicEmbeds.footerText("김노래#6163", "AI 추천 · 박카스"));
+        assertEquals("-# 김노래#6163\n-# " + BuildInfo.VERSION, MusicEmbeds.footerText("김노래#6163", null));
+    }
+
+    @Test
     void titleLinkNeutralisesBracketsThatWouldBreakMarkdown() {
         assertEquals("[(MV) 곡 (feat. X)](https://youtu.be/id)",
                 MusicEmbeds.titleLink(info("[MV] 곡 [feat. X]", "a", 1000, false)));
