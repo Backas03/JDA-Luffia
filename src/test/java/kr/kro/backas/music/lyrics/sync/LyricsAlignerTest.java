@@ -205,6 +205,18 @@ class LyricsAlignerTest {
     }
 
     @Test
+    void refusesWhenMostLinesThatShouldBeHeardDidNotMatch() {
+        List<LyricLine> lines = new ArrayList<>();
+        for (int i = 0; i < 12; i++) lines.add(new LyricLine(4_000 + 5_000L * i, REPEATING_INTRO.get(6 + i).text()));
+        List<LyricLine> heardLines = List.of(lines.get(0), lines.get(3), lines.get(6), lines.get(9));
+        assertTrue(LyricsAligner.align(heard(heardLines, 500, 70_000, Map.of(), 0), lines, 70_000).isEmpty());
+        List<LyricLine> most = lines.subList(0, 8);
+        Optional<LyricsAligner.Alignment> result = LyricsAligner.align(heard(most, 500, 70_000, Map.of(), 0), lines, 70_000);
+        assertTrue(result.isPresent());
+        assertEquals(-500, result.get().offsetMs());
+    }
+
+    @Test
     void normalisationFoldsWidthCaseKanaAndPunctuation() {
         assertEquals("helloworld", LyricsAligner.normalize("Ｈｅｌｌｏ, World!"));
         assertEquals("かたかな", LyricsAligner.normalize("カタカナ"));
