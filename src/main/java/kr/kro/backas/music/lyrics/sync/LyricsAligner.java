@@ -18,6 +18,7 @@ public final class LyricsAligner {
 
     static final double MIN_SCORE = 0.45;
     static final int MIN_MATCHES = 3;
+    static final double MIN_MATCHED_SHARE = 0.5;
     static final long MAX_DEVIATION_MS = 700;
     static final int MIN_LINE_CHARS = 4;
     static final long EDGE_MARGIN_MS = 1500;
@@ -31,6 +32,14 @@ public final class LyricsAligner {
     }
 
     public static Optional<Alignment> align(List<WhisperClient.Word> words, List<LyricLine> lines, long capturedMs) {
+        List<String> texts = texts(lines);
+        if (Romaji.looksLike(texts)) {
+            List<String> romanized = Romaji.lines(texts);
+            List<LyricLine> converted = new ArrayList<>(lines.size());
+            for (int i = 0; i < lines.size(); i++) converted.add(new LyricLine(lines.get(i).timeMs(), romanized.get(i)));
+            lines = converted;
+            words = Romaji.words(words);
+        }
         List<Integer> tokenIndex = new ArrayList<>();
         List<WhisperClient.Word> tokenWords = new ArrayList<>();
         StringBuilder transcript = new StringBuilder();
@@ -87,7 +96,7 @@ public final class LyricsAligner {
             long expectedAt = time - median;
             if (expectedAt >= 0 && expectedAt <= capturedMs - EDGE_MARGIN_MS) expectedInCapture++;
         }
-        int required = Math.max(2, Math.min(MIN_MATCHES, expectedInCapture));
+        int required = Math.max(Math.max(2, Math.min(MIN_MATCHES, expectedInCapture)), (int) Math.ceil(expectedInCapture * MIN_MATCHED_SHARE));
         if (agreeing.size() < required) return Optional.empty();
         long refined = median(agreeing);
         long spread = agreeing.get(agreeing.size() - 1) - agreeing.get(0);
@@ -219,6 +228,13 @@ public final class LyricsAligner {
         if (kana > 0 && kana >= hangul) return "ja";
         if (hangul > 0) return "ko";
         if (han > 0) return null;
-        return latin > 0 ? "en" : null;
+        if (latin == 0) return null;
+        return Romaji.looksLike(texts(lines)) ? "ja" : "en";
+    }
+
+    private static List<String> texts(List<LyricLine> lines) {
+        List<String> texts = new ArrayList<>(lines.size());
+        for (LyricLine line : lines) texts.add(line.text());
+        return texts;
     }
 }

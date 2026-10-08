@@ -43,6 +43,9 @@ public final class LyricsTimestamper {
     }
 
     public static Optional<Result> timestamp(List<String> lines, List<WhisperClient.Word> words, long durationMs, boolean partial) {
+        boolean romaji = Romaji.looksLike(lines);
+        List<String> targets = romaji ? Romaji.lines(lines) : lines;
+        if (romaji) words = Romaji.words(words);
         List<Integer> tokenIndex = new ArrayList<>();
         List<WhisperClient.Word> tokenWords = new ArrayList<>();
         StringBuilder transcript = new StringBuilder();
@@ -60,7 +63,7 @@ public final class LyricsTimestamper {
 
         double[][] score = new double[count][tokens];
         for (int i = 0; i < count; i++) {
-            String target = LyricsAligner.normalize(lines.get(i));
+            String target = LyricsAligner.normalize(targets.get(i));
             for (int j = 0; j < tokens; j++) {
                 if (target.length() < 2) {
                     score[i][j] = NONE;
