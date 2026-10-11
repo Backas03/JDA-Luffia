@@ -67,6 +67,7 @@ class WhisperClientTest {
         assertTrue(text.startsWith("--xyz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.wav\""));
         assertTrue(text.contains("name=\"language\"\r\n\r\nja\r\n"));
         assertTrue(text.contains("name=\"response_format\"\r\n\r\nverbose_json\r\n"));
+        assertTrue(text.contains("name=\"max_context\"\r\n\r\n0\r\n"));
         assertTrue(text.endsWith("--xyz--\r\n"));
     }
 }
