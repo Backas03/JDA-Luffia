@@ -54,6 +54,15 @@ class WhisperClientTest {
     }
 
     @Test
+    void readsSegmentTextAndTimesForTranscription() throws Exception {
+        String json = "{\"segments\":[{\"start\":1.5,\"end\":3.25,\"text\":\" 君の声 \"},"
+                + "{\"start\":4,\"end\":5,\"text\":\"�\"},{\"start\":6,\"end\":5.5,\"text\":\"夜\"}]}";
+        List<WhisperClient.Segment> segments = WhisperClient.parseSegments(json);
+        assertEquals(List.of(new WhisperClient.Segment(1_500, 3_250, "君の声"), new WhisperClient.Segment(6_000, 6_000, "夜")), segments);
+        assertTrue(WhisperClient.parseSegments("{\"text\":\"x\"}").isEmpty());
+    }
+
+    @Test
     void postsToTheConfiguredPathOrTheOpenAiPath() {
         assertEquals("http://a:8000/v1/audio/transcriptions", WhisperClient.transcriptionUrl("http://a:8000"));
         assertEquals("http://b:8178/inference", WhisperClient.transcriptionUrl("http://b:8178/inference"));
@@ -67,6 +76,7 @@ class WhisperClientTest {
         assertTrue(text.startsWith("--xyz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.wav\""));
         assertTrue(text.contains("name=\"language\"\r\n\r\nja\r\n"));
         assertTrue(text.contains("name=\"response_format\"\r\n\r\nverbose_json\r\n"));
+        assertTrue(text.contains("name=\"max_context\"\r\n\r\n0\r\n"));
         assertTrue(text.endsWith("--xyz--\r\n"));
     }
 }

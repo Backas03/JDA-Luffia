@@ -93,7 +93,7 @@ public record LuffiaConfig(Bot bot,
     public record Prefetch(int count, int countFast, int lookupThreads) {
     }
 
-    public record Whisper(List<WhisperEndpoint> endpoints, int retryFailedSeconds, AutoSync autoSync, Convert convert) {
+    public record Whisper(List<WhisperEndpoint> endpoints, int retryFailedSeconds, AutoSync autoSync, Convert convert, Transcribe transcribe) {
         public String endpointSpec() {
             List<String> parts = new ArrayList<>();
             if (endpoints != null) {
@@ -113,6 +113,9 @@ public record LuffiaConfig(Bot bot,
     }
 
     public record Convert(boolean auto, int maxSeconds, int firstPassSeconds, int passStepSeconds) {
+    }
+
+    public record Transcribe(boolean enabled, int minLetters) {
     }
 
     public record Cache(String dir) {

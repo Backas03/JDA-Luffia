@@ -32,6 +32,8 @@ public final class SpotifyLyricsClient {
 
     static final int VERSION = 1;
     static final long DURATION_TOLERANCE_MS = 5_000;
+    static final long SAME_ARTIST_TOLERANCE_MS = 3_000;
+    static final int SAME_ARTIST_RANKS = 3;
     private static final long WAIT_MS = 10_000;
     private static final long MISS_RETRY_MS = 24L * 60 * 60 * 1000;
     private static final Pattern TRACK_URL = Pattern.compile("open\\.spotify\\.com/(?:intl-[a-z]+/)?track/([A-Za-z0-9]+)");
@@ -92,9 +94,12 @@ public final class SpotifyLyricsClient {
             matched = found.getInfo();
         }
         AudioLyrics lyrics = source.getLyrics(id);
-        if (lyrics == null) return null;
-        Lyrics converted = toLyrics(lyrics, matched.title, matched.author);
-        if (converted != null) LOGGER.info("found {} lyrics for {} on spotify ({})", converted.hasSynced() ? "synced" : "plain", info.title, lyrics.getProvider());
+        Lyrics converted = lyrics == null ? null : toLyrics(lyrics, matched.title, matched.author);
+        if (converted == null) {
+            LOGGER.info("spotify has no lyrics for {} (spotify track {})", info.title, id);
+            return null;
+        }
+        LOGGER.info("found {} lyrics for {} on spotify ({}, track {})", converted.hasSynced() ? "synced" : "plain", info.title, lyrics.getProvider(), id);
         return converted;
     }
 
@@ -103,15 +108,18 @@ public final class SpotifyLyricsClient {
         List<String> queries = new ArrayList<>();
         if (info.isrc != null && !info.isrc.isBlank()) queries.add("isrc:" + info.isrc);
         queries.add(LrcLibClient.cleanTitle(info.title) + " " + LrcLibClient.firstArtist(info.author));
+        int seen = 0;
         for (String query : queries) {
             AudioItem item = source.getSearch(query, false);
             List<AudioTrack> candidates = item instanceof AudioPlaylist playlist ? playlist.getTracks()
                     : item instanceof AudioTrack single ? List.of(single) : List.of();
             boolean byIsrc = query.startsWith("isrc:");
-            for (AudioTrack candidate : candidates) {
-                if (matches(info, candidate.getInfo(), byIsrc)) return candidate;
+            for (int i = 0; i < candidates.size(); i++) {
+                if (matches(info, candidates.get(i).getInfo(), byIsrc, i)) return candidates.get(i);
             }
+            seen += candidates.size();
         }
+        LOGGER.info("no spotify track matched {} by {} among {} search result(s)", info.title, info.author, seen);
         return null;
     }
 
@@ -124,11 +132,16 @@ public final class SpotifyLyricsClient {
         return matcher.find() ? matcher.group(1) : null;
     }
 
-    static boolean matches(AudioTrackInfo ours, AudioTrackInfo candidate, boolean byIsrc) {
-        if (ours.length > 0 && candidate.length > 0 && Math.abs(ours.length - candidate.length) > DURATION_TOLERANCE_MS) return false;
+    static boolean matches(AudioTrackInfo ours, AudioTrackInfo candidate, boolean byIsrc, int rank) {
+        long gap = ours.length > 0 && candidate.length > 0 ? Math.abs(ours.length - candidate.length) : 0;
+        if (gap > DURATION_TOLERANCE_MS) return false;
         if (byIsrc) return true;
+        String ourKey = LrcLibClient.matchKey(ours.title + " " + ours.author);
         String title = LrcLibClient.matchKey(DECORATION.matcher(candidate.title == null ? "" : candidate.title).replaceAll(""));
-        return !title.isEmpty() && LrcLibClient.matchKey(ours.title + " " + ours.author).contains(title);
+        if (!title.isEmpty() && ourKey.contains(title)) return true;
+        String artist = LrcLibClient.matchKey(LrcLibClient.firstArtist(candidate.author));
+        return rank < SAME_ARTIST_RANKS && ours.length > 0 && gap <= SAME_ARTIST_TOLERANCE_MS
+                && artist.length() >= 3 && ourKey.contains(artist);
     }
 
     @Nullable
