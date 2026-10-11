@@ -119,6 +119,35 @@ class LrcLibClientTest {
     }
 
     @Test
+    void treatsLatinOnlyLyricsOfAJapaneseTitleAsATranslationUnlessTheyAreRomaji() throws Exception {
+        JsonNode translation = MAPPER.readTree("""
+                {"id": 1, "duration": 123.0, "plainLyrics": "We walked along the river at night\\nI never said the words I meant"}""");
+        JsonNode original = MAPPER.readTree("""
+                {"id": 2, "duration": 123.0, "syncedLyrics": "[00:03.00] 夜の川を歩いた\\n[00:08.00] 言えなかった言葉"}""");
+        JsonNode romaji = MAPPER.readTree("""
+                {"id": 3, "duration": 123.0, "plainLyrics": "Yoru no kawa wo aruita futari de\\nIenakatta kotoba wo mada oboeteru\\nAshita mo kitto onaji sora no shita"}""");
+        assertTrue(LrcLibClient.translated(translation, "夜の川（Night River）/ Sample feat. Singer"));
+        assertFalse(LrcLibClient.translated(original, "夜の川（Night River）/ Sample feat. Singer"));
+        assertFalse(LrcLibClient.translated(romaji, "夜の川"));
+        assertFalse(LrcLibClient.translated(translation, "Night River"));
+
+        ArrayNode results = MAPPER.createArrayNode().add(translation).add(original);
+        assertEquals(2, LrcLibClient.pickBest(results, 123, "夜の川").path("id").asInt());
+    }
+
+    @Test
+    void triesTheEnglishTitleInParenthesesAndPutsTheChannelArtistFirst() {
+        List<String[]> pairs = LrcLibClient.candidatePairs("夜の川（Night River）/ Sample feat. Singer", "Sample");
+        assertTrue(hasPair(pairs, "Sample", "Night River"));
+        int plain = -1;
+        for (int i = 0; i < pairs.size(); i++) {
+            if (pairs.get(i)[0].equals("Sample") && pairs.get(i)[1].equals("夜の川")) plain = i;
+        }
+        assertTrue(plain >= 0 && plain < 6);
+        assertFalse(hasPair(LrcLibClient.candidatePairs("夜の川 (feat. Singer)", "Sample"), "Sample", "feat. Singer"));
+    }
+
+    @Test
     void comparesNamesIgnoringWidthCaseAndPunctuation() {
         assertEquals(LrcLibClient.matchKey("MyGO!!!!!"), LrcLibClient.matchKey("ｍｙｇｏ"));
         assertEquals("", LrcLibClient.matchKey("「」！？"));

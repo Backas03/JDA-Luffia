@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import kr.kro.backas.music.cache.DiskCache;
+import kr.kro.backas.music.lyrics.sync.Romaji;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -21,13 +22,16 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -100,7 +104,7 @@ public class LrcLibClient {
                 if (cached != null) return cached.orElse(null);
                 Long missedAt = MISSES.get(identifier);
                 if (missedAt != null && System.currentTimeMillis() - missedAt < MISS_TTL_MS) return null;
-                String diskPath = "lyrics-v3/" + TranslationJobs.sha256(identifier) + ".json";
+                String diskPath = "lyrics-v4/" + TranslationJobs.sha256(identifier) + ".json";
                 Lyrics found = DiskCache.defaultCache().read(diskPath, Lyrics.class);
                 boolean fromDisk = found != null;
                 if (!fromDisk) found = lookup(info);
@@ -133,30 +137,45 @@ public class LrcLibClient {
             if (exactPaths.size() >= MAX_PARALLEL_EXACT) break;
             exactPaths.add("get?track_name=" + encode(candidate[1]) + "&artist_name=" + encode(candidate[0]) + "&duration=" + durationSec);
         }
-        JsonNode exact = firstSuccess(failures, exactPaths, resolved, found -> found);
-        JsonNode node = exact == null || unreliableSync(exact, durationSec) ? null : exact;
+        AtomicReference<JsonNode> rejected = new AtomicReference<>();
+        JsonNode node = firstSuccess(failures, exactPaths, resolved, found -> {
+            if (!unreliableSync(found, durationSec) && !translated(found, info.title)) return found;
+            rejected.compareAndSet(null, found);
+            return null;
+        });
+        JsonNode unsynced = node == null || hasSynced(node) ? null : node;
+        if (unsynced != null) node = null;
         if (node == null) {
+            List<String[]> searched = candidates.subList(0, Math.min(MAX_PARALLEL_SEARCH, candidates.size()));
             List<String> searchPaths = new ArrayList<>();
-            for (String[] candidate : candidates) {
-                if (searchPaths.size() >= MAX_PARALLEL_SEARCH) break;
+            for (String[] candidate : searched) {
+                searchPaths.add("search?track_name=" + encode(candidate[1]) + "&artist_name=" + encode(candidate[0]));
+            }
+            for (String[] candidate : searched) {
                 searchPaths.add("search?q=" + encode(candidate[1] + " " + candidate[0]));
             }
-            node = firstSuccess(failures, searchPaths, resolved, found -> pickBest(found, durationSec));
+            JsonNode best = pickBest(gather(failures, searchPaths, resolved), durationSec, info.title);
+            if (best != null && !unreliableSync(best, durationSec) && !translated(best, info.title)) node = best;
+            else if (best != null) rejected.compareAndSet(null, best);
         }
         if (node == null && !hasResult(resolved)) {
-            node = pickBest(tryGet(failures, "search?track_name=" + encode(title)), durationSec);
+            node = pickBest(tryGet(failures, "search?track_name=" + encode(title)), durationSec, info.title);
         }
         if (node == null && !hasResult(resolved)) {
             for (String[] candidate : candidates) {
                 if (candidate[1].equalsIgnoreCase(title)) continue;
-                node = pickBest(tryGet(failures, "search?track_name=" + encode(candidate[1])), durationSec);
+                node = pickBest(tryGet(failures, "search?track_name=" + encode(candidate[1])), durationSec, info.title);
                 break;
             }
+        }
+        if (unsynced != null && (node == null || !hasSynced(node) || unreliableSync(node, durationSec) || translated(node, info.title))) {
+            node = unsynced;
         }
         if (node != null) return usable(node, durationSec);
         Lyrics byResolver = resolved == null ? null : resolved.join();
         if (byResolver != null) return byResolver;
-        if (exact != null) return usable(exact, durationSec);
+        JsonNode fallback = rejected.get();
+        if (fallback != null) return usable(fallback, durationSec);
         if (failures.last != null) throw failures.last;
         return null;
     }
@@ -192,6 +211,39 @@ public class LrcLibClient {
         return best;
     }
 
+    @Nullable
+    private ArrayNode gather(Failures failures, List<String> paths, @Nullable CompletableFuture<Lyrics> resolved) throws IOException {
+        if (paths.isEmpty() || hasResult(resolved)) return null;
+        List<CompletableFuture<JsonNode>> futures = new ArrayList<>();
+        for (String path : paths) {
+            futures.add(CompletableFuture.supplyAsync(() -> {
+                try {
+                    return tryGet(failures, path);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }, TranslationJobs.EXECUTOR));
+        }
+        ArrayNode merged = MAPPER.createArrayNode();
+        Set<Long> seen = new HashSet<>();
+        IOException failure = null;
+        for (CompletableFuture<JsonNode> future : futures) {
+            try {
+                JsonNode found = future.join();
+                if (found == null || !found.isArray()) continue;
+                for (JsonNode candidate : found) {
+                    if (seen.add(candidate.path("id").asLong(-1))) merged.add(candidate);
+                }
+            } catch (CompletionException e) {
+                if (e.getCause() instanceof UncheckedIOException unchecked) failure = unchecked.getCause();
+                else if (e.getCause() instanceof RuntimeException runtime) throw runtime;
+                else throw e;
+            }
+        }
+        if (merged.isEmpty() && failure != null) throw failure;
+        return merged;
+    }
+
     private static boolean hasResult(@Nullable CompletableFuture<Lyrics> resolved) {
         return resolved != null && resolved.isDone() && resolved.getNow(null) != null;
     }
@@ -205,21 +257,21 @@ public class LrcLibClient {
             Failures failures = new Failures();
             JsonNode exact = song.artist().isBlank() ? null
                     : tryGet(failures, "get?track_name=" + encode(song.title()) + "&artist_name=" + encode(song.artist()) + "&duration=" + durationSec);
-            JsonNode node = exact == null || unreliableSync(exact, durationSec) ? null : exact;
+            JsonNode node = exact == null || unreliableSync(exact, durationSec) || translated(exact, info.title) ? null : exact;
             boolean lengthDiffers = false;
             if (node == null) {
                 JsonNode results = song.artist().isBlank() ? null
                         : tryGet(failures, "search?track_name=" + encode(song.title()) + "&artist_name=" + encode(song.artist()));
                 if (results == null) results = tryGet(failures, "search?track_name=" + encode(song.title()));
                 ArrayNode same = sameSong(results, song, matchKey(info.title + " " + info.author));
-                node = pickBest(same, durationSec);
+                node = pickBest(same, durationSec, info.title);
                 if (node == null) {
                     node = withPlainFirst(same);
                     lengthDiffers = node != null;
                 }
             }
             if (node == null) node = exact;
-            if (node == null) return null;
+            if (node == null || translated(node, info.title)) return null;
             Lyrics lyrics = usable(node, durationSec);
             return lengthDiffers ? plainOnly(lyrics) : lyrics;
         } catch (IOException | RuntimeException e) {
@@ -305,6 +357,8 @@ public class LrcLibClient {
 
     private static final Pattern BRACKET_TITLE = Pattern.compile("^(.*?)[「『](.+?)[」』].*$");
     private static final Pattern QUOTED_TITLE = Pattern.compile("^(.*?)\\s+['‘\"](.+?)['’\"].*$");
+    private static final Pattern ALTERNATIVE_TITLE = Pattern.compile("^(.+?)\\s*[(（]\\s*([A-Za-z][^)）]*[A-Za-z])\\s*[)）]\\s*$");
+    private static final Pattern ALTERNATIVE_NOISE = Pattern.compile("(?i)\\b(feat|ft|prod|ver|version|remix|mix|edit|cover|live|size|inst|instrumental|acoustic)\\b");
     private static final Pattern TRAILING_PAREN = Pattern.compile("\\s*[\\[(（][^)\\]）]*[\\])）]");
 
     static List<String[]> candidatePairs(String title, String channelArtist) {
@@ -322,7 +376,20 @@ public class LrcLibClient {
             addPair(pairs, left, right);
             addPair(pairs, right, left);
         }
-        return pairs;
+        for (String[] pair : new ArrayList<>(pairs)) {
+            Matcher alternative = ALTERNATIVE_TITLE.matcher(pair[1]);
+            if (!alternative.matches() || !hasCjk(alternative.group(1)) || ALTERNATIVE_NOISE.matcher(alternative.group(2)).find()) continue;
+            if (!containsPair(pairs, pair[0], alternative.group(2).trim())) pairs.add(new String[]{pair[0], alternative.group(2).trim()});
+        }
+        String artistKey = matchKey(channelArtist);
+        List<String[]> ordered = new ArrayList<>();
+        for (String[] pair : pairs) {
+            if (!artistKey.isEmpty() && matchKey(pair[0]).equals(artistKey) && !matchKey(pair[1]).contains(artistKey)) ordered.add(pair);
+        }
+        for (String[] pair : pairs) {
+            if (!ordered.contains(pair)) ordered.add(pair);
+        }
+        return ordered;
     }
 
     private static void addPair(List<String[]> pairs, String artist, String trackTitle) {
@@ -398,6 +465,11 @@ public class LrcLibClient {
 
     @Nullable
     static JsonNode pickBest(@Nullable JsonNode results, long durationSec) {
+        return pickBest(results, durationSec, null);
+    }
+
+    @Nullable
+    static JsonNode pickBest(@Nullable JsonNode results, long durationSec, @Nullable String title) {
         if (results == null || !results.isArray()) return null;
         JsonNode best = null;
         long bestDiff = Long.MAX_VALUE;
@@ -407,7 +479,8 @@ public class LrcLibClient {
             if (!hasLyrics) continue;
             long diff = Math.abs(candidate.path("duration").asLong(0) - durationSec);
             boolean synced = !candidate.path("syncedLyrics").asText("").isBlank();
-            long score = diff - (synced ? 1 : 0) + (synced && unreliableSync(candidate, durationSec) ? TRUNCATED_PENALTY : 0);
+            long score = diff - (synced ? 1 : 0) + (synced && unreliableSync(candidate, durationSec) ? TRUNCATED_PENALTY : 0)
+                    + (translated(candidate, title) ? TRUNCATED_PENALTY : 0);
             if (score < bestDiff || (score == bestDiff && best != null
                     && candidate.path("id").asLong(Long.MAX_VALUE) < best.path("id").asLong(Long.MAX_VALUE))) {
                 bestDiff = score;
@@ -437,6 +510,29 @@ public class LrcLibClient {
             lastSung = line.timeMs();
         }
         return sung >= MIN_CROWDED_LINES && lastSung - firstSung < sung * MIN_LINE_GAP_MS;
+    }
+
+    private static boolean hasSynced(JsonNode candidate) {
+        return !candidate.path("syncedLyrics").asText("").isBlank();
+    }
+
+    static boolean translated(JsonNode candidate, @Nullable String title) {
+        if (title == null || !hasCjk(title)) return false;
+        String text = candidate.path("syncedLyrics").asText("");
+        if (text.isBlank()) text = candidate.path("plainLyrics").asText("");
+        if (text.isBlank() || hasCjk(text)) return false;
+        List<String> lines = new ArrayList<>();
+        for (LyricLine line : parseLrc(text)) lines.add(line.text());
+        if (lines.isEmpty()) lines = List.of(text.split("\\r?\\n"));
+        return !Romaji.looksLike(lines);
+    }
+
+    private static boolean hasCjk(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if ((c >= 0x3040 && c <= 0x30FF) || (c >= 0x4E00 && c <= 0x9FFF)) return true;
+        }
+        return false;
     }
 
     private static Lyrics usable(JsonNode node, long durationSec) {
