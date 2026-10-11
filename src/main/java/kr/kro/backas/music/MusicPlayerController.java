@@ -19,7 +19,8 @@ import kr.kro.backas.music.source.MusicSourceRegistry;
 import kr.kro.backas.util.BotShutdown;
 import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
-import net.dv8tion.jda.api.components.container.Container;
+import net.dv8tion.jda.api.entities.Message;
+import java.util.concurrent.CompletableFuture;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.audio.AudioModuleConfig;
@@ -275,17 +276,14 @@ public class MusicPlayerController extends ListenerAdapter {
             return;
         }
         try {
-            Container result = findClientAndEnqueue(new MusicSelection(
+            CompletableFuture<MusicEmbeds.PlayCard> result = findClientAndEnqueue(new MusicSelection(
                     loader.getQueryInfo(),
                     loader.getLoadedTracks().get(event.getValues().get(0))
             ));
             event.editSelectMenu(event.getComponent().asDisabled()).queue();
             if (result != null) {
-                event.getMessage()
-                        .replyComponents(result)
-                        .useComponentsV2(true)
-                        .mentionRepliedUser(false)
-                        .queue();
+                Message message = event.getMessage();
+                result.thenAccept(card -> card.replyTo(message).queue());
             }
         } catch (MusicPlayerException e) {
             EmbedBuilder builder = switch (e.getErrorType()) {
@@ -301,7 +299,7 @@ public class MusicPlayerController extends ListenerAdapter {
     }
 
     @Nullable
-    public Container findClientAndEnqueue(MusicSelection selection) throws MusicPlayerException {
+    public CompletableFuture<MusicEmbeds.PlayCard> findClientAndEnqueue(MusicSelection selection) throws MusicPlayerException {
         Member requestedMember = selection.getRequestedMember();
         AudioChannelUnion joinedAudioChannel = MemberUtil.getJoinedAudioChannel(requestedMember);
         if (joinedAudioChannel == null) {

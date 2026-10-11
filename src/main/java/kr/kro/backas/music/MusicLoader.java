@@ -7,7 +7,6 @@ import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import kr.kro.backas.util.MemberUtil;
-import net.dv8tion.jda.api.components.container.Container;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.interactions.InteractionHook;
@@ -83,16 +82,16 @@ public class MusicLoader implements AudioLoadResultHandler {
 
     private void playSingle(AudioTrack track, VoiceChannel channel) {
         MusicSelection selection = new MusicSelection(queryInfo, track).withReplyHook(hook);
-        Container result = musicPlayerClient.enqueue(selection, channel);
+        CompletableFuture<MusicEmbeds.PlayCard> result = musicPlayerClient.enqueue(selection, channel);
         if (result != null) {
             selection.takeReplyHook();
-            hook.editOriginalComponents(result).useComponentsV2(true).setReplace(true).queue();
+            result.thenAccept(card -> card.editReply(hook).queue());
             return;
         }
         controller.getScheduler().schedule(() -> {
             if (selection.takeReplyHook() == null) return;
-            hook.editOriginalComponents(MusicEmbeds.playCard(track, musicPlayerClient.getGuild())).useComponentsV2(true).setReplace(true)
-                    .queue(null, e -> LOGGER.debug("failed to answer the play request", e));
+            MusicEmbeds.playCard(track, musicPlayerClient.getGuild()).thenAccept(card -> card.editReply(hook)
+                    .queue(null, e -> LOGGER.debug("failed to answer the play request", e)));
         }, HOOK_FALLBACK_SECONDS, TimeUnit.SECONDS);
     }
 
@@ -159,9 +158,8 @@ public class MusicLoader implements AudioLoadResultHandler {
         if (playlist instanceof ExtendedAudioPlaylist extended && extended.getTotalTracks() != null) {
             total = Math.max(total, extended.getTotalTracks());
         }
-        Container result = MusicEmbeds.playlistCard(
-                playlist, added, total, startedPlaying, musicPlayerClient.getGuild(), requester());
-        hook.editOriginalComponents(result).useComponentsV2(true).setReplace(true).queue();
+        MusicEmbeds.playlistCard(playlist, added, total, startedPlaying, musicPlayerClient.getGuild(), requester())
+                .thenAccept(card -> card.editReply(hook).queue());
     }
 
     @Override

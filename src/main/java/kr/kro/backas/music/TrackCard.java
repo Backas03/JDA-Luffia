@@ -43,11 +43,11 @@ public final class TrackCard {
     private static final Logger LOGGER = LoggerFactory.getLogger(TrackCard.class);
     static final String LOOKING_UP = "가사를 찾고 있습니다";
     static final String PLAYED_NOTE = "재생 완료됨";
-    private static final String BANNER_FILE = "banner.jpg";
+    static final String BANNER_FILE = "banner.jpg";
     private static final int MAX_AUTHOR_LENGTH = 80;
     private static final long RECOLLAPSE_SECONDS = 3;
 
-    private static final long BANNER_WAIT_MS = 3000;
+    static final long BANNER_WAIT_MS = 3000;
 
     private final MusicPlayerClient client;
     private final AudioTrack track;
