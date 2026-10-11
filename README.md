@@ -129,9 +129,6 @@ PARAMETER num_ctx 8192
 ### Whisper
 ``whisper.endpoints`` 에 서버(``url``, ``label``)를 적으면 가사 싱크 자동 보정과 AI 가사 변환(타임스탬프 없는 가사에 시각 붙이기)이 켜집니다. 서버는 OpenAI 호환 ``/v1/audio/transcriptions`` 로 단어별 타임스탬프(``words``)를 돌려줘야 합니다. whisper.cpp 서버는 ``url`` 에 ``/inference`` 까지 적습니다 (예: ``http://gpu-pc-2:8178/inference``).
 
-### Spotify 가사
-LRCLIB 에 싱크 가사가 없으면 Spotify 가사를 씁니다. 스포티파이 소스가 켜져 있어야 하고, 무료 계정의 ``sp_dc`` 쿠키를 ``sources.spotify.sp-dc`` 에, [spotify-tokener](https://github.com/topi314/spotify-tokener) 주소를 ``sources.spotify.token-endpoint`` 에 적습니다 (예: ``http://127.0.0.1:8080/api/token``).
-
 ### 캐시
 번역, 가사, AI 태그, 서버 속도 등을 ``cache/`` 에 저장해 재시작 후에도 씁니다. 위치는 ``cache.dir`` 로 바꾸고, 폴더를 지우면 초기화됩니다.
 
