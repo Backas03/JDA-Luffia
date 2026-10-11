@@ -43,11 +43,20 @@ class SpotifyLyricsTest {
     @Test
     void acceptsASearchHitOnlyWhenTitleAndLengthAgree() {
         AudioTrackInfo video = info("Sample Artist – Night Walk (official video)", "Sample Artist", 202_000, "https://youtu.be/x");
-        assertTrue(SpotifyLyricsClient.matches(video, info("Night Walk", "Sample Artist", 205_000, "spotify"), false));
-        assertTrue(SpotifyLyricsClient.matches(video, info("Night Walk - Remastered 2020", "Sample Artist", 203_000, "spotify"), false));
-        assertFalse(SpotifyLyricsClient.matches(video, info("Night Walk", "Sample Artist", 230_000, "spotify"), false));
-        assertFalse(SpotifyLyricsClient.matches(video, info("Morning Run", "Sample Artist", 202_000, "spotify"), false));
-        assertTrue(SpotifyLyricsClient.matches(video, info("Completely Different Name", "x", 201_000, "spotify"), true));
+        assertTrue(SpotifyLyricsClient.matches(video, info("Night Walk", "Sample Artist", 205_000, "spotify"), false, 0));
+        assertTrue(SpotifyLyricsClient.matches(video, info("Night Walk - Remastered 2020", "Sample Artist", 203_000, "spotify"), false, 0));
+        assertFalse(SpotifyLyricsClient.matches(video, info("Night Walk", "Sample Artist", 230_000, "spotify"), false, 0));
+        assertFalse(SpotifyLyricsClient.matches(video, info("Morning Run", "Other Band", 202_000, "spotify"), false, 0));
+        assertTrue(SpotifyLyricsClient.matches(video, info("Completely Different Name", "x", 201_000, "spotify"), true, 0));
+    }
+
+    @Test
+    void acceptsATranslatedTitleFromTheSameArtistWhenTheLengthIsAlmostTheSame() {
+        AudioTrackInfo video = info("Sample Artist - Telepathy feat. Singer", "Sample Artist", 138_000, "https://youtu.be/x");
+        assertTrue(SpotifyLyricsClient.matches(video, info("テレパシ", "Sample Artist, Singer", 137_000, "spotify"), false, 0));
+        assertFalse(SpotifyLyricsClient.matches(video, info("テレパシ", "Sample Artist", 142_000, "spotify"), false, 0));
+        assertFalse(SpotifyLyricsClient.matches(video, info("テレパシ", "Sample Artist", 138_000, "spotify"), false, 3));
+        assertFalse(SpotifyLyricsClient.matches(video, info("テレパシ", "Someone Else", 138_000, "spotify"), false, 0));
     }
 
     @Test
