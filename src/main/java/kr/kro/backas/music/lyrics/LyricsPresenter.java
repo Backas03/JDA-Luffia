@@ -10,6 +10,7 @@ import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.MusicPlayerController;
 import kr.kro.backas.music.lyrics.sync.AiLyricsStore;
 import kr.kro.backas.music.lyrics.sync.LyricsConverter;
+import kr.kro.backas.music.lyrics.sync.LyricsTranscriber;
 import kr.kro.backas.music.TrackCard;
 import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.MemberUtil;
@@ -164,7 +165,12 @@ public final class LyricsPresenter {
         MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
         return CompletableFuture.supplyAsync(() -> {
             try {
-                return AiLyricsStore.defaultStore().enrich(track.getIdentifier(), controller.getLyricsSources().find(track));
+                Lyrics found = AiLyricsStore.defaultStore().enrich(track.getIdentifier(), controller.getLyricsSources().find(track));
+                if (hasNoLyrics(found) && (found == null || !found.instrumental())) {
+                    Lyrics transcript = LyricsTranscriber.cached(track);
+                    if (transcript != null) return transcript;
+                }
+                return found;
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -210,11 +216,12 @@ public final class LyricsPresenter {
             if (error != null) {
                 Throwable cause = error.getCause() == null ? error : error.getCause();
                 LOGGER.warn("lyrics lookup failed for {}", track.getInfo().title, cause);
-                card.note(LYRICS_LOOKUP_FAILED_NOTE);
+                transcribeOnCard(client, track, card, LYRICS_LOOKUP_FAILED_NOTE);
                 return;
             }
             if (hasNoLyrics(lyrics)) {
-                card.note(NO_LYRICS_NOTE);
+                if (lyrics != null && lyrics.instrumental()) card.note(NO_LYRICS_NOTE);
+                else transcribeOnCard(client, track, card, NO_LYRICS_NOTE);
                 prefetchNext(client);
                 return;
             }
@@ -231,6 +238,22 @@ public final class LyricsPresenter {
                     Main.getLuffia().getMusicPlayerController().getLyricsConversions());
             showFull(client, track, lyrics, null, true, view, translator);
             if (Config.get().whisper().convert().auto()) view.requestConversion();
+        });
+    }
+
+    private static void transcribeOnCard(MusicPlayerClient client, AudioTrack track, TrackCard card, String fallbackNote) {
+        if (!LyricsTranscriber.isEnabled() || !client.isCurrentTrack(track)) {
+            card.note(fallbackNote);
+            return;
+        }
+        card.note(TRANSCRIBING_NOTE);
+        LyricsTranscriber.transcribe(client, track).whenComplete((result, error) -> {
+            if (card.isClosed()) return;
+            if (error == null && result != null && result.isPresent() && client.isCurrentTrack(track)) {
+                presentSynced(client, track, card, result.get());
+                return;
+            }
+            card.note(fallbackNote);
         });
     }
 
@@ -718,6 +741,7 @@ public final class LyricsPresenter {
     public static final int PREFETCH_COUNT = Config.get().lyrics().prefetch().count();
     static final String CONVERTING_NOTE = "AI 가사 변환 중...";
     static final String NO_LYRICS_NOTE = "가사를 찾지 못했습니다";
+    static final String TRANSCRIBING_NOTE = "가사 정보를 찾을 수 없어 AI로 가사를 생성하고 있습니다...";
     static final String LYRICS_LOOKUP_FAILED_NOTE = "가사 조회에 실패했습니다";
     static final String CONVERSION_FAILED_NOTE = "AI 가사 변환에 실패했습니다";
     public static final int PREFETCH_COUNT_FAST = Config.get().lyrics().prefetch().countFast();

@@ -42,7 +42,7 @@ public final class LyricsAutoSync {
     }
 
     public static void apply(MusicPlayerClient client, AudioTrack track, Lyrics lyrics, LyricsSession session) {
-        if (lyrics.aiTimed()) return;
+        if (lyrics.aiTimed() || lyrics.aiGenerated()) return;
         LyricsOffsets.Entry cached = LyricsOffsets.defaultStore().get(track.getIdentifier());
         if (cached != null) {
             session.setAutoOffsetMs(cached.offsetMs());

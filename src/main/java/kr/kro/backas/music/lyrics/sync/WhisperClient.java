@@ -29,6 +29,12 @@ public final class WhisperClient {
     public record Endpoint(String baseUrl, String label) {
     }
 
+    public record Segment(long startMs, long endMs, String text) {
+    }
+
+    public record Transcript(List<Word> words, List<Segment> segments) {
+    }
+
     private static final Logger LOGGER = LoggerFactory.getLogger(WhisperClient.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
     static final long RETRY_FAILED_MS = Config.get().whisper().retryFailedSeconds() * 1000L;
@@ -86,13 +92,17 @@ public final class WhisperClient {
     }
 
     public List<Word> transcribe(byte[] wav, @Nullable String language) throws IOException {
+        return transcribeDetailed(wav, language).words();
+    }
+
+    public Transcript transcribeDetailed(byte[] wav, @Nullable String language) throws IOException {
         IOException last = null;
         for (Endpoint endpoint : endpoints) {
             if (isDown(endpoint)) continue;
             try {
-                List<Word> words = request(endpoint, wav, language);
+                Transcript transcript = request(endpoint, wav, language);
                 failedAt.remove(endpoint.baseUrl());
-                return words;
+                return transcript;
             } catch (IOException e) {
                 failedAt.put(endpoint.baseUrl(), System.currentTimeMillis());
                 LOGGER.info("whisper endpoint {} unavailable, trying the next one: {}", endpoint.label(), e.toString());
@@ -105,7 +115,7 @@ public final class WhisperClient {
         throw last == null ? new IOException("no whisper endpoint available") : last;
     }
 
-    private List<Word> request(Endpoint endpoint, byte[] wav, @Nullable String language) throws IOException, InterruptedException {
+    private Transcript request(Endpoint endpoint, byte[] wav, @Nullable String language) throws IOException, InterruptedException {
         String boundary = "luffia-" + UUID.randomUUID();
         HttpRequest request = HttpRequest.newBuilder(URI.create(transcriptionUrl(endpoint.baseUrl())))
                 .timeout(REQUEST_TIMEOUT)
@@ -116,7 +126,7 @@ public final class WhisperClient {
         if (response.statusCode() != 200) {
             throw new IOException("whisper " + response.statusCode() + ": " + abbreviate(response.body()));
         }
-        return parseWords(response.body());
+        return new Transcript(parseWords(response.body()), parseSegments(response.body()));
     }
 
     static String transcriptionUrl(String base) {
@@ -150,6 +160,18 @@ public final class WhisperClient {
             for (JsonNode segment : root.path("segments")) addWords(segment.path("words"), words);
         }
         return words;
+    }
+
+    static List<Segment> parseSegments(String json) throws IOException {
+        List<Segment> segments = new ArrayList<>();
+        for (JsonNode node : MAPPER.readTree(json).path("segments")) {
+            String text = node.path("text").asText("").replace("�", "").strip();
+            if (text.isEmpty()) continue;
+            long start = Math.round(node.path("start").asDouble(0) * 1000);
+            long end = Math.round(node.path("end").asDouble(0) * 1000);
+            segments.add(new Segment(start, Math.max(start, end), text));
+        }
+        return segments;
     }
 
     private static void addWords(JsonNode nodes, List<Word> words) {

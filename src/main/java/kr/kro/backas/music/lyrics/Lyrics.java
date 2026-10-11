@@ -9,10 +9,15 @@ public record Lyrics(String trackName,
                      @Nullable String plain,
                      List<LyricLine> synced,
                      boolean instrumental,
-                     boolean aiTimed) {
+                     boolean aiTimed,
+                     boolean aiGenerated) {
 
     public Lyrics(String trackName, String artistName, @Nullable String plain, List<LyricLine> synced, boolean instrumental) {
-        this(trackName, artistName, plain, synced, instrumental, false);
+        this(trackName, artistName, plain, synced, instrumental, false, false);
+    }
+
+    public Lyrics(String trackName, String artistName, @Nullable String plain, List<LyricLine> synced, boolean instrumental, boolean aiTimed) {
+        this(trackName, artistName, plain, synced, instrumental, aiTimed, false);
     }
 
     public boolean hasSynced() {
@@ -24,6 +29,6 @@ public record Lyrics(String trackName,
     }
 
     public Lyrics withAiTimestamps(List<LyricLine> lines) {
-        return new Lyrics(trackName, artistName, plain, lines, instrumental, true);
+        return new Lyrics(trackName, artistName, plain, lines, instrumental, true, aiGenerated);
     }
 }
