@@ -27,6 +27,8 @@ sources:
     refresh-token: ""
     country: KR
     page-limit: 10
+    sp-dc: ""
+    token-endpoint: ""
 
 music-player:
   default-volume: 10

@@ -1,5 +1,6 @@
 package kr.kro.backas.music;
 
+import com.github.topi314.lavasrc.spotify.SpotifySourceManager;
 import kr.kro.backas.config.Config;
 import club.minnced.discord.jdave.interop.JDaveSessionFactory;
 import kr.kro.backas.music.ai.AiGuard;
@@ -13,6 +14,8 @@ import kr.kro.backas.music.ai.AiTrackTagger;
 import kr.kro.backas.music.lyrics.LrcLibClient;
 import kr.kro.backas.music.lyrics.LyricsConversions;
 import kr.kro.backas.music.lyrics.LyricsExpansions;
+import kr.kro.backas.music.lyrics.LyricsSources;
+import kr.kro.backas.music.lyrics.SpotifyLyricsClient;
 import kr.kro.backas.music.lyrics.TranslationClient;
 import kr.kro.backas.music.lyrics.sync.WhisperClient;
 import kr.kro.backas.music.source.MusicSourceRegistry;
@@ -65,7 +68,7 @@ public class MusicPlayerController extends ListenerAdapter {
 
     private final Map<Long, MusicLoader> searchData;
     private final ScheduledExecutorService scheduler;
-    private final LrcLibClient lyricsClient;
+    private final LyricsSources lyricsSources;
     private final TranslationClient translationClient;
     private final WhisperClient whisperClient;
     private final AiShuffleClassifier aiShuffleClassifier;
@@ -114,7 +117,12 @@ public class MusicPlayerController extends ListenerAdapter {
         this.scheduler.scheduleWithFixedDelay(lyricsExpansions::prune, EXPANSION_PRUNE_MINUTES, EXPANSION_PRUNE_MINUTES, TimeUnit.MINUTES);
         this.scheduler.scheduleWithFixedDelay(lyricsConversions::prune, EXPANSION_PRUNE_MINUTES, EXPANSION_PRUNE_MINUTES, TimeUnit.MINUTES);
         this.aiPlaylistBuilder = new AiPlaylistBuilder(this.translationClient, this.aiShuffleClassifier);
-        this.lyricsClient = new LrcLibClient(new AiSongResolver(this.translationClient));
+        SpotifySourceManager spotify = sourceRegistry.getSpotify();
+        String spDc = Config.get().sources().spotify().spDc();
+        boolean spotifyLyrics = spotify != null && spDc != null && !spDc.isBlank();
+        this.lyricsSources = new LyricsSources(new LrcLibClient(new AiSongResolver(this.translationClient)),
+                spotifyLyrics ? new SpotifyLyricsClient(spotify) : null);
+        LOGGER.info("가사 출처: LRCLIB{}", spotifyLyrics ? " + Spotify" : "");
         this.bots = new CopyOnWriteArrayList<>();
         this.ownedBots = new CopyOnWriteArrayList<>();
         this.clients = new ConcurrentHashMap<>();
@@ -177,8 +185,8 @@ public class MusicPlayerController extends ListenerAdapter {
         watchdog.start();
     }
 
-    public LrcLibClient getLyricsClient() {
-        return lyricsClient;
+    public LyricsSources getLyricsSources() {
+        return lyricsSources;
     }
 
     public WhisperClient getWhisperClient() {

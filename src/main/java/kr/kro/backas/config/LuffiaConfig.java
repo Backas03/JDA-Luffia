@@ -41,7 +41,8 @@ public record LuffiaConfig(Bot bot,
     public record Youtube(int playlistPageCount) {
     }
 
-    public record Spotify(String clientId, String clientSecret, String refreshToken, String country, int pageLimit) {
+    public record Spotify(String clientId, String clientSecret, String refreshToken, String country, int pageLimit, String spDc,
+                          String tokenEndpoint) {
     }
 
     public record MusicPlayer(int defaultVolume, int connectGraceSeconds, Karaoke karaoke) {
