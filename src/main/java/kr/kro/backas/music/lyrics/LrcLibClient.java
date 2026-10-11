@@ -31,6 +31,9 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.regex.Matcher;
@@ -54,6 +57,8 @@ public class LrcLibClient {
     private static final int MAX_PARALLEL_SEARCH = 3;
     private static final int TIMEOUT_RETRIES = 1;
     private static final int MAX_FAILED_REQUESTS = 2;
+    static final long LOOKUP_BUDGET_MS = 20_000;
+    private static final long MIN_RESOLVER_WAIT_MS = 3_000;
     private static final Pattern LRC_LINE = Pattern.compile("\\[(\\d{1,2}):(\\d{2})(?:[.:](\\d{1,3}))?](.*)");
     private static final Pattern LRC_OFFSET = Pattern.compile("\\[offset:\\s*([+-]?\\d+)\\s*]", Pattern.CASE_INSENSITIVE);
     private static final Pattern TITLE_NOISE = Pattern.compile(
@@ -93,7 +98,7 @@ public class LrcLibClient {
 
     @Nullable
     public Lyrics find(AudioTrackInfo info) throws IOException {
-        String identifier = info.identifier == null || info.identifier.isBlank() ? info.title + "|" + info.author : info.identifier;
+        String identifier = identifierOf(info);
         Object lock = LOCKS.computeIfAbsent(identifier, k -> new Object());
         synchronized (lock) {
             try {
@@ -104,18 +109,16 @@ public class LrcLibClient {
                 if (cached != null) return cached.orElse(null);
                 Long missedAt = MISSES.get(identifier);
                 if (missedAt != null && System.currentTimeMillis() - missedAt < MISS_TTL_MS) return null;
-                String diskPath = "lyrics-v4/" + TranslationJobs.sha256(identifier) + ".json";
-                Lyrics found = DiskCache.defaultCache().read(diskPath, Lyrics.class);
-                boolean fromDisk = found != null;
-                if (!fromDisk) found = lookup(info);
+                Lyrics found = DiskCache.defaultCache().read(diskPathOf(identifier), Lyrics.class);
                 if (found != null) {
                     synchronized (CACHE) {
                         CACHE.put(identifier, Optional.of(found));
                     }
-                    if (!fromDisk) DiskCache.defaultCache().write(diskPath, found);
-                } else {
-                    MISSES.put(identifier, System.currentTimeMillis());
+                    return found;
                 }
+                found = lookup(info);
+                if (found != null) remember(identifier, found);
+                else MISSES.put(identifier, System.currentTimeMillis());
                 return found;
             } finally {
                 LOCKS.remove(identifier, lock);
@@ -123,8 +126,25 @@ public class LrcLibClient {
         }
     }
 
+    private static String identifierOf(AudioTrackInfo info) {
+        return info.identifier == null || info.identifier.isBlank() ? info.title + "|" + info.author : info.identifier;
+    }
+
+    private static String diskPathOf(String identifier) {
+        return "lyrics-v4/" + TranslationJobs.sha256(identifier) + ".json";
+    }
+
+    private static void remember(String identifier, Lyrics lyrics) {
+        synchronized (CACHE) {
+            CACHE.put(identifier, Optional.of(lyrics));
+        }
+        MISSES.remove(identifier);
+        DiskCache.defaultCache().write(diskPathOf(identifier), lyrics);
+    }
+
     @Nullable
     private Lyrics lookup(AudioTrackInfo info) throws IOException {
+        long startedAt = System.currentTimeMillis();
         String title = cleanTitle(info.title);
         String artist = firstArtist(info.author);
         long durationSec = info.length / 1000;
@@ -172,12 +192,33 @@ public class LrcLibClient {
             node = unsynced;
         }
         if (node != null) return usable(node, durationSec);
-        Lyrics byResolver = resolved == null ? null : resolved.join();
+        Lyrics byResolver = resolved == null ? null : awaitResolved(resolved, startedAt, info);
         if (byResolver != null) return byResolver;
         JsonNode fallback = rejected.get();
         if (fallback != null) return usable(fallback, durationSec);
         if (failures.last != null) throw failures.last;
         return null;
+    }
+
+    @Nullable
+    static Lyrics awaitResolved(CompletableFuture<Lyrics> resolved, long startedAt, AudioTrackInfo info) {
+        long waitMs = Math.max(MIN_RESOLVER_WAIT_MS, LOOKUP_BUDGET_MS - (System.currentTimeMillis() - startedAt));
+        try {
+            return resolved.get(waitMs, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            LOGGER.info("ai song lookup for {} is still running after {}ms, keeping its answer for the next time", info.title,
+                    System.currentTimeMillis() - startedAt);
+            String identifier = identifierOf(info);
+            resolved.thenAccept(late -> {
+                if (late != null) remember(identifier, late);
+            });
+            return null;
+        } catch (ExecutionException e) {
+            return null;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        }
     }
 
     @Nullable
