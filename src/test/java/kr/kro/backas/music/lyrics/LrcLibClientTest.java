@@ -3,9 +3,11 @@ package kr.kro.backas.music.lyrics;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -116,6 +118,47 @@ class LrcLibClientTest {
         JsonNode normal = MAPPER.readTree("{\"syncedLyrics\": \"" + spread + "[03:10.00] \"}");
         assertTrue(LrcLibClient.unreliableSync(squeezed, 0));
         assertFalse(LrcLibClient.unreliableSync(normal, 202));
+    }
+
+    @Test
+    void treatsLatinOnlyLyricsOfAJapaneseTitleAsATranslationUnlessTheyAreRomaji() throws Exception {
+        JsonNode translation = MAPPER.readTree("""
+                {"id": 1, "duration": 123.0, "plainLyrics": "We walked along the river at night\\nI never said the words I meant"}""");
+        JsonNode original = MAPPER.readTree("""
+                {"id": 2, "duration": 123.0, "syncedLyrics": "[00:03.00] 夜の川を歩いた\\n[00:08.00] 言えなかった言葉"}""");
+        JsonNode romaji = MAPPER.readTree("""
+                {"id": 3, "duration": 123.0, "plainLyrics": "Yoru no kawa wo aruita futari de\\nIenakatta kotoba wo mada oboeteru\\nAshita mo kitto onaji sora no shita"}""");
+        assertTrue(LrcLibClient.translated(translation, "夜の川（Night River）/ Sample feat. Singer"));
+        assertFalse(LrcLibClient.translated(original, "夜の川（Night River）/ Sample feat. Singer"));
+        assertFalse(LrcLibClient.translated(romaji, "夜の川"));
+        assertFalse(LrcLibClient.translated(translation, "Night River"));
+
+        ArrayNode results = MAPPER.createArrayNode().add(translation).add(original);
+        assertEquals(2, LrcLibClient.pickBest(results, 123, "夜の川").path("id").asInt());
+    }
+
+    @Test
+    void triesTheEnglishTitleInParenthesesAndPutsTheChannelArtistFirst() {
+        List<String[]> pairs = LrcLibClient.candidatePairs("夜の川（Night River）/ Sample feat. Singer", "Sample");
+        assertTrue(hasPair(pairs, "Sample", "Night River"));
+        int plain = -1;
+        for (int i = 0; i < pairs.size(); i++) {
+            if (pairs.get(i)[0].equals("Sample") && pairs.get(i)[1].equals("夜の川")) plain = i;
+        }
+        assertTrue(plain >= 0 && plain < 6);
+        assertFalse(hasPair(LrcLibClient.candidatePairs("夜の川 (feat. Singer)", "Sample"), "Sample", "feat. Singer"));
+    }
+
+    @Test
+    void stopsWaitingForASlowAiAnswerOnceTheLookupBudgetIsSpent() {
+        AudioTrackInfo info = new AudioTrackInfo("Song", "Channel", 1000, "id", false, "https://youtu.be/id");
+        long started = System.currentTimeMillis();
+        assertNull(LrcLibClient.awaitResolved(new CompletableFuture<>(), started - LrcLibClient.LOOKUP_BUDGET_MS, info));
+        long waited = System.currentTimeMillis() - started;
+        assertTrue(waited < 5_000, "waited " + waited + "ms");
+
+        Lyrics ready = new Lyrics("Song", "Artist", "line", List.of(), false);
+        assertEquals(ready, LrcLibClient.awaitResolved(CompletableFuture.completedFuture(ready), started, info));
     }
 
     @Test
