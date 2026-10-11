@@ -91,6 +91,9 @@ whisper:
     max-seconds: 900
     first-pass-seconds: 20
     pass-step-seconds: 30
+  transcribe:
+    enabled: true
+    min-letters: 30
 
 cache:
   dir: cache

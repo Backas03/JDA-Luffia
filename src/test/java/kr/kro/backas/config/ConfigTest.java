@@ -69,6 +69,8 @@ class ConfigTest {
         assertEquals(0.30, config.musicPlayer().karaoke().echoSeconds(), 1e-9);
         assertEquals("http://gpu:11434/|GPU|gemma|4,http://127.0.0.1:8765|CPU||fallback", config.llm().endpointSpec());
         assertEquals("http://gpu:8000|W", config.whisper().endpointSpec());
+        assertTrue(config.whisper().transcribe().enabled());
+        assertEquals(30, config.whisper().transcribe().minLetters());
         assertTrue(Config.missingRequired(config).isEmpty());
         assertTrue(Config.load(null).isServiceGuild(999));
     }

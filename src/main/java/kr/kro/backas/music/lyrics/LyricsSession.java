@@ -7,6 +7,7 @@ import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.Main;
 import kr.kro.backas.music.lyrics.sync.LyricsAutoSync;
+import kr.kro.backas.music.lyrics.sync.LyricsTranscriber;
 import kr.kro.backas.music.TrackCard;
 import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.DurationUtil;
@@ -166,6 +167,7 @@ public class LyricsSession {
     private String autoNote() {
         if (autoPending) return AUTO_PENDING_NOTE;
         if (convertingPartial) return LyricsConversions.LABEL_RUNNING;
+        if (lyrics.aiGenerated()) return LyricsTranscriber.NOTE;
         return lyrics.aiTimed() ? LyricsConversions.LABEL_DONE : null;
     }
 
