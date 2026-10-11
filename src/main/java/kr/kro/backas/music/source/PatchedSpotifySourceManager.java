@@ -43,8 +43,10 @@ public class PatchedSpotifySourceManager extends SpotifySourceManager {
                                        String countryCode,
                                        Function<Void, AudioPlayerManager> audioPlayerManager,
                                        MirroringAudioTrackResolver resolver,
-                                       @Nullable SpotifyUserTokenTracker userToken) {
-        super(clientId, clientSecret, countryCode, audioPlayerManager, resolver);
+                                       @Nullable SpotifyUserTokenTracker userToken,
+                                       @Nullable String spDc,
+                                       @Nullable String tokenEndpoint) {
+        super(clientId, clientSecret, false, tokenEndpoint, spDc, countryCode, audioPlayerManager, resolver);
         this.userToken = userToken;
     }
 

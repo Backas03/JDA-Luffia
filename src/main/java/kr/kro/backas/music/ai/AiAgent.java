@@ -251,7 +251,7 @@ public class AiAgent {
         if (track == null) return error(position <= 0 ? "nothing is playing" : "there is no song at that queue position");
         Lyrics lyrics = null;
         try {
-            lyrics = controller.getLyricsClient().find(track.getInfo());
+            lyrics = controller.getLyricsSources().find(track);
         } catch (IOException e) {
             LOGGER.debug("lyrics lookup failed for song info of {}", track.getInfo().title, e);
         }
@@ -550,7 +550,7 @@ public class AiAgent {
     private void warmLyrics(AudioTrack first) {
         CompletableFuture<Void> lookup = CompletableFuture.runAsync(() -> {
             try {
-                controller.getLyricsClient().find(first.getInfo());
+                controller.getLyricsSources().find(first);
             } catch (IOException e) {
                 LOGGER.debug("lyrics warm-up failed for {}", first.getInfo().title, e);
             }
