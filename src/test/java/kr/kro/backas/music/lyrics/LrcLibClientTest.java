@@ -3,9 +3,11 @@ package kr.kro.backas.music.lyrics;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -145,6 +147,18 @@ class LrcLibClientTest {
         }
         assertTrue(plain >= 0 && plain < 6);
         assertFalse(hasPair(LrcLibClient.candidatePairs("夜の川 (feat. Singer)", "Sample"), "Sample", "feat. Singer"));
+    }
+
+    @Test
+    void stopsWaitingForASlowAiAnswerOnceTheLookupBudgetIsSpent() {
+        AudioTrackInfo info = new AudioTrackInfo("Song", "Channel", 1000, "id", false, "https://youtu.be/id");
+        long started = System.currentTimeMillis();
+        assertNull(LrcLibClient.awaitResolved(new CompletableFuture<>(), started - LrcLibClient.LOOKUP_BUDGET_MS, info));
+        long waited = System.currentTimeMillis() - started;
+        assertTrue(waited < 5_000, "waited " + waited + "ms");
+
+        Lyrics ready = new Lyrics("Song", "Artist", "line", List.of(), false);
+        assertEquals(ready, LrcLibClient.awaitResolved(CompletableFuture.completedFuture(ready), started, info));
     }
 
     @Test
