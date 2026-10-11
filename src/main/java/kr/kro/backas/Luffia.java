@@ -64,7 +64,7 @@ public class Luffia {
         LoggerFactory.getLogger(Luffia.class).info("번역/AI 서버 주소: {}", translatorUrl);
         LuffiaConfig.Spotify spotify = config.sources().spotify();
         this.musicPlayerController = new MusicPlayerController(
-                new MusicSourceRegistry(spotify.clientId(), spotify.clientSecret(), spotify.refreshToken()),
+                new MusicSourceRegistry(spotify.clientId(), spotify.clientSecret(), spotify.refreshToken(), spotify.spDc(), spotify.tokenEndpoint()),
                 translatorUrl,
                 config.whisper().endpointSpec());
         this.musicPlayerController.register(discordAPI);

@@ -164,7 +164,7 @@ public final class LyricsPresenter {
         MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
         return CompletableFuture.supplyAsync(() -> {
             try {
-                return AiLyricsStore.defaultStore().enrich(track.getIdentifier(), controller.getLyricsClient().find(track.getInfo()));
+                return AiLyricsStore.defaultStore().enrich(track.getIdentifier(), controller.getLyricsSources().find(track));
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -754,7 +754,7 @@ public final class LyricsPresenter {
             if (!WARMED.add(identifier)) continue;
             LOOKUP_EXECUTOR.execute(() -> {
                 try {
-                    controller.getLyricsClient().find(track.getInfo());
+                    controller.getLyricsSources().find(track);
                 } catch (IOException | RuntimeException e) {
                     WARMED.remove(identifier);
                     LOGGER.debug("lyrics lookup ahead of time failed for {}", track.getInfo().title, e);
@@ -815,7 +815,7 @@ public final class LyricsPresenter {
         if (!PREFETCHING.add(key)) return;
         try {
             LOGGER.info("prefetching lyrics translation for {}", next.getInfo().title);
-            Lyrics lyrics = AiLyricsStore.defaultStore().enrich(next.getIdentifier(), controller.getLyricsClient().find(next.getInfo()));
+            Lyrics lyrics = AiLyricsStore.defaultStore().enrich(next.getIdentifier(), controller.getLyricsSources().find(next));
             if (lyrics == null || lyrics.instrumental()) {
                 LOGGER.info("no lyrics to prefetch for {}", next.getInfo().title);
                 reportSongComplete(client, next);

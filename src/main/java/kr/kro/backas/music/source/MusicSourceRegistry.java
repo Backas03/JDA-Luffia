@@ -33,10 +33,14 @@ public final class MusicSourceRegistry {
 
     private final AudioPlayerManager audioPlayerManager;
     private final boolean spotifyEnabled;
+    @Nullable
+    private final SpotifySourceManager spotify;
 
     public MusicSourceRegistry(@Nullable String spotifyClientId,
                                @Nullable String spotifyClientSecret,
-                               @Nullable String spotifyRefreshToken) {
+                               @Nullable String spotifyRefreshToken,
+                               @Nullable String spotifySpDc,
+                               @Nullable String spotifyTokenEndpoint) {
         DefaultAudioPlayerManager manager = new DefaultAudioPlayerManager();
         AudioConfiguration configuration = manager.getConfiguration();
         configuration.setOpusEncodingQuality(AudioConfiguration.OPUS_QUALITY_MAX);
@@ -57,17 +61,21 @@ public final class MusicSourceRegistry {
         youtube.setPlaylistPageCount(YOUTUBE_PLAYLIST_PAGE_COUNT);
         manager.registerSourceManager(youtube);
 
-        this.spotifyEnabled = registerSpotify(manager, spotifyClientId, spotifyClientSecret, spotifyRefreshToken);
+        this.spotify = registerSpotify(manager, spotifyClientId, spotifyClientSecret, spotifyRefreshToken, spotifySpDc, spotifyTokenEndpoint);
+        this.spotifyEnabled = this.spotify != null;
         this.audioPlayerManager = manager;
     }
 
-    private static boolean registerSpotify(AudioPlayerManager manager,
-                                           @Nullable String clientId,
-                                           @Nullable String clientSecret,
-                                           @Nullable String refreshToken) {
+    @Nullable
+    private static SpotifySourceManager registerSpotify(AudioPlayerManager manager,
+                                                        @Nullable String clientId,
+                                                        @Nullable String clientSecret,
+                                                        @Nullable String refreshToken,
+                                                        @Nullable String spDc,
+                                                        @Nullable String tokenEndpoint) {
         if (isBlank(clientId) || isBlank(clientSecret)) {
             LOGGER.info("config.yaml 의 sources.spotify.client-id / client-secret 이 비어 있어 스포티파이 소스를 비활성화합니다.");
-            return false;
+            return null;
         }
         try {
             SpotifyUserTokenTracker userToken = isBlank(refreshToken)
@@ -79,22 +87,29 @@ public final class MusicSourceRegistry {
                     SPOTIFY_COUNTRY_CODE,
                     unused -> manager,
                     new DefaultMirroringAudioTrackResolver(SPOTIFY_MIRROR_PROVIDERS),
-                    userToken
+                    userToken,
+                    isBlank(spDc) ? null : spDc.trim(),
+                    isBlank(tokenEndpoint) ? null : tokenEndpoint.trim()
             );
             spotify.setResolveArtistsInSearch(false);
             spotify.setPlaylistPageLimit(SPOTIFY_PAGE_LIMIT);
             spotify.setAlbumPageLimit(SPOTIFY_PAGE_LIMIT);
             manager.registerSourceManager(spotify);
-            LOGGER.info("스포티파이 소스 등록 완료 (country={}, playlist={})", SPOTIFY_COUNTRY_CODE, userToken != null);
-            return true;
+            LOGGER.info("스포티파이 소스 등록 완료 (country={}, playlist={}, lyrics={})", SPOTIFY_COUNTRY_CODE, userToken != null, !isBlank(spDc));
+            return spotify;
         } catch (RuntimeException e) {
             LOGGER.warn("스포티파이 소스 등록에 실패했습니다. 유튜브만 사용합니다.", e);
-            return false;
+            return null;
         }
     }
 
     private static boolean isBlank(@Nullable String s) {
         return s == null || s.isBlank();
+    }
+
+    @Nullable
+    public SpotifySourceManager getSpotify() {
+        return spotify;
     }
 
     public AudioPlayerManager getAudioPlayerManager() {

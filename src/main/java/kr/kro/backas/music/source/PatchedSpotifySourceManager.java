@@ -3,17 +3,22 @@ package kr.kro.backas.music.source;
 import com.github.topi314.lavasrc.ExtendedAudioPlaylist;
 import com.github.topi314.lavasrc.mirror.MirroringAudioTrackResolver;
 import com.github.topi314.lavasrc.spotify.SpotifyAudioTrack;
+import com.github.topi314.lavasrc.spotify.SpotifyPartnerApiClient;
 import com.github.topi314.lavasrc.spotify.SpotifySourceManager;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.tools.JsonBrowser;
 import com.sedmelluq.discord.lavaplayer.track.AudioItem;
+import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.track.AudioReference;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -35,7 +40,11 @@ public class PatchedSpotifySourceManager extends SpotifySourceManager {
     private static final int PLAYLIST_PAGE_SIZE = 100;
     private static final int PLAYLIST_MAX_PAGES = 10;
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(PatchedSpotifySourceManager.class);
+
     private final SpotifyUserTokenTracker userToken;
+    @Nullable
+    private final SpotifyPartnerApiClient webPlayer;
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
     public PatchedSpotifySourceManager(String clientId,
@@ -43,9 +52,12 @@ public class PatchedSpotifySourceManager extends SpotifySourceManager {
                                        String countryCode,
                                        Function<Void, AudioPlayerManager> audioPlayerManager,
                                        MirroringAudioTrackResolver resolver,
-                                       @Nullable SpotifyUserTokenTracker userToken) {
-        super(clientId, clientSecret, countryCode, audioPlayerManager, resolver);
+                                       @Nullable SpotifyUserTokenTracker userToken,
+                                       @Nullable String spDc,
+                                       @Nullable String tokenEndpoint) {
+        super(clientId, clientSecret, false, tokenEndpoint, spDc, countryCode, audioPlayerManager, resolver);
         this.userToken = userToken;
+        this.webPlayer = tokenEndpoint == null || tokenEndpoint.isBlank() ? null : webPlayerClient();
     }
 
     @Override
@@ -80,8 +92,28 @@ public class PatchedSpotifySourceManager extends SpotifySourceManager {
                 albumUrl, artwork, albumArtists, totalTracks);
     }
 
+    @Nullable
+    private SpotifyPartnerApiClient webPlayerClient() {
+        try {
+            Field field = SpotifySourceManager.class.getDeclaredField("partnerApiClient");
+            field.setAccessible(true);
+            return (SpotifyPartnerApiClient) field.get(this);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            LOGGER.warn("스포티파이 웹 플레이어 API 를 쓸 수 없어 로그인 계정으로만 플레이리스트를 읽습니다", e);
+            return null;
+        }
+    }
+
     @Override
     public AudioItem getPlaylist(String id, boolean preview) throws IOException {
+        if (webPlayer != null) {
+            try {
+                AudioItem viaWebPlayer = webPlayer.loadPartnerPlaylist(id, preview, PLAYLIST_PAGE_SIZE * PLAYLIST_MAX_PAGES, this);
+                if (viaWebPlayer instanceof AudioPlaylist playlist && !playlist.getTracks().isEmpty()) return viaWebPlayer;
+            } catch (IOException | RuntimeException e) {
+                LOGGER.info("web player could not read spotify playlist {}, trying the logged-in account: {}", id, e.toString());
+            }
+        }
         if (userToken == null) {
             throw new FriendlyException(PLAYLIST_NOT_CONFIGURED_MESSAGE, FriendlyException.Severity.COMMON, null);
         }
