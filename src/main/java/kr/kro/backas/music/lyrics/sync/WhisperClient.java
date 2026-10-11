@@ -136,6 +136,8 @@ public final class WhisperClient {
         }
         out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\nverbose_json\r\n")
                 .getBytes(StandardCharsets.UTF_8));
+        out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"max_context\"\r\n\r\n0\r\n")
+                .getBytes(StandardCharsets.UTF_8));
         out.write(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
         return out.toByteArray();
     }
