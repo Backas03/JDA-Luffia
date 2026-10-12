@@ -3,8 +3,6 @@ package kr.kro.backas.music.lyrics.sync;
 import kr.kro.backas.music.lyrics.LyricLine;
 import org.jetbrains.annotations.Nullable;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -14,21 +12,23 @@ public final class OnsetRefiner {
     public record Refinement(long offsetMs, double confidence, int lines) {
     }
 
-    public record Analysis(long offsetMs, double zScore, double peakRatio, int lines, double[] scores) {
+    public record Analysis(long offsetMs, double zScore, double peakRatio, double dominance, int lines, double[] scores) {
         public boolean isConfident() {
-            return lines >= MIN_LINES && zScore >= MIN_Z_SCORE && peakRatio >= MIN_PEAK_RATIO;
+            return lines >= MIN_LINES && zScore >= MIN_Z_SCORE && peakRatio >= MIN_PEAK_RATIO && dominance >= MIN_DOMINANCE;
         }
     }
 
-    static final int FRAME_MS = 10;
+    static final int FRAME_MS = VocalActivity.FRAME_MS;
     static final long DEFAULT_WINDOW_MS = 600;
     static final long PEAK_TOLERANCE_MS = 30;
-    static final double MIN_Z_SCORE = 2.0;
+    static final double MIN_Z_SCORE = 1.5;
     static final double MIN_PEAK_RATIO = 1.3;
+    static final double MIN_DOMINANCE = 1.3;
+    static final long RIVAL_DISTANCE_MS = 250;
+    static final long ATTACK_EARLIER_MS = 120;
+    static final long ATTACK_LATER_MS = 40;
     static final int MIN_LINES = 3;
     static final double PRIOR_SIGMA_MS = 300;
-    private static final float PRE_EMPHASIS = 0.95f;
-    private static final int FLUX_HISTORY = 3;
 
     private OnsetRefiner() {
     }
@@ -45,14 +45,13 @@ public final class OnsetRefiner {
 
     @Nullable
     public static Analysis analyze(byte[] wav, List<LyricLine> lines, long coarseOffsetMs, long windowMs) {
-        ByteBuffer buffer = ByteBuffer.wrap(wav).order(ByteOrder.LITTLE_ENDIAN);
-        if (wav.length < 44 || buffer.getShort(22) != 1 || buffer.getShort(34) != 16) return null;
-        int rate = buffer.getInt(24);
-        int count = (wav.length - 44) / 2;
-        short[] samples = new short[count];
-        buffer.position(44);
-        buffer.asShortBuffer().get(samples);
-        float[] envelope = envelope(samples, rate);
+        VocalActivity activity = VocalActivity.of(wav);
+        return activity == null ? null : analyze(activity, lines, coarseOffsetMs, windowMs);
+    }
+
+    @Nullable
+    public static Analysis analyze(VocalActivity activity, List<LyricLine> lines, long coarseOffsetMs, long windowMs) {
+        float[] envelope = activity.onsetEnvelope();
         long durationMs = (long) envelope.length * FRAME_MS;
 
         List<Long> anchors = new ArrayList<>();
@@ -80,11 +79,12 @@ public final class OnsetRefiner {
             }
             scores[step + steps] = total;
         }
+        double[] smoothed = new double[scores.length];
         double[] weighted = new double[scores.length];
         for (int i = 0; i < scores.length; i++) {
-            double smoothed = (scores[Math.max(0, i - 1)] + scores[i] + scores[Math.min(scores.length - 1, i + 1)]) / 3;
+            smoothed[i] = (scores[Math.max(0, i - 1)] + scores[i] + scores[Math.min(scores.length - 1, i + 1)]) / 3;
             double delta = (double) (i - steps) * FRAME_MS;
-            weighted[i] = smoothed * Math.exp(-(delta * delta) / (2 * PRIOR_SIGMA_MS * PRIOR_SIGMA_MS));
+            weighted[i] = smoothed[i] * Math.exp(-(delta * delta) / (2 * PRIOR_SIGMA_MS * PRIOR_SIGMA_MS));
         }
         int best = 0;
         double sum = 0;
@@ -98,32 +98,45 @@ public final class OnsetRefiner {
         for (double score : weighted) variance += (score - mean) * (score - mean);
         double deviation = Math.sqrt(variance / weighted.length);
         double z = deviation == 0 ? 0 : (weighted[best] - mean) / deviation;
-        long refined = coarseOffsetMs + (long) (best - steps) * FRAME_MS;
-        return new Analysis(refined, z, weighted[best] / mean, anchors.size(), weighted);
+        int peak = best;
+        while (peak > 0 && smoothed[peak - 1] > smoothed[peak]) peak--;
+        while (peak < smoothed.length - 1 && smoothed[peak + 1] > smoothed[peak]) peak++;
+        long voiced = coarseOffsetMs + (long) (peak - steps) * FRAME_MS;
+        long refined = snapToAttack(activity.attackEnvelope(), anchors, voiced);
+        return new Analysis(refined, z, weighted[best] / mean, dominance(smoothed, peak), anchors.size(), weighted);
     }
 
-    static float[] envelope(short[] samples, int rate) {
-        int frame = Math.max(1, rate * FRAME_MS / 1000);
-        int frames = samples.length / frame;
-        double[] logEnergy = new double[frames];
-        float previous = 0;
-        for (int f = 0; f < frames; f++) {
-            double energy = 0;
-            int base = f * frame;
-            for (int i = 0; i < frame; i++) {
-                float sample = samples[base + i] / 32768f;
-                float emphasised = sample - PRE_EMPHASIS * previous;
-                previous = sample;
-                energy += emphasised * emphasised;
+    private static long snapToAttack(float[] attack, List<Long> anchors, long offsetMs) {
+        long first = offsetMs - ATTACK_LATER_MS;
+        long last = offsetMs + ATTACK_EARLIER_MS;
+        long best = offsetMs;
+        double bestScore = 0;
+        for (long candidate = first; candidate <= last; candidate += FRAME_MS) {
+            double total = 0;
+            for (long anchor : anchors) {
+                int frame = (int) ((anchor - candidate) / FRAME_MS);
+                float peak = 0;
+                for (int f = frame - 1; f <= frame + 1; f++) {
+                    if (f >= 0 && f < attack.length && attack[f] > peak) peak = attack[f];
+                }
+                total += peak;
             }
-            logEnergy[f] = Math.log(1e-6 + energy / frame);
+            if (total > bestScore) {
+                bestScore = total;
+                best = candidate;
+            }
         }
-        float[] flux = new float[frames];
-        for (int f = FLUX_HISTORY; f < frames; f++) {
-            double history = 0;
-            for (int h = 1; h <= FLUX_HISTORY; h++) history += logEnergy[f - h];
-            flux[f] = (float) Math.max(0, logEnergy[f] - history / FLUX_HISTORY);
+        return best == first || best == last ? offsetMs : best;
+    }
+
+    private static double dominance(double[] smoothed, int peak) {
+        if (peak == 0 || peak == smoothed.length - 1 || smoothed[peak] <= 0) return 0;
+        int distance = (int) (RIVAL_DISTANCE_MS / FRAME_MS);
+        double rival = 0;
+        for (int i = 1; i < smoothed.length - 1; i++) {
+            if (Math.abs(i - peak) < distance || smoothed[i] < smoothed[i - 1] || smoothed[i] < smoothed[i + 1]) continue;
+            rival = Math.max(rival, smoothed[i]);
         }
-        return flux;
+        return rival <= 0 ? Double.POSITIVE_INFINITY : smoothed[peak] / rival;
     }
 }
