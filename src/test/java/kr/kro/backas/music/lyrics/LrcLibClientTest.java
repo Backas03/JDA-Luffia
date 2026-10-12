@@ -31,6 +31,40 @@ class LrcLibClientTest {
     }
 
     @Test
+    void titleOnlyResultsMustComeFromTheArtistWhenTheChannelOrCatalogNamesIt() throws Exception {
+        JsonNode results = MAPPER.readTree("""
+                [{"id": 1, "trackName": "Shooting Star (Shooting Star)", "artistName": "N.Flying - Topic", "duration": 200, "syncedLyrics": "[00:10.00] a"},
+                 {"id": 2, "trackName": "Shooting Star", "artistName": "StelLive", "duration": 205, "syncedLyrics": "[00:10.00] b"}]
+                """);
+        AudioTrackInfo topic = new AudioTrackInfo("Shooting Star", "StelLive - Topic", 205_000, "n-NHnzia_Lw", false, "https://www.youtube.com/watch?v=n-NHnzia_Lw");
+        JsonNode filtered = LrcLibClient.byKnownArtist(results, topic);
+        assertEquals(1, filtered.size());
+        assertEquals(2, filtered.get(0).path("id").asInt());
+        AudioTrackInfo spotify = new AudioTrackInfo("Shooting Star", "StelLive", 205_000, "x", false, "https://open.spotify.com/track/x");
+        assertEquals(1, LrcLibClient.byKnownArtist(results, spotify).size());
+        AudioTrackInfo upload = new AudioTrackInfo("Shooting Star", "Some Uploader", 205_000, "y", false, "https://www.youtube.com/watch?v=y");
+        assertEquals(2, LrcLibClient.byKnownArtist(results, upload).size());
+        JsonNode onlyOthers = MAPPER.readTree("""
+                [{"id": 1, "trackName": "Shooting Star", "artistName": "N.Flying - Topic", "duration": 200, "syncedLyrics": "[00:10.00] a"}]
+                """);
+        assertNull(LrcLibClient.pickBest(LrcLibClient.byKnownArtist(onlyOthers, topic), 205));
+    }
+
+    @Test
+    void searchesByTheLongestTitleWordAndKeepsOnlyCloseTitles() throws Exception {
+        assertEquals("Heroine", LrcLibClient.keyword("I Wanna Be the Heroine!"));
+        assertNull(LrcLibClient.keyword("Heroine"));
+        assertNull(LrcLibClient.keyword("夜に駆ける"));
+        JsonNode results = MAPPER.readTree("""
+                [{"id": 1, "trackName": "I Want to Be a Heroine (히로인이 되고싶어)", "artistName": "StelLive (스텔라이브)", "duration": 194},
+                 {"id": 2, "trackName": "Heroine Audition", "artistName": "StelLive (스텔라이브)", "duration": 194}]
+                """);
+        ArrayNode similar = LrcLibClient.similarTitles(results, "I Wanna Be the Heroine!");
+        assertEquals(1, similar.size());
+        assertEquals(1, similar.get(0).path("id").asInt());
+    }
+
+    @Test
     void takesTheBracketedTitleEvenWhenNothingComesBeforeIt() {
         List<String[]> pairs = LrcLibClient.candidatePairs("「夜明けの歌」（アニメ「Sample Show」オープニング映像）", "Sample Channel");
         assertTrue(hasPair(pairs, "Sample Channel", "夜明けの歌"));
