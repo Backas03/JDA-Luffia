@@ -405,6 +405,8 @@ public class LyricsSession {
             text.append("-# ").append(translation).append('\n').append(BLANK).append('\n');
         } else if (pendingTranslation) {
             text.append("-# ").append(TRANSLATING_NOTE).append('\n').append(BLANK).append('\n');
+        } else {
+            text.append(BLANK).append('\n');
         }
         text.append(next.isBlank() ? BLANK : "*" + next + "*").append('\n');
         text.append("-# ").append(WIDTH_FILLER);
