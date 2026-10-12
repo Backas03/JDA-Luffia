@@ -424,9 +424,10 @@ public final class LyricsPresenter {
         }
 
         @Override
-        public void requestConversion() {
+        public void requestConversion(boolean fresh) {
             if (converting || superseded || convertToken == null) return;
-            CompletableFuture<Optional<Lyrics>> job = LyricsConverter.convert(client, track, lyrics, partialLyrics -> switchToSynced(partialLyrics, true));
+            CompletableFuture<Optional<Lyrics>> job = LyricsConverter.convert(client, track, lyrics,
+                    partialLyrics -> switchToSynced(partialLyrics, true), fresh);
             if (!job.isDone()) {
                 converting = true;
                 convertNote = CONVERTING_NOTE;
@@ -442,8 +443,10 @@ public final class LyricsPresenter {
                 }
                 converting = false;
                 convertNote = CONVERSION_FAILED_NOTE;
-                conversions.release(convertToken);
-                convertToken = null;
+                if (!fresh || !stored) {
+                    conversions.release(convertToken);
+                    convertToken = null;
+                }
                 card.edit(render(), System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS)
                         .whenComplete((sent, editError) -> {
                             if (editError != null) LOGGER.debug("failed to show conversion failure", editError);
@@ -474,7 +477,10 @@ public final class LyricsPresenter {
             List<Button> buttons = new ArrayList<>();
             if (foldable) buttons.add(LyricsExpansions.button(token, expanded));
             String convert = convertToken;
-            if (convert != null) buttons.add(LyricsConversions.button(convert, converting, stored));
+            if (convert != null) {
+                buttons.add(LyricsConversions.button(convert, converting, stored));
+                if (stored && !converting) buttons.add(LyricsConversions.redoButton(convert));
+            }
             if (!buttons.isEmpty()) body.add(ActionRow.of(buttons));
             return card.frame(body);
         }

@@ -56,8 +56,13 @@ public final class LyricsConverter {
 
     public static CompletableFuture<Optional<Lyrics>> convert(MusicPlayerClient client, AudioTrack track, Lyrics lyrics,
                                                               @Nullable Consumer<Lyrics> onProgress) {
+        return convert(client, track, lyrics, onProgress, false);
+    }
+
+    public static CompletableFuture<Optional<Lyrics>> convert(MusicPlayerClient client, AudioTrack track, Lyrics lyrics,
+                                                              @Nullable Consumer<Lyrics> onProgress, boolean fresh) {
         String identifier = track.getIdentifier();
-        List<LyricLine> stored = AiLyricsStore.defaultStore().get(identifier);
+        List<LyricLine> stored = fresh ? null : AiLyricsStore.defaultStore().get(identifier);
         if (stored != null) return CompletableFuture.completedFuture(Optional.of(lyrics.withAiTimestamps(stored)));
         WhisperClient whisper = whisper();
         if (whisper == null || !whisper.isAvailable() || !lyrics.hasPlain()) return CompletableFuture.completedFuture(Optional.empty());
