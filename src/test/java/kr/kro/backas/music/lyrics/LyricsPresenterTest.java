@@ -8,9 +8,20 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LyricsPresenterTest {
+
+    @Test
+    void labelsLyricsByWhereTheTextCameFrom() {
+        Lyrics plain = new Lyrics("t", "a", "x", List.of(), false).withSource(Lyrics.Source.LRCLIB);
+        assertEquals("LRCLIB", LyricsPresenter.sourceLabel(plain));
+        assertEquals("LRCLIB", LyricsPresenter.sourceLabel(plain.withAiTimestamps(List.of(new LyricLine(1000, "x")))));
+        assertEquals("Spotify", LyricsPresenter.sourceLabel(plain.withSource(Lyrics.Source.SPOTIFY).withoutSync()));
+        assertEquals("AI", LyricsPresenter.sourceLabel(new Lyrics("t", "a", "x", List.of(new LyricLine(0, "x")), false, false, true, null)));
+        assertNull(LyricsPresenter.sourceLabel(new Lyrics("t", "a", "x", List.of(), false)));
+    }
 
     @Test
     void fullBodyInterleavesTranslationsAndEndsWithTheFooter() {

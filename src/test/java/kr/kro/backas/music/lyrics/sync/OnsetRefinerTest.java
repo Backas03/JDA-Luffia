@@ -48,6 +48,27 @@ class OnsetRefinerTest {
     }
 
     @Test
+    void locksOntoTheSingingInsteadOfTheBeatClosestToTheGuess() {
+        short[] samples = VocalActivityTest.silence(32, 8);
+        VocalActivityTest.drums(samples, 0, 32_000, 500, 9);
+        long trueOffsetMs = -250;
+        for (LyricLine line : LINES) VocalActivityTest.sing(samples, line.timeMs() - trueOffsetMs, 1_800, 230, 60);
+        byte[] wav = VocalActivityTest.wav(samples);
+        for (long guess : new long[]{-50, -450, 50}) {
+            Optional<OnsetRefiner.Refinement> result = OnsetRefiner.refine(wav, LINES, guess);
+            assertTrue(result.isPresent(), String.valueOf(guess));
+            assertTrue(Math.abs(result.get().offsetMs() - trueOffsetMs) <= 40, guess + " -> " + result.get().offsetMs());
+        }
+    }
+
+    @Test
+    void givesUpWhenOnlyTheBeatLinesUpWithTheLyrics() {
+        short[] samples = VocalActivityTest.silence(32, 10);
+        VocalActivityTest.drums(samples, 0, 32_000, 500, 11);
+        assertTrue(OnsetRefiner.refine(VocalActivityTest.wav(samples), LINES, 0).isEmpty());
+    }
+
+    @Test
     void givesUpWhenTheAudioHasNoClearOnsetsAtTheLyricLines() {
         Random random = new Random(3);
         short[] noise = new short[RATE * 45];

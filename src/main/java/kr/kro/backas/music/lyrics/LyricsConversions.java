@@ -17,19 +17,25 @@ public class LyricsConversions extends ListenerAdapter {
     private static final Logger LOGGER = LoggerFactory.getLogger(LyricsConversions.class);
     private static final String PREFIX = "lyrics-ai:";
     private static final String ORIGINAL_PREFIX = "lyrics-orig:";
+    private static final String REDO_PREFIX = "lyrics-ai-redo:";
     private static final long EXPIRE_MS = 60 * 60 * 1000;
     public static final String LABEL = "AI 가사 변환";
     public static final String LABEL_RUNNING = "AI 가사 변환 중";
     public static final String LABEL_DONE = "AI 타임스탬프 가사 변환됨";
     public static final String LABEL_SWITCH = "AI 타임스탬프 가사 전환";
     public static final String LABEL_ORIGINAL = "원문 보기";
+    public static final String LABEL_REDO = "재변환";
 
     public interface Convertible {
         boolean isConverting();
 
         boolean isSuperseded();
 
-        void requestConversion();
+        default void requestConversion() {
+            requestConversion(false);
+        }
+
+        void requestConversion(boolean fresh);
 
         Container render();
     }
@@ -77,6 +83,10 @@ public class LyricsConversions extends ListenerAdapter {
         return converting ? button.asDisabled() : button;
     }
 
+    public static Button redoButton(String token) {
+        return Button.secondary(REDO_PREFIX + token, LABEL_REDO);
+    }
+
     public static Button originalButton(String token) {
         return Button.secondary(ORIGINAL_PREFIX + token, LABEL_ORIGINAL);
     }
@@ -96,14 +106,15 @@ public class LyricsConversions extends ListenerAdapter {
             }
             return;
         }
-        if (!id.startsWith(PREFIX)) return;
-        Entry entry = entries.get(id.substring(PREFIX.length()));
+        boolean redo = id.startsWith(REDO_PREFIX);
+        if (!redo && !id.startsWith(PREFIX)) return;
+        Entry entry = entries.get(id.substring((redo ? REDO_PREFIX : PREFIX).length()));
         if (entry == null) {
             event.deferEdit().queue(null, e -> LOGGER.debug("failed to acknowledge an expired conversion button", e));
             return;
         }
         Convertible view = entry.view();
-        if (!view.isConverting()) view.requestConversion();
+        if (!view.isConverting()) view.requestConversion(redo);
         if (view.isSuperseded()) {
             event.deferEdit().queue(null, e -> LOGGER.debug("failed to acknowledge a finished conversion", e));
             return;

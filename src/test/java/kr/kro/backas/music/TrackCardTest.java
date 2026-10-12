@@ -19,6 +19,11 @@ class TrackCardTest {
     }
 
     @Test
+    void lyricsSourceReadsAsASetting() {
+        assertEquals("Spotify (가사)", TrackCard.lyricsSetting("Spotify"));
+    }
+
+    @Test
     void finishedHeaderDropsSettingsAndMissingArtist() {
         assertEquals("### [Radio](https://youtu.be/id)\n-# 라이브 · YouTube",
                 TrackCard.headerText(info("Radio", "", 0, true), "YouTube", null));

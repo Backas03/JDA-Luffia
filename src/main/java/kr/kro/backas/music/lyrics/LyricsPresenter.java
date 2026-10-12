@@ -189,7 +189,8 @@ public final class LyricsPresenter {
 
     public static void presentPlain(MusicPlayerClient client, AudioTrack track, TrackCard card, Lyrics lyrics) {
         MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
-        Lyrics plain = new Lyrics(lyrics.trackName(), lyrics.artistName(), lyrics.plain(), List.of(), lyrics.instrumental());
+        Lyrics plain = lyrics.withoutSync();
+        card.setLyricsSource(sourceLabel(plain));
         showFull(client, track, plain, null, true,
                 new CardFullView(client, track, plain, card, controller.getLyricsExpansions(), controller.getLyricsConversions()),
                 controller.getTranslationClient());
@@ -205,7 +206,10 @@ public final class LyricsPresenter {
         LyricsSession session = new LyricsSession(client, track, lyrics, surface,
                 controller.getLyricsScheduler(), controller.getTranslationClient(), offsetMs);
         TrackCard card = surface.card();
-        if (card != null) card.claim(session);
+        if (card != null) {
+            card.claim(session);
+            card.setLyricsSource(sourceLabel(lyrics));
+        }
         client.setLyricsSession(session);
         session.start();
     }
@@ -234,11 +238,18 @@ public final class LyricsPresenter {
                 startSession(client, track, lyrics, LyricsSurface.ofCard(card), offsetMs);
                 return;
             }
+            card.setLyricsSource(sourceLabel(lyrics));
             CardFullView view = new CardFullView(client, track, lyrics, card, Main.getLuffia().getMusicPlayerController().getLyricsExpansions(),
                     Main.getLuffia().getMusicPlayerController().getLyricsConversions());
             showFull(client, track, lyrics, null, true, view, translator);
             if (Config.get().whisper().convert().auto()) view.requestConversion();
         });
+    }
+
+    @Nullable
+    static String sourceLabel(Lyrics lyrics) {
+        if (lyrics.aiGenerated()) return Lyrics.Source.AI.label();
+        return lyrics.source() == null ? null : lyrics.source().label();
     }
 
     private static void transcribeOnCard(MusicPlayerClient client, AudioTrack track, TrackCard card, String fallbackNote) {
@@ -413,9 +424,10 @@ public final class LyricsPresenter {
         }
 
         @Override
-        public void requestConversion() {
+        public void requestConversion(boolean fresh) {
             if (converting || superseded || convertToken == null) return;
-            CompletableFuture<Optional<Lyrics>> job = LyricsConverter.convert(client, track, lyrics, partialLyrics -> switchToSynced(partialLyrics, true));
+            CompletableFuture<Optional<Lyrics>> job = LyricsConverter.convert(client, track, lyrics,
+                    partialLyrics -> switchToSynced(partialLyrics, true), fresh);
             if (!job.isDone()) {
                 converting = true;
                 convertNote = CONVERTING_NOTE;
@@ -431,8 +443,10 @@ public final class LyricsPresenter {
                 }
                 converting = false;
                 convertNote = CONVERSION_FAILED_NOTE;
-                conversions.release(convertToken);
-                convertToken = null;
+                if (!fresh || !stored) {
+                    conversions.release(convertToken);
+                    convertToken = null;
+                }
                 card.edit(render(), System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS)
                         .whenComplete((sent, editError) -> {
                             if (editError != null) LOGGER.debug("failed to show conversion failure", editError);
@@ -463,7 +477,10 @@ public final class LyricsPresenter {
             List<Button> buttons = new ArrayList<>();
             if (foldable) buttons.add(LyricsExpansions.button(token, expanded));
             String convert = convertToken;
-            if (convert != null) buttons.add(LyricsConversions.button(convert, converting, stored));
+            if (convert != null) {
+                buttons.add(LyricsConversions.button(convert, converting, stored));
+                if (stored && !converting) buttons.add(LyricsConversions.redoButton(convert));
+            }
             if (!buttons.isEmpty()) body.add(ActionRow.of(buttons));
             return card.frame(body);
         }

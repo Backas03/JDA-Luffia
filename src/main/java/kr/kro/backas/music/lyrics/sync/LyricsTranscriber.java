@@ -31,8 +31,18 @@ public final class LyricsTranscriber {
     public record Stored(@Nullable List<AiLyricsStore.Line> lines, long at, int version) {
     }
 
-    static final int VERSION = 1;
-    static final long OUTRO_GAP_MS = 3_000;
+    private record Sung(long onsetMs, long endMs) {
+    }
+
+    static final int VERSION = 2;
+    static final long REST_GAP_MS = 3_000;
+    static final long REST_DELAY_MS = 500;
+    static final long SNAP_MS = 30;
+    static final long CJK_CHAR_MS = 200;
+    static final long LATIN_CHAR_MS = 110;
+    static final long MIN_SUNG_MS = 250;
+    static final long SMEAR_RATIO = 5;
+    static final long SMEAR_MS = 3_000;
     private static final Pattern BRACKETED = Pattern.compile("^[\\[(（【♪].*[\\])）】♪]$");
     private static final List<String> HALLUCINATIONS = List.of(
             "ご視聴ありがとう", "ご清聴ありがとう", "チャンネル登録", "高評価", "作詞", "作曲", "編曲", "字幕",
@@ -102,23 +112,81 @@ public final class LyricsTranscriber {
 
     static List<LyricLine> lines(WhisperClient.Transcript transcript, long audioMs) {
         List<LyricLine> lines = new ArrayList<>();
-        long lastEnd = 0;
+        long lastEnd = -1;
         for (WhisperClient.Segment segment : transcript.segments()) {
             String text = segment.text().strip();
             if (!isLyric(text)) continue;
-            long start = segment.startMs();
-            for (WhisperClient.Word word : transcript.words()) {
-                if (word.startMs() < segment.startMs()) continue;
-                if (word.startMs() < segment.endMs()) start = Math.max(start, LyricsAligner.onsetMs(word));
-                break;
-            }
-            long at = Math.max(0, start - LyricsTimestamper.LINE_LEAD_MS);
-            if (!lines.isEmpty() && at <= lines.get(lines.size() - 1).timeMs()) at = lines.get(lines.size() - 1).timeMs() + 1;
-            lines.add(new LyricLine(at, text));
-            lastEnd = Math.max(lastEnd, segment.endMs());
+            List<WhisperClient.Word> words = sungWords(transcript.words(), segment);
+            Sung sung = words.isEmpty() ? new Sung(segment.startMs(), segment.endMs()) : sung(segment, words);
+            if (lastEnd < 0 && sung.onsetMs() > REST_GAP_MS) add(lines, 0, "");
+            if (lastEnd >= 0 && sung.onsetMs() - lastEnd > REST_GAP_MS) add(lines, lastEnd + REST_DELAY_MS, "");
+            add(lines, Math.max(0, sung.onsetMs() - LyricsTimestamper.LINE_LEAD_MS), text);
+            lastEnd = Math.max(lastEnd, sung.endMs());
         }
-        if (!lines.isEmpty() && lastEnd + OUTRO_GAP_MS < audioMs) lines.add(new LyricLine(lastEnd, ""));
+        if (!lines.isEmpty() && lastEnd + REST_GAP_MS < audioMs) add(lines, lastEnd + REST_DELAY_MS, "");
         return lines;
+    }
+
+    private static List<WhisperClient.Word> sungWords(List<WhisperClient.Word> words, WhisperClient.Segment segment) {
+        List<WhisperClient.Word> sung = new ArrayList<>();
+        for (WhisperClient.Word word : words) {
+            if (word.startMs() < segment.startMs() || word.startMs() >= segment.endMs()) continue;
+            if (!LyricsAligner.normalize(word.text()).isEmpty()) sung.add(word);
+        }
+        return sung;
+    }
+
+    private static Sung sung(WhisperClient.Segment segment, List<WhisperClient.Word> words) {
+        int head = 0;
+        while (head < words.size() && smeared(words.get(head))) head++;
+        int tail = words.size();
+        while (tail > head && smeared(words.get(tail - 1))) tail--;
+        WhisperClient.Word last = words.getLast();
+        if (head == words.size() && last.endMs() - words.getFirst().startMs() >= SMEAR_MS) {
+            return new Sung(last.endMs() - sungMs(words, 0, words.size()), last.endMs());
+        }
+        long onset = head > 0 && words.get(head - 1).endMs() - words.getFirst().startMs() >= SMEAR_MS
+                ? words.get(head).startMs() - sungMs(words, 0, head)
+                : onsetMs(segment, words);
+        long end = tail < words.size() && last.endMs() - words.get(tail).startMs() >= SMEAR_MS
+                ? words.get(tail).startMs() + sungMs(words, tail, words.size())
+                : last.endMs();
+        return new Sung(onset, Math.max(onset, end));
+    }
+
+    private static boolean smeared(WhisperClient.Word word) {
+        return word.endMs() - word.startMs() >= SMEAR_RATIO * sungMs(word.text());
+    }
+
+    private static long sungMs(List<WhisperClient.Word> words, int from, int to) {
+        long total = 0;
+        for (int i = from; i < to; i++) total += sungMs(words.get(i).text());
+        return total;
+    }
+
+    private static long onsetMs(WhisperClient.Segment segment, List<WhisperClient.Word> words) {
+        WhisperClient.Word first = words.getFirst();
+        long duration = sungMs(first.text());
+        boolean snapped = first.startMs() - segment.startMs() <= SNAP_MS;
+        long onset = Math.max(first.startMs(), first.endMs() - (snapped ? 0 : duration));
+        if (words.size() > 1) onset = Math.max(onset, Math.min(words.get(1).startMs() - duration, first.endMs() + MIN_SUNG_MS));
+        return onset;
+    }
+
+    private static long sungMs(String text) {
+        long total = 0;
+        for (int i = 0; i < text.length(); ) {
+            int cp = text.codePointAt(i);
+            i += Character.charCount(cp);
+            if (!Character.isLetterOrDigit(cp)) continue;
+            total += cp < 0x3000 ? LATIN_CHAR_MS : CJK_CHAR_MS;
+        }
+        return Math.max(MIN_SUNG_MS, total);
+    }
+
+    private static void add(List<LyricLine> lines, long at, String text) {
+        if (!lines.isEmpty() && at <= lines.getLast().timeMs()) at = lines.getLast().timeMs() + 1;
+        lines.add(new LyricLine(at, text));
     }
 
     static boolean isLyric(String text) {
@@ -155,7 +223,7 @@ public final class LyricsTranscriber {
         for (LyricLine line : lines) {
             if (!line.text().isBlank()) plain.append(line.text()).append('\n');
         }
-        return new Lyrics(info.title, info.author, plain.toString().strip(), lines, false, false, true);
+        return new Lyrics(info.title, info.author, plain.toString().strip(), lines, false, false, true, Lyrics.Source.AI);
     }
 
     private static String path(AudioTrack track) {
