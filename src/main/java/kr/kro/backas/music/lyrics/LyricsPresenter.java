@@ -189,7 +189,8 @@ public final class LyricsPresenter {
 
     public static void presentPlain(MusicPlayerClient client, AudioTrack track, TrackCard card, Lyrics lyrics) {
         MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
-        Lyrics plain = new Lyrics(lyrics.trackName(), lyrics.artistName(), lyrics.plain(), List.of(), lyrics.instrumental());
+        Lyrics plain = lyrics.withoutSync();
+        card.setLyricsSource(sourceLabel(plain));
         showFull(client, track, plain, null, true,
                 new CardFullView(client, track, plain, card, controller.getLyricsExpansions(), controller.getLyricsConversions()),
                 controller.getTranslationClient());
@@ -205,7 +206,10 @@ public final class LyricsPresenter {
         LyricsSession session = new LyricsSession(client, track, lyrics, surface,
                 controller.getLyricsScheduler(), controller.getTranslationClient(), offsetMs);
         TrackCard card = surface.card();
-        if (card != null) card.claim(session);
+        if (card != null) {
+            card.claim(session);
+            card.setLyricsSource(sourceLabel(lyrics));
+        }
         client.setLyricsSession(session);
         session.start();
     }
@@ -234,11 +238,18 @@ public final class LyricsPresenter {
                 startSession(client, track, lyrics, LyricsSurface.ofCard(card), offsetMs);
                 return;
             }
+            card.setLyricsSource(sourceLabel(lyrics));
             CardFullView view = new CardFullView(client, track, lyrics, card, Main.getLuffia().getMusicPlayerController().getLyricsExpansions(),
                     Main.getLuffia().getMusicPlayerController().getLyricsConversions());
             showFull(client, track, lyrics, null, true, view, translator);
             if (Config.get().whisper().convert().auto()) view.requestConversion();
         });
+    }
+
+    @Nullable
+    static String sourceLabel(Lyrics lyrics) {
+        if (lyrics.aiGenerated()) return Lyrics.Source.AI.label();
+        return lyrics.source() == null ? null : lyrics.source().label();
     }
 
     private static void transcribeOnCard(MusicPlayerClient client, AudioTrack track, TrackCard card, String fallbackNote) {
