@@ -38,6 +38,21 @@ class DiskCacheTest {
         Lyrics lyrics = new Lyrics("track", "artist", null, List.of(new LyricLine(1000, "line")), false);
         cache.write("lyrics/x.json", lyrics);
         assertEquals(lyrics, cache.read("lyrics/x.json", Lyrics.class));
+        Lyrics tagged = lyrics.withSource(Lyrics.Source.SPOTIFY);
+        cache.write("lyrics/y.json", tagged);
+        assertEquals(tagged, cache.read("lyrics/y.json", Lyrics.class));
+    }
+
+    @Test
+    void readsLyricsCachedBeforeTheSourceWasStored() throws Exception {
+        DiskCache cache = new DiskCache(directory);
+        Files.createDirectories(directory.resolve("lyrics"));
+        Files.writeString(directory.resolve("lyrics/old.json"),
+                "{\"trackName\":\"track\",\"artistName\":\"artist\",\"plain\":\"line\",\"synced\":[],\"instrumental\":false,\"aiTimed\":false}");
+        Lyrics lyrics = cache.read("lyrics/old.json", Lyrics.class);
+        assertEquals("line", lyrics.plain());
+        assertFalse(lyrics.aiGenerated());
+        assertNull(lyrics.source());
     }
 
     @Test

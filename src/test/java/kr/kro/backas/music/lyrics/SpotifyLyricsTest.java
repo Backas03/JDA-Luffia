@@ -87,4 +87,11 @@ class SpotifyLyricsTest {
         assertSame(spotifyPlain, LyricsSources.prefer(null, spotifyPlain));
         assertNull(LyricsSources.prefer(null, null));
     }
+
+    @Test
+    void tagsLyricsWithWhereTheyCameFrom() {
+        Lyrics found = new Lyrics("t", "a", "x", List.of(), false);
+        assertEquals(Lyrics.Source.SPOTIFY, LyricsSources.tagged(found, Lyrics.Source.SPOTIFY).source());
+        assertNull(LyricsSources.tagged(null, Lyrics.Source.LRCLIB));
+    }
 }
