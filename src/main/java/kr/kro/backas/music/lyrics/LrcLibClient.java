@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import kr.kro.backas.music.cache.DiskCache;
+import kr.kro.backas.music.lyrics.sync.LyricsAligner;
 import kr.kro.backas.music.lyrics.sync.Romaji;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import org.jetbrains.annotations.Nullable;
@@ -50,6 +51,8 @@ public class LrcLibClient {
     private static final int MIN_CROWDED_LINES = 10;
     private static final long MIN_LINE_GAP_MS = 1000;
     private static final int MIN_ARTIST_KEY_LENGTH = 3;
+    private static final int MIN_KEYWORD_LENGTH = 4;
+    private static final double MIN_TITLE_SIMILARITY = 0.5;
     private static final int RETRY_ATTEMPTS = 4;
     private static final long RETRY_BASE_DELAY_MS = 1000;
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(15);
@@ -61,6 +64,7 @@ public class LrcLibClient {
     private static final long MIN_RESOLVER_WAIT_MS = 3_000;
     private static final Pattern LRC_LINE = Pattern.compile("\\[(\\d{1,2}):(\\d{2})(?:[.:](\\d{1,3}))?](.*)");
     private static final Pattern LRC_OFFSET = Pattern.compile("\\[offset:\\s*([+-]?\\d+)\\s*]", Pattern.CASE_INSENSITIVE);
+    private static final Pattern TOPIC_CHANNEL = Pattern.compile("(?i)\\s-\\s*topic$");
     private static final Pattern TITLE_NOISE = Pattern.compile(
             "(?i)\\s*[\\[(【].*?(official|mv|m/v|music video|lyric|audio|visualizer|ver\\.?|version|remaster|가사|자막|한글|번역|공식|뮤직비디오|4k|8k|hd).*?[\\])】]\\s*|\\s*[\\[(【]\\s*from\\s.*?[\\])】]\\s*|\\s*[|_]\\s*(mv|m/v|official.*)$");
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -178,13 +182,20 @@ public class LrcLibClient {
             if (best != null && !unreliableSync(best, durationSec) && !translated(best, info.title)) node = best;
             else if (best != null) rejected.compareAndSet(null, best);
         }
+        if (node == null && !hasResult(resolved) && hasKnownArtist(info)) {
+            String keyword = keyword(title);
+            if (keyword != null) {
+                JsonNode byKeyword = tryGet(failures, "search?track_name=" + encode(keyword) + "&artist_name=" + encode(artist));
+                node = pickBest(similarTitles(byKnownArtist(byKeyword, info), title), durationSec, info.title);
+            }
+        }
         if (node == null && !hasResult(resolved)) {
-            node = pickBest(tryGet(failures, "search?track_name=" + encode(title)), durationSec, info.title);
+            node = pickBest(byKnownArtist(tryGet(failures, "search?track_name=" + encode(title)), info), durationSec, info.title);
         }
         if (node == null && !hasResult(resolved)) {
             for (String[] candidate : candidates) {
                 if (candidate[1].equalsIgnoreCase(title)) continue;
-                node = pickBest(tryGet(failures, "search?track_name=" + encode(candidate[1])), durationSec, info.title);
+                node = pickBest(byKnownArtist(tryGet(failures, "search?track_name=" + encode(candidate[1])), info), durationSec, info.title);
                 break;
             }
         }
@@ -319,6 +330,45 @@ public class LrcLibClient {
             LOGGER.debug("lyrics lookup by resolved song failed for {}", info.title, e);
             return null;
         }
+    }
+
+    @Nullable
+    static JsonNode byKnownArtist(@Nullable JsonNode results, AudioTrackInfo info) {
+        if (results == null || !results.isArray() || !hasKnownArtist(info)) return results;
+        String artist = matchKey(firstArtist(info.author));
+        ArrayNode same = MAPPER.createArrayNode();
+        for (JsonNode candidate : results) {
+            String candidateArtist = matchKey(candidate.path("artistName").asText(""));
+            if (artist.isEmpty() || candidateArtist.isEmpty()) continue;
+            if (candidateArtist.contains(artist) || (candidateArtist.length() >= MIN_ARTIST_KEY_LENGTH && artist.contains(candidateArtist))) {
+                same.add(candidate);
+            }
+        }
+        return same;
+    }
+
+    @Nullable
+    static String keyword(String title) {
+        String best = null;
+        for (String word : title.split("[^A-Za-z0-9]+")) {
+            if (word.length() >= MIN_KEYWORD_LENGTH && (best == null || word.length() > best.length())) best = word;
+        }
+        return best == null || best.equalsIgnoreCase(title.trim()) ? null : best;
+    }
+
+    static ArrayNode similarTitles(@Nullable JsonNode results, String title) {
+        ArrayNode similar = MAPPER.createArrayNode();
+        if (results == null || !results.isArray()) return similar;
+        String ours = matchKey(TRAILING_PAREN.matcher(title).replaceAll(""));
+        for (JsonNode candidate : results) {
+            String theirs = matchKey(TRAILING_PAREN.matcher(candidate.path("trackName").asText("")).replaceAll(""));
+            if (!ours.isEmpty() && !theirs.isEmpty() && LyricsAligner.similarity(ours, theirs) >= MIN_TITLE_SIMILARITY) similar.add(candidate);
+        }
+        return similar;
+    }
+
+    static boolean hasKnownArtist(AudioTrackInfo info) {
+        return hasCatalogMetadata(info) || (info.author != null && TOPIC_CHANNEL.matcher(info.author).find());
     }
 
     private static boolean hasCatalogMetadata(AudioTrackInfo info) {

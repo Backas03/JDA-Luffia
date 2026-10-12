@@ -25,7 +25,7 @@ public final class LyricsSources {
         Lyrics fromLrcLib = null;
         IOException failure = null;
         try {
-            fromLrcLib = lrcLib.find(track.getInfo());
+            fromLrcLib = tagged(lrcLib.find(track.getInfo()), Lyrics.Source.LRCLIB);
         } catch (IOException e) {
             failure = e;
         }
@@ -33,9 +33,14 @@ public final class LyricsSources {
             if (fromLrcLib == null && failure != null) throw failure;
             return fromLrcLib;
         }
-        Lyrics chosen = prefer(fromLrcLib, spotify.find(track));
+        Lyrics chosen = prefer(fromLrcLib, tagged(spotify.find(track), Lyrics.Source.SPOTIFY));
         if (chosen == null && failure != null) throw failure;
         return chosen;
+    }
+
+    @Nullable
+    static Lyrics tagged(@Nullable Lyrics lyrics, Lyrics.Source source) {
+        return lyrics == null ? null : lyrics.withSource(source);
     }
 
     @Nullable

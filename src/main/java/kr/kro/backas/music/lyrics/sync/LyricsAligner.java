@@ -192,7 +192,7 @@ public final class LyricsAligner {
         return out.toString();
     }
 
-    static double similarity(String a, String b) {
+    public static double similarity(String a, String b) {
         if (a.length() < 2 || b.length() < 2) return a.equals(b) ? 1 : 0;
         Map<String, Integer> counts = new HashMap<>();
         for (int i = 0; i + 1 < a.length(); i++) counts.merge(a.substring(i, i + 2), 1, Integer::sum);

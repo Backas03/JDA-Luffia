@@ -60,6 +60,8 @@ public final class TrackCard {
     private volatile boolean lyricsExpanded;
     private volatile Object presenter;
     private volatile long finishedAt;
+    @Nullable
+    private volatile String lyricsSource;
 
     private TrackCard(MusicPlayerClient client, AudioTrack track, long channelId, @Nullable MessageChannel recordChannel) {
         this.client = client;
@@ -88,7 +90,7 @@ public final class TrackCard {
                 .thenCompose(banner -> {
                     boolean attach = banner != null && banner.isFile();
                     card.bannerAttached = attach;
-                    Container initial = frame(client, track, body, 0, attach);
+                    Container initial = frame(client, track, body, 0, attach, null);
                     if (hook != null) {
                         WebhookMessageEditAction<Message> action = hook.editOriginalComponents(initial).useComponentsV2(true);
                         if (attach) action = action.setFiles(bannerFile(banner));
@@ -121,6 +123,10 @@ public final class TrackCard {
         this.lyricsExpanded = expanded;
     }
 
+    public void setLyricsSource(@Nullable String source) {
+        this.lyricsSource = source;
+    }
+
     public void claim(Object owner) {
         this.presenter = owner;
     }
@@ -140,7 +146,7 @@ public final class TrackCard {
 
     public Container frame(List<? extends ContainerChildComponent> body) {
         lastBody = body;
-        return frame(client, track, body, finishedAt, bannerAttached);
+        return frame(client, track, body, finishedAt, bannerAttached, lyricsSource);
     }
 
     public static FileUpload bannerFile(ArtworkColors.Banner banner) {
@@ -226,7 +232,7 @@ public final class TrackCard {
             remove();
             ArtworkColors.Banner banner = ArtworkColors.bannerFor(MusicEmbeds.bannerOf(track));
             boolean attach = banner != null && banner.isFile();
-            MessageCreateAction record = recordChannel.sendMessageComponents(frame(client, track, List.of(), finishedAt, attach))
+            MessageCreateAction record = recordChannel.sendMessageComponents(frame(client, track, List.of(), finishedAt, attach, null))
                     .useComponentsV2(true);
             if (attach) record = record.addFiles(bannerFile(banner));
             record.queue(null, error -> LOGGER.debug("failed to leave a play record for {}", track.getInfo().title, error));
@@ -259,15 +265,15 @@ public final class TrackCard {
     }
 
     public static Container frame(MusicPlayerClient client, AudioTrack track, List<? extends ContainerChildComponent> body, long finishedAt,
-                                  boolean bannerAttached) {
+                                  boolean bannerAttached, @Nullable String lyricsSource) {
         boolean playing = !body.isEmpty();
         List<ContainerChildComponent> children = new ArrayList<>();
         MediaGallery banner = banner(track, bannerAttached);
         if (banner != null) {
             children.add(banner);
-            children.add(headerText(client, track, playing));
+            children.add(headerText(client, track, playing, lyricsSource));
         } else {
-            children.add(header(client, track, playing));
+            children.add(header(client, track, playing, lyricsSource));
         }
         if (playing) {
             children.add(Separator.createDivider(Separator.Spacing.SMALL));
@@ -278,14 +284,14 @@ public final class TrackCard {
         return Container.of(children).withAccentColor(ArtworkColors.of(MusicEmbeds.thumbnailOf(track)));
     }
 
-    public static ContainerChildComponent header(MusicPlayerClient client, AudioTrack track, boolean playing) {
-        TextDisplay text = headerText(client, track, playing);
+    private static ContainerChildComponent header(MusicPlayerClient client, AudioTrack track, boolean playing, @Nullable String lyricsSource) {
+        TextDisplay text = headerText(client, track, playing, lyricsSource);
         String artwork = MusicEmbeds.thumbnailOf(track);
         return artwork == null ? text : Section.of(Thumbnail.fromUrl(artwork), text);
     }
 
-    private static TextDisplay headerText(MusicPlayerClient client, AudioTrack track, boolean playing) {
-        return TextDisplay.of(headerText(track.getInfo(), MusicEmbeds.sourceLabel(track), playing ? settingsLine(client) : null));
+    private static TextDisplay headerText(MusicPlayerClient client, AudioTrack track, boolean playing, @Nullable String lyricsSource) {
+        return TextDisplay.of(headerText(track.getInfo(), MusicEmbeds.sourceLabel(track), playing ? settingsLine(client, lyricsSource) : null));
     }
 
     static String headerText(AudioTrackInfo info, String source, @Nullable String settings) {
@@ -304,6 +310,10 @@ public final class TrackCard {
     }
 
     public static String settingsLine(MusicPlayerClient client) {
+        return settingsLine(client, null);
+    }
+
+    static String settingsLine(MusicPlayerClient client, @Nullable String lyricsSource) {
         List<String> settings = new ArrayList<>();
         settings.add("볼륨 " + client.getVolume() + "%");
         settings.add(client.getRepeatModeName());
@@ -311,7 +321,12 @@ public final class TrackCard {
         if (client.getKaraokeMode().isActive()) settings.add("노래방 " + client.getKaraokeMode().getName());
         if (!client.getCurrentEqualizer().isFlat()) settings.add("이퀄라이저 " + client.getCurrentEqualizer().getName());
         settings.add("AI 추천 " + autoplayStatus(client));
+        if (lyricsSource != null) settings.add(lyricsSetting(lyricsSource));
         return String.join(" · ", settings);
+    }
+
+    static String lyricsSetting(String source) {
+        return source + " (가사)";
     }
 
     public static String autoplayStatus(MusicPlayerClient client) {
