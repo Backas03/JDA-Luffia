@@ -31,23 +31,63 @@ class LrcLibClientTest {
     }
 
     @Test
+    void picksTheSameSongByTheSameArtistInTheLanguageTheVocalsUse() throws Exception {
+        JsonNode results = MAPPER.readTree("""
+                [{"id": 1, "trackName": "最終花", "artistName": "AIRI KANNA", "duration": 246, "plainLyrics": "苦しみは無標的だ\\n何処からでもない自意識だ"},
+                 {"id": 2, "trackName": "최종화", "artistName": "AIRI KANNA", "duration": 247, "plainLyrics": "움츠러든 어깨를 따라서\\n다시 저물어가는 오늘의 끝"},
+                 {"id": 3, "trackName": "최종화", "artistName": "Someone Else", "duration": 247, "plainLyrics": "움츠러든 어깨를 따라서"},
+                 {"id": 4, "trackName": "다른 노래", "artistName": "AIRI KANNA", "duration": 300, "plainLyrics": "전혀 다른 노래 가사"}]
+                """);
+        assertEquals(2, LrcLibClient.pickAlternative(results, "AIRI KANNA", 255, "ko").path("id").asInt());
+        assertEquals(1, LrcLibClient.pickAlternative(results, "AIRI KANNA", 255, "ja").path("id").asInt());
+        assertNull(LrcLibClient.pickAlternative(results, "Nobody", 255, "ko"));
+    }
+
+    @Test
+    void learnsOtherSpellingsOfAnArtistFromHowLrclibNamesThem() throws Exception {
+        JsonNode results = MAPPER.readTree("""
+                [{"id": 1, "trackName": "セカイ / 스텔라이브(StelLive) cover", "artistName": "스텔라이브 StelLive Official"},
+                 {"id": 2, "trackName": "Shooting Star (유성우)", "artistName": "StelLive (스텔라이브)"},
+                 {"id": 3, "trackName": "So Many Stars", "artistName": "Maria Kim"}]
+                """);
+        assertEquals(List.of("스텔라이브"), LrcLibClient.aliasesIn(results, "StelLive"));
+        assertEquals(List.of("StelLive", "Kenshi Yonezu"), LrcLibClient.artistNames("StelLive (Kenshi Yonezu)"));
+        assertTrue(LrcLibClient.aliasesIn(results, "Nobody").isEmpty());
+    }
+
+    @Test
+    void splitsOfficialChannelNamesIntoTheArtistNamesTheyCarry() {
+        assertEquals(List.of("스텔라이브 StelLive", "스텔라이브", "StelLive"), LrcLibClient.channelNames("스텔라이브 StelLive Official"));
+        assertEquals(List.of("米津玄師 Kenshi Yonezu", "米津玄師", "Kenshi Yonezu"), LrcLibClient.channelNames("米津玄師 Kenshi Yonezu"));
+        assertEquals(List.of("YOASOBI"), LrcLibClient.channelNames("YOASOBI Official Channel"));
+        List<String[]> pairs = LrcLibClient.candidatePairs("Twinkle", "스텔라이브 StelLive Official");
+        boolean searched = false;
+        for (String[] pair : pairs.subList(0, 3)) searched |= pair[0].equals("스텔라이브") && pair[1].equals("Twinkle");
+        assertTrue(searched);
+    }
+
+    @Test
     void titleOnlyResultsMustComeFromTheArtistWhenTheChannelOrCatalogNamesIt() throws Exception {
         JsonNode results = MAPPER.readTree("""
                 [{"id": 1, "trackName": "Shooting Star (Shooting Star)", "artistName": "N.Flying - Topic", "duration": 200, "syncedLyrics": "[00:10.00] a"},
                  {"id": 2, "trackName": "Shooting Star", "artistName": "StelLive", "duration": 205, "syncedLyrics": "[00:10.00] b"}]
                 """);
         AudioTrackInfo topic = new AudioTrackInfo("Shooting Star", "StelLive - Topic", 205_000, "n-NHnzia_Lw", false, "https://www.youtube.com/watch?v=n-NHnzia_Lw");
-        JsonNode filtered = LrcLibClient.byKnownArtist(results, topic);
+        JsonNode filtered = LrcLibClient.byArtist(results, topic);
         assertEquals(1, filtered.size());
         assertEquals(2, filtered.get(0).path("id").asInt());
         AudioTrackInfo spotify = new AudioTrackInfo("Shooting Star", "StelLive", 205_000, "x", false, "https://open.spotify.com/track/x");
-        assertEquals(1, LrcLibClient.byKnownArtist(results, spotify).size());
+        assertEquals(1, LrcLibClient.byArtist(results, spotify).size());
         AudioTrackInfo upload = new AudioTrackInfo("Shooting Star", "Some Uploader", 205_000, "y", false, "https://www.youtube.com/watch?v=y");
-        assertEquals(2, LrcLibClient.byKnownArtist(results, upload).size());
+        assertEquals(0, LrcLibClient.byArtist(results, upload).size());
+        AudioTrackInfo named = new AudioTrackInfo("StelLive - Shooting Star", "Some Uploader", 205_000, "z", false, "https://www.youtube.com/watch?v=z");
+        assertEquals(2, LrcLibClient.byArtist(results, named).get(0).path("id").asInt());
+        AudioTrackInfo official = new AudioTrackInfo("Shooting Star", "스텔라이브 StelLive Official", 205_000, "w", false, "https://www.youtube.com/watch?v=w");
+        assertEquals(1, LrcLibClient.byArtist(results, official).size());
         JsonNode onlyOthers = MAPPER.readTree("""
                 [{"id": 1, "trackName": "Shooting Star", "artistName": "N.Flying - Topic", "duration": 200, "syncedLyrics": "[00:10.00] a"}]
                 """);
-        assertNull(LrcLibClient.pickBest(LrcLibClient.byKnownArtist(onlyOthers, topic), 205));
+        assertNull(LrcLibClient.pickBest(LrcLibClient.byArtist(onlyOthers, topic), 205));
     }
 
     @Test

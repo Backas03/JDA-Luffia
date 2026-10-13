@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -52,6 +53,8 @@ public class LrcLibClient {
     private static final long MIN_LINE_GAP_MS = 1000;
     private static final int MIN_ARTIST_KEY_LENGTH = 3;
     private static final int MIN_KEYWORD_LENGTH = 4;
+    private static final long ALTERNATIVE_TOLERANCE_SEC = 10;
+    private static final int MAX_ALIASES = 3;
     private static final double MIN_TITLE_SIMILARITY = 0.5;
     private static final int RETRY_ATTEMPTS = 4;
     private static final long RETRY_BASE_DELAY_MS = 1000;
@@ -65,6 +68,10 @@ public class LrcLibClient {
     private static final Pattern LRC_LINE = Pattern.compile("\\[(\\d{1,2}):(\\d{2})(?:[.:](\\d{1,3}))?](.*)");
     private static final Pattern LRC_OFFSET = Pattern.compile("\\[offset:\\s*([+-]?\\d+)\\s*]", Pattern.CASE_INSENSITIVE);
     private static final Pattern TOPIC_CHANNEL = Pattern.compile("(?i)\\s-\\s*topic$");
+    private static final Pattern MORE_ARTISTS = Pattern.compile("(?i)\\s+and\\s+\\d+\\s+more$");
+    private static final Pattern BRACKETED_NAME =Pattern.compile("^(.+?)\\s*[(（\\[]([^)）\\]]+)[)）\\]]$");
+    private static final Pattern CHANNEL_SUFFIX = Pattern.compile(
+            "(?i)(\\s*[-|]?\\s*(official(\\s+youtube)?(\\s+channel)?|vevo|topic|공식(\\s*채널)?|오피셜|公式(チャンネル)?|channel))+$");
     private static final Pattern TITLE_NOISE = Pattern.compile(
             "(?i)\\s*[\\[(【].*?(official|mv|m/v|music video|lyric|audio|visualizer|ver\\.?|version|remaster|가사|자막|한글|번역|공식|뮤직비디오|4k|8k|hd).*?[\\])】]\\s*|\\s*[\\[(【]\\s*from\\s.*?[\\])】]\\s*|\\s*[|_]\\s*(mv|m/v|official.*)$");
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -135,7 +142,7 @@ public class LrcLibClient {
     }
 
     private static String diskPathOf(String identifier) {
-        return "lyrics-v4/" + TranslationJobs.sha256(identifier) + ".json";
+        return "lyrics-v5/" + TranslationJobs.sha256(identifier) + ".json";
     }
 
     private static void remember(String identifier, Lyrics lyrics) {
@@ -182,20 +189,28 @@ public class LrcLibClient {
             if (best != null && !unreliableSync(best, durationSec) && !translated(best, info.title)) node = best;
             else if (best != null) rejected.compareAndSet(null, best);
         }
+        if (node == null && !hasResult(resolved)) {
+            List<String> aliasPaths = new ArrayList<>();
+            for (String alias : artistAliases(failures, artist)) {
+                aliasPaths.add("search?track_name=" + encode(title) + "&artist_name=" + encode(alias));
+            }
+            JsonNode best = pickBest(gather(failures, aliasPaths, resolved), durationSec, info.title);
+            if (best != null && !unreliableSync(best, durationSec) && !translated(best, info.title)) node = best;
+        }
         if (node == null && !hasResult(resolved) && hasKnownArtist(info)) {
             String keyword = keyword(title);
             if (keyword != null) {
                 JsonNode byKeyword = tryGet(failures, "search?track_name=" + encode(keyword) + "&artist_name=" + encode(artist));
-                node = pickBest(similarTitles(byKnownArtist(byKeyword, info), title), durationSec, info.title);
+                node = pickBest(similarTitles(byArtist(byKeyword, info), title), durationSec, info.title);
             }
         }
         if (node == null && !hasResult(resolved)) {
-            node = pickBest(byKnownArtist(tryGet(failures, "search?track_name=" + encode(title)), info), durationSec, info.title);
+            node = pickBest(byArtist(tryGet(failures, "search?track_name=" + encode(title)), info), durationSec, info.title);
         }
         if (node == null && !hasResult(resolved)) {
             for (String[] candidate : candidates) {
                 if (candidate[1].equalsIgnoreCase(title)) continue;
-                node = pickBest(byKnownArtist(tryGet(failures, "search?track_name=" + encode(candidate[1])), info), durationSec, info.title);
+                node = pickBest(byArtist(tryGet(failures, "search?track_name=" + encode(candidate[1])), info), durationSec, info.title);
                 break;
             }
         }
@@ -333,18 +348,146 @@ public class LrcLibClient {
     }
 
     @Nullable
-    static JsonNode byKnownArtist(@Nullable JsonNode results, AudioTrackInfo info) {
-        if (results == null || !results.isArray() || !hasKnownArtist(info)) return results;
-        String artist = matchKey(firstArtist(info.author));
-        ArrayNode same = MAPPER.createArrayNode();
+    public Lyrics alternative(AudioTrackInfo info, Lyrics current, String language) {
+        long durationSec = info.length / 1000;
+        Set<String> artists = new LinkedHashSet<>();
+        artists.add(current.artistName());
+        artists.addAll(channelNames(firstArtist(info.author)));
+        Failures failures = new Failures();
+        ArrayNode pool = MAPPER.createArrayNode();
+        Set<Long> seen = new HashSet<>();
+        for (String artist : artists) {
+            if (artist == null || artist.isBlank()) continue;
+            try {
+                JsonNode found = tryGet(failures, "search?q=" + encode(artist));
+                if (found == null || !found.isArray()) continue;
+                for (JsonNode candidate : found) {
+                    if (seen.add(candidate.path("id").asLong(-1))) pool.add(candidate);
+                }
+            } catch (IOException e) {
+                LOGGER.debug("alternative lyrics search failed for {}", info.title, e);
+            }
+        }
+        JsonNode best = pickAlternative(pool, current.artistName(), durationSec, language);
+        return best == null ? null : usable(best, durationSec);
+    }
+
+    @Nullable
+    static JsonNode pickAlternative(JsonNode results, String artistName, long durationSec, String language) {
+        String artist = matchKey(artistName);
+        JsonNode best = null;
+        long bestScore = Long.MAX_VALUE;
         for (JsonNode candidate : results) {
             String candidateArtist = matchKey(candidate.path("artistName").asText(""));
             if (artist.isEmpty() || candidateArtist.isEmpty()) continue;
-            if (candidateArtist.contains(artist) || (candidateArtist.length() >= MIN_ARTIST_KEY_LENGTH && artist.contains(candidateArtist))) {
-                same.add(candidate);
+            if (!candidateArtist.contains(artist) && !(candidateArtist.length() >= MIN_ARTIST_KEY_LENGTH && artist.contains(candidateArtist))) continue;
+            long diff = Math.abs(candidate.path("duration").asLong(0) - durationSec);
+            if (durationSec > 0 && diff > ALTERNATIVE_TOLERANCE_SEC) continue;
+            boolean synced = !candidate.path("syncedLyrics").asText("").isBlank();
+            String text = synced ? candidate.path("syncedLyrics").asText("") : candidate.path("plainLyrics").asText("");
+            if (text.isBlank()) continue;
+            List<LyricLine> lines = synced ? parseLrc(text) : new ArrayList<>();
+            if (!synced) for (String line : text.split("\\r?\\n")) lines.add(new LyricLine(0, line));
+            if (!language.equals(LyricsAligner.languageHint(lines))) continue;
+            long score = diff - (synced ? 1 : 0);
+            if (score < bestScore) {
+                bestScore = score;
+                best = candidate;
             }
         }
+        return best;
+    }
+
+    public void override(AudioTrackInfo info, Lyrics lyrics) {
+        remember(identifierOf(info), lyrics);
+    }
+
+    @Nullable
+    static JsonNode byArtist(@Nullable JsonNode results, AudioTrackInfo info) {
+        if (results == null || !results.isArray()) return results;
+        boolean known = hasKnownArtist(info);
+        String artist = matchKey(firstArtist(info.author));
+        String video = matchKey(info.title + " " + info.author);
+        ArrayNode same = MAPPER.createArrayNode();
+        for (JsonNode candidate : results) {
+            String candidateArtist = matchKey(candidate.path("artistName").asText(""));
+            if (candidateArtist.isEmpty()) continue;
+            boolean related = !artist.isEmpty() && (candidateArtist.contains(artist)
+                    || (candidateArtist.length() >= MIN_ARTIST_KEY_LENGTH && artist.contains(candidateArtist)));
+            boolean named = !known && candidateArtist.length() >= MIN_ARTIST_KEY_LENGTH && video.contains(candidateArtist);
+            if (related || named) same.add(candidate);
+        }
         return same;
+    }
+
+    private List<String> artistAliases(Failures failures, String artist) throws IOException {
+        String key = matchKey(artist);
+        if (key.length() < MIN_ARTIST_KEY_LENGTH) return List.of();
+        return aliasesIn(tryGet(failures, "search?q=" + encode(artist)), artist);
+    }
+
+    static List<String> aliasesIn(@Nullable JsonNode results, String artist) {
+        List<String> aliases = new ArrayList<>();
+        String key = matchKey(artist);
+        if (results == null || !results.isArray() || key.isEmpty()) return aliases;
+        for (JsonNode candidate : results) {
+            String name = candidate.path("artistName").asText("");
+            if (!matchKey(name).contains(key)) continue;
+            for (String alias : artistNames(name)) {
+                String aliasKey = matchKey(alias);
+                if (aliasKey.isEmpty() || aliasKey.equals(key) || aliasKey.contains(key)) continue;
+                if (aliases.stream().noneMatch(known -> matchKey(known).equals(aliasKey))) aliases.add(alias);
+            }
+            if (aliases.size() >= MAX_ALIASES) break;
+        }
+        return aliases.size() > MAX_ALIASES ? aliases.subList(0, MAX_ALIASES) : aliases;
+    }
+
+    static List<String> artistNames(String name) {
+        List<String> names = new ArrayList<>();
+        Matcher bracketed = BRACKETED_NAME.matcher(name.trim());
+        if (bracketed.matches()) {
+            names.addAll(channelNames(bracketed.group(1)));
+            names.addAll(channelNames(bracketed.group(2)));
+        } else {
+            names.addAll(channelNames(name));
+        }
+        return names;
+    }
+
+    static List<String> channelNames(String channel) {
+        List<String> names = new ArrayList<>();
+        String cleaned = CHANNEL_SUFFIX.matcher(channel).replaceAll("").trim();
+        if (cleaned.isBlank()) return names;
+        names.add(cleaned);
+        List<String> groups = new ArrayList<>();
+        StringBuilder group = new StringBuilder();
+        Boolean groupCjk = null;
+        for (String word : cleaned.split("\\s+")) {
+            boolean cjk = hasCjkOrHangul(word);
+            if (groupCjk != null && cjk != groupCjk) {
+                groups.add(group.toString());
+                group.setLength(0);
+            }
+            if (!group.isEmpty()) group.append(' ');
+            group.append(word);
+            groupCjk = cjk;
+        }
+        if (!group.isEmpty()) groups.add(group.toString());
+        if (groups.size() > 1) {
+            for (String name : groups) {
+                if (matchKey(name).length() >= 2 && !names.contains(name)) names.add(name);
+            }
+        }
+        return names;
+    }
+
+    private static boolean hasCjkOrHangul(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if ((c >= 0xAC00 && c <= 0xD7A3) || (c >= 0x3040 && c <= 0x30FF) || (c >= 0x4E00 && c <= 0x9FFF)) return true;
+        }
+        return false;
     }
 
     @Nullable
@@ -455,6 +598,7 @@ public class LrcLibClient {
     static List<String[]> candidatePairs(String title, String channelArtist) {
         List<String[]> pairs = new ArrayList<>();
         addPair(pairs, channelArtist, title);
+        for (String name : channelNames(channelArtist)) addPair(pairs, name, title);
         Matcher bracket = BRACKET_TITLE.matcher(title);
         if (bracket.matches()) addPair(pairs, bracket.group(1).isBlank() ? channelArtist : bracket.group(1), bracket.group(2));
         Matcher quoted = QUOTED_TITLE.matcher(title);
@@ -713,7 +857,7 @@ public class LrcLibClient {
 
     public static String firstArtist(@Nullable String author) {
         if (author == null) return "";
-        String first = author.split("[,/&]")[0].trim();
+        String first = MORE_ARTISTS.matcher(author.split("[,/&]")[0].trim()).replaceAll("").trim();
         return first.replaceAll("(?i)\\s*-\\s*topic$", "").trim();
     }
 

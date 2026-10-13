@@ -34,7 +34,7 @@ public final class LyricsTranscriber {
     private record Sung(long onsetMs, long endMs) {
     }
 
-    static final int VERSION = 2;
+    static final int VERSION = 4;
     static final long REST_GAP_MS = 3_000;
     static final long REST_DELAY_MS = 500;
     static final long SNAP_MS = 30;
@@ -95,7 +95,7 @@ public final class LyricsTranscriber {
                     } catch (IOException e) {
                         throw new UncheckedIOException(e);
                     }
-                    List<LyricLine> lines = lines(transcript, captured.capturedMs());
+                    List<LyricLine> lines = LyricsTimestamper.placeRests(lines(transcript, captured.capturedMs()), VocalActivity.of(captured.wav()));
                     boolean usable = letters(lines) >= Config.get().whisper().transcribe().minLetters();
                     List<AiLyricsStore.Line> stored = new ArrayList<>();
                     for (LyricLine line : lines) stored.add(new AiLyricsStore.Line(line.timeMs(), line.text()));

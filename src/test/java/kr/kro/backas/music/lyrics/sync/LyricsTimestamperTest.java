@@ -118,6 +118,42 @@ class LyricsTimestamperTest {
         assertEquals(4, result.total());
     }
 
+    @Test
+    void restsGoOnlyWhereTheAccompanimentPlaysAlone() {
+        short[] samples = VocalActivityTest.silence(30, 7);
+        VocalActivityTest.sing(samples, 1_000, 10_000, 220, 60);
+        VocalActivityTest.drums(samples, 11_000, 20_000, 500, 3);
+        VocalActivityTest.sing(samples, 20_000, 5_000, 260, 60);
+        VocalActivityTest.drums(samples, 25_000, 30_000, 500, 4);
+        VocalActivity vocals = VocalActivity.of(VocalActivityTest.wav(samples));
+        List<LyricLine> lines = List.of(
+                new LyricLine(1_000, "held note"),
+                new LyricLine(6_000, ""),
+                new LyricLine(20_000, "after the break"));
+        List<LyricLine> placed = LyricsTimestamper.placeRests(lines, vocals);
+        assertEquals(List.of("held note", "", "after the break", ""), texts(placed));
+        assertTrue(placed.get(1).timeMs() >= 10_800 && placed.get(1).timeMs() <= 11_600, "rest at " + placed.get(1).timeMs());
+        assertTrue(placed.get(3).timeMs() >= 24_800 && placed.get(3).timeMs() <= 25_600, "outro at " + placed.get(3).timeMs());
+    }
+
+    @Test
+    void withoutAudioOnlyRestsTooShortToNoticeAreDropped() {
+        List<LyricLine> lines = List.of(
+                new LyricLine(1_000, "first"),
+                new LyricLine(4_000, ""),
+                new LyricLine(7_000, "second"),
+                new LyricLine(9_000, ""),
+                new LyricLine(20_000, "third"));
+        assertEquals(List.of("first", "second", "", "third"), texts(LyricsTimestamper.placeRests(lines, null)));
+    }
+
+    @Test
+    void partialPassesKeepOneLinePerLyricSoTheFinalPassCanReplaceThem() {
+        List<Long> starts = java.util.Arrays.asList(5_000L, 10_000L, 40_000L, 45_000L);
+        LyricsTimestamper.Result result = LyricsTimestamper.timestamp(LINES, sung(LINES, starts), 60_000, true).orElseThrow();
+        assertEquals(LINES, texts(result.lines()));
+    }
+
     private static WhisperClient.Word word(String text, long startMs, long endMs) {
         return new WhisperClient.Word(text, startMs, endMs);
     }
