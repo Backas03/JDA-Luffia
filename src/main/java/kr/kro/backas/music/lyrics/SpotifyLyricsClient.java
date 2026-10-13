@@ -30,7 +30,8 @@ public final class SpotifyLyricsClient {
     public record Stored(@Nullable Lyrics lyrics, long at, int version) {
     }
 
-    static final int VERSION = 1;
+    static final int VERSION = 2;
+    static final int MAX_QUERIES = 3;
     static final long DURATION_TOLERANCE_MS = 5_000;
     static final long SAME_ARTIST_TOLERANCE_MS = 3_000;
     static final int SAME_ARTIST_RANKS = 3;
@@ -105,11 +106,8 @@ public final class SpotifyLyricsClient {
 
     @Nullable
     private AudioTrack search(AudioTrackInfo info) throws IOException {
-        List<String> queries = new ArrayList<>();
-        if (info.isrc != null && !info.isrc.isBlank()) queries.add("isrc:" + info.isrc);
-        queries.add(LrcLibClient.cleanTitle(info.title) + " " + LrcLibClient.firstArtist(info.author));
         int seen = 0;
-        for (String query : queries) {
+        for (String query : queries(info)) {
             AudioItem item = source.getSearch(query, false);
             List<AudioTrack> candidates = item instanceof AudioPlaylist playlist ? playlist.getTracks()
                     : item instanceof AudioTrack single ? List.of(single) : List.of();
@@ -121,6 +119,28 @@ public final class SpotifyLyricsClient {
         }
         LOGGER.info("no spotify track matched {} by {} among {} search result(s)", info.title, info.author, seen);
         return null;
+    }
+
+    static List<String> queries(AudioTrackInfo info) {
+        List<String> queries = new ArrayList<>();
+        if (info.isrc != null && !info.isrc.isBlank()) queries.add("isrc:" + info.isrc);
+        String title = LrcLibClient.cleanTitle(info.title);
+        String artist = LrcLibClient.firstArtist(info.author);
+        List<String> names = LrcLibClient.channelNames(artist);
+        String name = names.isEmpty() ? artist : names.get(names.size() > 1 ? 1 : 0);
+        List<String> titles = new ArrayList<>();
+        for (String[] pair : LrcLibClient.candidatePairs(title, artist)) {
+            if (pair[1].length() < title.length() && LrcLibClient.matchKey(pair[1]).length() >= 2 && !titles.contains(pair[1])) titles.add(pair[1]);
+        }
+        titles.sort(java.util.Comparator.comparingInt(String::length));
+        for (String core : titles) {
+            if (queries.size() >= MAX_QUERIES) break;
+            String query = (core + " " + name).trim();
+            if (!queries.contains(query)) queries.add(query);
+        }
+        String full = (title + " " + artist).trim();
+        if (!queries.contains(full)) queries.add(full);
+        return queries;
     }
 
     @Nullable

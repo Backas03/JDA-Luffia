@@ -89,6 +89,17 @@ class SpotifyLyricsTest {
     }
 
     @Test
+    void searchesSpotifyWithTheSongTitleInsteadOfTheWholeVideoTitle() {
+        AudioTrackInfo video = new AudioTrackInfo("스텔라이브 (STELLIVE) Universe | '마음악보'", "스텔라이브 StelLive Official and 4 more",
+                225_000, "id", false, "https://www.youtube.com/watch?v=id");
+        List<String> queries = SpotifyLyricsClient.queries(video);
+        assertEquals("마음악보 스텔라이브", queries.get(0));
+        assertTrue(queries.size() <= SpotifyLyricsClient.MAX_QUERIES + 1);
+        AudioTrackInfo catalog = new AudioTrackInfo("Twinkle", "스텔라이브", 213_000, "x", false, "https://open.spotify.com/track/x", null, "KRA000000001");
+        assertEquals(List.of("isrc:KRA000000001", "Twinkle 스텔라이브"), SpotifyLyricsClient.queries(catalog));
+    }
+
+    @Test
     void tagsLyricsWithWhereTheyCameFrom() {
         Lyrics found = new Lyrics("t", "a", "x", List.of(), false);
         assertEquals(Lyrics.Source.SPOTIFY, LyricsSources.tagged(found, Lyrics.Source.SPOTIFY).source());

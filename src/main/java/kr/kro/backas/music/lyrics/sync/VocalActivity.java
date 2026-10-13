@@ -24,6 +24,9 @@ public final class VocalActivity {
     static final double CLEAR_ONSET_DOMINANCE = 1.25;
     static final float PRE_EMPHASIS = 0.95f;
     static final int ATTACK_HISTORY = 3;
+    static final double QUIET_SHARE = 0.25;
+    static final long SETTLE_MS = 300;
+    static final double SETTLE_SHARE = 0.5;
 
     private final long durationMs;
     private final float[] onset;
@@ -74,6 +77,17 @@ public final class VocalActivity {
         int to = (int) Math.max(0, Math.min(frames, Math.floorDiv(toMs + FRAME_MS - 1, FRAME_MS)));
         if (to <= from) return 0;
         return (double) (singing[to] - singing[from]) / (to - from);
+    }
+
+    public long quietFrom(long fromMs, long toMs, long minMs) {
+        long latest = toMs - minMs;
+        for (long at = Math.max(0, Math.floorDiv(fromMs, FRAME_MS) * FRAME_MS); at <= latest; at += FRAME_MS) {
+            if (vocalRatio(at, toMs) > QUIET_SHARE) continue;
+            long start = at;
+            while (start + FRAME_MS <= latest && vocalRatio(start, start + SETTLE_MS) >= SETTLE_SHARE) start += FRAME_MS;
+            return start;
+        }
+        return -1;
     }
 
     public long durationMs() {

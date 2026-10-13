@@ -1,6 +1,7 @@
 package kr.kro.backas.music.lyrics.sync;
 
 import kr.kro.backas.music.lyrics.LyricLine;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,6 +28,7 @@ public final class LyricsTimestamper {
     static final double STRETCH_RATIO = 1.25;
     static final long REST_GAP_MS = 4_000;
     static final long REST_DELAY_MS = 1_000;
+    static final long MIN_REST_MS = 4_000;
     private static final double NONE = Double.NEGATIVE_INFINITY;
     private static final Pattern SECTION_TAG = Pattern.compile("^\\s*[\\[(].*[\\])]\\s*$");
 
@@ -206,7 +208,7 @@ public final class LyricsTimestamper {
             if (!matched[i]) continue;
             long next = i + 1 < count ? times[i + 1] : durationMs;
             long rest = Math.max(times[i] + MIN_GAP_MS, ends[i] + REST_DELAY_MS);
-            if (next - ends[i] >= REST_GAP_MS && rest <= next - MIN_GAP_MS) result.add(new LyricLine(rest, ""));
+            if (!partial && next - ends[i] >= REST_GAP_MS && rest <= next - MIN_GAP_MS) result.add(new LyricLine(rest, ""));
         }
         return Optional.of(new Result(result, matchedCount, count));
     }
@@ -233,6 +235,36 @@ public final class LyricsTimestamper {
 
     static boolean isStretched(WhisperClient.Word word) {
         return word.endMs() - word.startMs() >= STRETCH_RATIO * LyricsAligner.plausibleDurationMs(word.text());
+    }
+
+    public static Result withRests(Result result, @Nullable VocalActivity vocals) {
+        return new Result(placeRests(result.lines(), vocals), result.matched(), result.total());
+    }
+
+    public static List<LyricLine> placeRests(List<LyricLine> lines, @Nullable VocalActivity vocals) {
+        List<LyricLine> placed = new ArrayList<>(lines.size());
+        if (vocals == null) {
+            for (int i = 0; i < lines.size(); i++) {
+                LyricLine line = lines.get(i);
+                boolean shortRest = line.text().isBlank() && i + 1 < lines.size() && lines.get(i + 1).timeMs() - line.timeMs() < MIN_REST_MS;
+                if (!shortRest) placed.add(line);
+            }
+            return placed;
+        }
+        List<LyricLine> sung = new ArrayList<>(lines.size());
+        for (LyricLine line : lines) {
+            if (!line.text().isBlank()) sung.add(line);
+        }
+        for (int i = 0; i < sung.size(); i++) {
+            LyricLine line = sung.get(i);
+            placed.add(line);
+            long from = line.timeMs() + Math.max(MIN_GAP_MS, LyricsAligner.plausibleDurationMs(line.text()) / 2);
+            long to = i + 1 < sung.size() ? sung.get(i + 1).timeMs() : vocals.durationMs();
+            if (to - from < MIN_REST_MS) continue;
+            long rest = vocals.quietFrom(from, to, MIN_REST_MS);
+            if (rest >= 0) placed.add(new LyricLine(rest, ""));
+        }
+        return placed;
     }
 
     static int releaseToken(List<Integer> tokenIndex, int token, int windowEnd) {
