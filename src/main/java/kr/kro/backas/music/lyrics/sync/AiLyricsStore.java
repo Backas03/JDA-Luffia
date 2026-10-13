@@ -10,7 +10,7 @@ import java.util.List;
 
 public final class AiLyricsStore {
 
-    public static final int VERSION = 4;
+    public static final int VERSION = 6;
 
     public record Line(long timeMs, String text) {
     }

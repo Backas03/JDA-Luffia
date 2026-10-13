@@ -408,8 +408,11 @@ public final class LyricsPresenter {
             if (superseded) {
                 LyricsSession current = client.getLyricsSession();
                 if (current != null && current.isForTrack(track)) {
-                    current.updateLyrics(timed);
-                    current.setConvertingPartial(partial);
+                    if (current.updateLyrics(timed)) {
+                        current.setConvertingPartial(partial);
+                    } else if (!partial && !card.isClosed() && card.isPresentedBy(current)) {
+                        presentSynced(client, track, card, timed);
+                    }
                 }
                 return true;
             }
