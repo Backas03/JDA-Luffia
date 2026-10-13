@@ -141,7 +141,7 @@ public final class LyricsConverter {
                 passes++;
                 Optional<LyricsTimestamper.Result> result = LyricsTimestamper.timestamp(lines, words, finished ? audioMs : trackMs, !finished);
                 if (result.isPresent()) {
-                    last = result;
+                    last = finished ? Optional.of(LyricsTimestamper.withRests(result.get(), VocalActivity.of(wav))) : result;
                     if (onProgress != null && !finished) onProgress.accept(lyrics.withAiTimestamps(result.get().lines()));
                 }
                 lastPassMs = have;
