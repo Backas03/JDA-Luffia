@@ -31,6 +31,19 @@ class LrcLibClientTest {
     }
 
     @Test
+    void picksTheSameSongByTheSameArtistInTheLanguageTheVocalsUse() throws Exception {
+        JsonNode results = MAPPER.readTree("""
+                [{"id": 1, "trackName": "最終花", "artistName": "AIRI KANNA", "duration": 246, "plainLyrics": "苦しみは無標的だ\\n何処からでもない自意識だ"},
+                 {"id": 2, "trackName": "최종화", "artistName": "AIRI KANNA", "duration": 247, "plainLyrics": "움츠러든 어깨를 따라서\\n다시 저물어가는 오늘의 끝"},
+                 {"id": 3, "trackName": "최종화", "artistName": "Someone Else", "duration": 247, "plainLyrics": "움츠러든 어깨를 따라서"},
+                 {"id": 4, "trackName": "다른 노래", "artistName": "AIRI KANNA", "duration": 300, "plainLyrics": "전혀 다른 노래 가사"}]
+                """);
+        assertEquals(2, LrcLibClient.pickAlternative(results, "AIRI KANNA", 255, "ko").path("id").asInt());
+        assertEquals(1, LrcLibClient.pickAlternative(results, "AIRI KANNA", 255, "ja").path("id").asInt());
+        assertNull(LrcLibClient.pickAlternative(results, "Nobody", 255, "ko"));
+    }
+
+    @Test
     void learnsOtherSpellingsOfAnArtistFromHowLrclibNamesThem() throws Exception {
         JsonNode results = MAPPER.readTree("""
                 [{"id": 1, "trackName": "セカイ / 스텔라이브(StelLive) cover", "artistName": "스텔라이브 StelLive Official"},

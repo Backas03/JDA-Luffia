@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -52,6 +53,7 @@ public class LrcLibClient {
     private static final long MIN_LINE_GAP_MS = 1000;
     private static final int MIN_ARTIST_KEY_LENGTH = 3;
     private static final int MIN_KEYWORD_LENGTH = 4;
+    private static final long ALTERNATIVE_TOLERANCE_SEC = 10;
     private static final int MAX_ALIASES = 3;
     private static final double MIN_TITLE_SIMILARITY = 0.5;
     private static final int RETRY_ATTEMPTS = 4;
@@ -343,6 +345,61 @@ public class LrcLibClient {
             LOGGER.debug("lyrics lookup by resolved song failed for {}", info.title, e);
             return null;
         }
+    }
+
+    @Nullable
+    public Lyrics alternative(AudioTrackInfo info, Lyrics current, String language) {
+        long durationSec = info.length / 1000;
+        Set<String> artists = new LinkedHashSet<>();
+        artists.add(current.artistName());
+        artists.addAll(channelNames(firstArtist(info.author)));
+        Failures failures = new Failures();
+        ArrayNode pool = MAPPER.createArrayNode();
+        Set<Long> seen = new HashSet<>();
+        for (String artist : artists) {
+            if (artist == null || artist.isBlank()) continue;
+            try {
+                JsonNode found = tryGet(failures, "search?q=" + encode(artist));
+                if (found == null || !found.isArray()) continue;
+                for (JsonNode candidate : found) {
+                    if (seen.add(candidate.path("id").asLong(-1))) pool.add(candidate);
+                }
+            } catch (IOException e) {
+                LOGGER.debug("alternative lyrics search failed for {}", info.title, e);
+            }
+        }
+        JsonNode best = pickAlternative(pool, current.artistName(), durationSec, language);
+        return best == null ? null : usable(best, durationSec);
+    }
+
+    @Nullable
+    static JsonNode pickAlternative(JsonNode results, String artistName, long durationSec, String language) {
+        String artist = matchKey(artistName);
+        JsonNode best = null;
+        long bestScore = Long.MAX_VALUE;
+        for (JsonNode candidate : results) {
+            String candidateArtist = matchKey(candidate.path("artistName").asText(""));
+            if (artist.isEmpty() || candidateArtist.isEmpty()) continue;
+            if (!candidateArtist.contains(artist) && !(candidateArtist.length() >= MIN_ARTIST_KEY_LENGTH && artist.contains(candidateArtist))) continue;
+            long diff = Math.abs(candidate.path("duration").asLong(0) - durationSec);
+            if (durationSec > 0 && diff > ALTERNATIVE_TOLERANCE_SEC) continue;
+            boolean synced = !candidate.path("syncedLyrics").asText("").isBlank();
+            String text = synced ? candidate.path("syncedLyrics").asText("") : candidate.path("plainLyrics").asText("");
+            if (text.isBlank()) continue;
+            List<LyricLine> lines = synced ? parseLrc(text) : new ArrayList<>();
+            if (!synced) for (String line : text.split("\\r?\\n")) lines.add(new LyricLine(0, line));
+            if (!language.equals(LyricsAligner.languageHint(lines))) continue;
+            long score = diff - (synced ? 1 : 0);
+            if (score < bestScore) {
+                bestScore = score;
+                best = candidate;
+            }
+        }
+        return best;
+    }
+
+    public void override(AudioTrackInfo info, Lyrics lyrics) {
+        remember(identifierOf(info), lyrics);
     }
 
     @Nullable

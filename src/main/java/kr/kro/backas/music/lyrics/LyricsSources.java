@@ -39,6 +39,15 @@ public final class LyricsSources {
     }
 
     @Nullable
+    public Lyrics alternative(AudioTrack track, Lyrics current, String language) {
+        return tagged(lrcLib.alternative(track.getInfo(), current, language), Lyrics.Source.LRCLIB);
+    }
+
+    public void override(AudioTrack track, Lyrics lyrics) {
+        lrcLib.override(track.getInfo(), lyrics);
+    }
+
+    @Nullable
     static Lyrics tagged(@Nullable Lyrics lyrics, Lyrics.Source source) {
         return lyrics == null ? null : lyrics.withSource(source);
     }
