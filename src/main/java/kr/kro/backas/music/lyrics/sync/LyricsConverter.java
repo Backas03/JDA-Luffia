@@ -6,6 +6,7 @@ import kr.kro.backas.Luffia;
 import kr.kro.backas.Main;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.music.lyrics.LyricLine;
+import kr.kro.backas.music.lyrics.LyricsSources;
 import kr.kro.backas.music.lyrics.Lyrics;
 import kr.kro.backas.music.lyrics.TranslationJobs;
 import org.jetbrains.annotations.Nullable;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -34,6 +36,9 @@ public final class LyricsConverter {
     static final long PASS_STEP_MS = Config.get().whisper().convert().passStepSeconds() * 1000L;
     private static final long POLL_MS = 1_000;
     private static final long CAPTURE_START_TIMEOUT_S = 60;
+    static final int MIN_SPOKEN_LETTERS = 20;
+    static final double SPOKEN_SHARE = 0.8;
+    static final int MAX_DETECT_PASSES = 3;
     private static final Map<String, CompletableFuture<Optional<Lyrics>>> IN_FLIGHT = new ConcurrentHashMap<>();
 
     private LyricsConverter() {
@@ -71,20 +76,72 @@ public final class LyricsConverter {
         return job;
     }
 
-    private static CompletableFuture<Optional<Lyrics>> start(String identifier, MusicPlayerClient client, WhisperClient whisper,
-                                                             AudioTrack track, Lyrics lyrics, @Nullable Consumer<Lyrics> onProgress) {
-        List<String> lines = LyricsTimestamper.usableLines(Arrays.asList(lyrics.plain().split("\\r?\\n")));
-        String title = track.getInfo().title;
-        if (lines.size() < LyricsTimestamper.MIN_MATCHED) return CompletableFuture.completedFuture(Optional.empty());
+    private static List<String> lyricLines(Lyrics lyrics) {
+        return LyricsTimestamper.usableLines(Arrays.asList(lyrics.plain().split("\\r?\\n")));
+    }
+
+    @Nullable
+    private static String hintOf(List<String> lines) {
         List<LyricLine> asLines = new ArrayList<>(lines.size());
         for (String line : lines) asLines.add(new LyricLine(0, line));
-        String hint = LyricsAligner.languageHint(asLines);
+        return LyricsAligner.languageHint(asLines);
+    }
+
+    @Nullable
+    static String spokenLanguage(List<WhisperClient.Segment> segments) {
+        int hangul = 0;
+        int japanese = 0;
+        for (WhisperClient.Segment segment : segments) {
+            String text = segment.text();
+            if (!LyricsTranscriber.isLyric(text.strip())) continue;
+            for (int i = 0; i < text.length(); ) {
+                int cp = text.codePointAt(i);
+                i += Character.charCount(cp);
+                if ((cp >= 0xAC00 && cp <= 0xD7A3) || (cp >= 0x1100 && cp <= 0x11FF) || (cp >= 0x3130 && cp <= 0x318F)) hangul++;
+                else if ((cp >= 0x3040 && cp <= 0x30FF) || (cp >= 0x4E00 && cp <= 0x9FFF)) japanese++;
+            }
+        }
+        int total = hangul + japanese;
+        if (total < MIN_SPOKEN_LETTERS) return null;
+        if (hangul >= total * SPOKEN_SHARE) return "ko";
+        if (japanese >= total * SPOKEN_SHARE) return "ja";
+        return null;
+    }
+
+    static boolean mismatched(@Nullable String lyricsLanguage, @Nullable String spoken) {
+        if (lyricsLanguage == null || spoken == null) return false;
+        return ("ja".equals(lyricsLanguage) || "ko".equals(lyricsLanguage)) && !lyricsLanguage.equals(spoken);
+    }
+
+    private static Optional<Lyrics> transcribeInstead(MusicPlayerClient client, AudioTrack track) {
+        if (!LyricsTranscriber.isEnabled()) return Optional.empty();
+        try {
+            Optional<Lyrics> transcribed = LyricsTranscriber.transcribe(client, track).join();
+            if (transcribed.isPresent()) {
+                Main.getLuffia().getMusicPlayerController().getLyricsSources()
+                        .override(track, new Lyrics(track.getInfo().title, track.getInfo().author, null, List.of(), false));
+            }
+            return transcribed;
+        } catch (CompletionException e) {
+            return Optional.empty();
+        }
+    }
+
+    private static CompletableFuture<Optional<Lyrics>> start(String identifier, MusicPlayerClient client, WhisperClient whisper,
+                                                             AudioTrack track, Lyrics original, @Nullable Consumer<Lyrics> onProgress) {
+        String title = track.getInfo().title;
+        if (lyricLines(original).size() < LyricsTimestamper.MIN_MATCHED) return CompletableFuture.completedFuture(Optional.empty());
         long length = track.getInfo().length;
         int seconds = (int) (length <= 0 ? MAX_SECONDS : Math.min(MAX_SECONDS, length / 1000 + 2));
         long trackMs = length <= 0 ? seconds * 1000L : length;
         long started = System.currentTimeMillis();
         ScratchCapture.Progressive progressive = ScratchCapture.start(client.getAudioPlayerManager(), track, seconds);
         CompletableFuture<Optional<Lyrics>> job = CompletableFuture.supplyAsync(() -> {
+            Lyrics lyrics = original;
+            List<String> lines = lyricLines(lyrics);
+            String hint = hintOf(lines);
+            boolean detected = false;
+            int detectPasses = 0;
             PcmCapture capture;
             try {
                 capture = progressive.capture().get(CAPTURE_START_TIMEOUT_S, TimeUnit.SECONDS);
@@ -131,14 +188,39 @@ public final class LyricsConverter {
                     continue;
                 }
                 long whisperStarted = System.currentTimeMillis();
-                List<WhisperClient.Word> words;
+                WhisperClient.Transcript transcript;
                 try {
-                    words = whisper.transcribe(wav, hint);
+                    transcript = whisper.transcribeDetailed(wav, detected ? hint : null);
                 } catch (IOException e) {
                     throw new UncheckedIOException(e);
                 }
+                List<WhisperClient.Word> words = transcript.words();
                 whisperMs += System.currentTimeMillis() - whisperStarted;
                 passes++;
+                if (!detected) {
+                    String spoken = spokenLanguage(transcript.segments());
+                    detectPasses++;
+                    if (spoken == null && !finished && detectPasses < MAX_DETECT_PASSES) {
+                        lastPassMs = have;
+                        continue;
+                    }
+                    detected = true;
+                    if (mismatched(hint, spoken)) {
+                        LOGGER.info("vocals of {} sound {} but its lyrics are {}, looking for lyrics that match", title, spoken, hint);
+                        LyricsSources sources = Main.getLuffia().getMusicPlayerController().getLyricsSources();
+                        Lyrics alternative = sources.alternative(track, lyrics, spoken);
+                        if (alternative == null || (!alternative.hasSynced() && lyricLines(alternative).size() < LyricsTimestamper.MIN_MATCHED)) {
+                            LOGGER.info("no {} lyrics found for {}, transcribing the vocals instead", spoken, title);
+                            return transcribeInstead(client, track);
+                        }
+                        sources.override(track, alternative);
+                        LOGGER.info("switched {} to {} lyrics \"{}\" by {}", title, spoken, alternative.trackName(), alternative.artistName());
+                        if (alternative.hasSynced()) return Optional.of(alternative);
+                        lyrics = alternative;
+                        lines = lyricLines(lyrics);
+                        hint = spoken;
+                    }
+                }
                 Optional<LyricsTimestamper.Result> result = LyricsTimestamper.timestamp(lines, words, finished ? audioMs : trackMs, !finished);
                 if (result.isPresent()) {
                     last = finished ? Optional.of(LyricsTimestamper.withRests(result.get(), VocalActivity.of(wav))) : result;
