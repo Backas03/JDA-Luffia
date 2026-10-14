@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 public class CommandManager {
-    private static final Logger LOGGER = LoggerFactory.getLogger("[JDA-Luffia CommandManager]");
+    private static final Logger LOGGER = LoggerFactory.getLogger(CommandManager.class);
 
     private final Map<String, CommandSource> REGISTERED = new HashMap<>();
     private final Map<String, SlashCommandSource> REGISTERED_SLASH_COMMAND = new HashMap<>();

@@ -49,3 +49,6 @@ bin/
 
 ### Local docs ###
 /docs/
+
+### Logs ###
+/logs/

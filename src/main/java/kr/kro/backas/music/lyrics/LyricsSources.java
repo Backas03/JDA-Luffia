@@ -2,10 +2,14 @@ package kr.kro.backas.music.lyrics;
 
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
 public final class LyricsSources {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(LyricsSources.class);
 
     private final LrcLibClient lrcLib;
     @Nullable
@@ -27,6 +31,7 @@ public final class LyricsSources {
         try {
             fromLrcLib = tagged(lrcLib.find(track.getInfo()), Lyrics.Source.LRCLIB);
         } catch (IOException e) {
+            LOGGER.debug("LRCLIB lookup failed for {}", track.getInfo().title, e);
             failure = e;
         }
         if (spotify == null || (fromLrcLib != null && (fromLrcLib.hasSynced() || fromLrcLib.instrumental()))) {

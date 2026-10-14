@@ -2,6 +2,7 @@ package kr.kro.backas.command.api;
 
 import kr.kro.backas.config.Config;
 import kr.kro.backas.Main;
+import kr.kro.backas.util.LogContext;
 import kr.kro.backas.util.StackTraceUtil;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Role;
@@ -12,6 +13,7 @@ import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 public class CommandListener extends ListenerAdapter {
 
@@ -29,7 +31,10 @@ public class CommandListener extends ListenerAdapter {
         SlashCommandSource source = Main.getLuffia()
                 .getCommandManager()
                 .getSlashCommandSource(command);
-        if (source != null) source.onTriggered(event);
+        if (source == null) return;
+        try (MDC.MDCCloseable ctx = LogContext.enter(event.getGuild(), event.getUser(), "/" + command)) {
+            source.onTriggered(event);
+        }
     }
 
     @Override
@@ -42,7 +47,10 @@ public class CommandListener extends ListenerAdapter {
         SlashCommandSource source = Main.getLuffia()
                 .getCommandManager()
                 .getSlashCommandSource(command);
-        if (source != null) source.onCommandAutoCompleteInteraction(event);
+        if (source == null) return;
+        try (MDC.MDCCloseable ctx = LogContext.enter(event.getGuild(), event.getUser(), "/" + command)) {
+            source.onCommandAutoCompleteInteraction(event);
+        }
     }
 
     @Override
@@ -55,7 +63,8 @@ public class CommandListener extends ListenerAdapter {
         }
         String content = event.getMessage().getContentRaw();
         CommandManager commandManager = Main.getLuffia().getCommandManager();
-        CommandSource command = commandManager.getSourceWithPrefix(content.split("\\s")[0]);
+        String commandWord = content.split("\\s")[0];
+        CommandSource command = commandManager.getSourceWithPrefix(commandWord);
         if (command == null) {
             return;
         }
@@ -72,10 +81,13 @@ public class CommandListener extends ListenerAdapter {
                         event.getAuthor(),
                         event.getMessage().getContentRaw()
                 );
-                try {
-                    command.onTriggered(event);
-                } catch (Exception e) {
-                    StackTraceUtil.replyError("커맨드를 실행하는 도중 예상치 못한 오류가 발생했습니다.", event.getMessage(), e);
+                try (MDC.MDCCloseable ctx = LogContext.enter(event.getGuild(), event.getAuthor(), commandWord)) {
+                    try {
+                        command.onTriggered(event);
+                    } catch (Exception e) {
+                        LOGGER.error("Error while handling command: {}", commandWord, e);
+                        StackTraceUtil.replyError("커맨드를 실행하는 도중 예상치 못한 오류가 발생했습니다.", event.getMessage(), e);
+                    }
                 }
                 return;
             }
@@ -85,6 +97,8 @@ public class CommandListener extends ListenerAdapter {
                 event.getAuthor(),
                 event.getMessage().getContentRaw()
         );
-        command.onTriggered(event);
+        try (MDC.MDCCloseable ctx = LogContext.enter(event.getGuild(), event.getAuthor(), commandWord)) {
+            command.onTriggered(event);
+        }
     }
 }

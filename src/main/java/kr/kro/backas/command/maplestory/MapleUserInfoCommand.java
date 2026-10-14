@@ -6,12 +6,15 @@ import kr.kro.backas.util.StackTraceUtil;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.utils.FileUpload;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URL;
 import java.util.concurrent.CompletableFuture;
 
 public class MapleUserInfoCommand implements CommandSource {
+    private static final Logger LOGGER = LoggerFactory.getLogger(MapleUserInfoCommand.class);
 
     @Override
     public void onTriggered(MessageReceivedEvent event) {
@@ -37,8 +40,8 @@ public class MapleUserInfoCommand implements CommandSource {
                                     "character.png"
                             )
                     ).queue();
-                } catch (IOException ignore) {
-                    // TODO: logging
+                } catch (IOException e) {
+                    LOGGER.warn("메이플 캐릭터 정보를 전송하지 못했습니다: {}", nickname, e);
                 }
                 return false;
             });

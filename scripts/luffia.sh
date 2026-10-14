@@ -83,7 +83,15 @@ case "$1" in
   status)
     screen -ls
     ;;
+  log)
+    if [ "$2" = "error" ]; then
+      tail -n 200 -f "$BASE_DIR/logs/luffia-error.log"
+    else
+      tail -n 200 -f "$BASE_DIR/logs/luffia.log"
+    fi
+    ;;
   *)
     echo "$0 (start|stop|restart|view|sv|status) [all|bot|translator]"
+    echo "$0 log [bot|error]"
     ;;
 esac
