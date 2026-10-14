@@ -123,6 +123,7 @@ public final class LyricsConverter {
             }
             return transcribed;
         } catch (CompletionException e) {
+            LOGGER.warn("transcribing lyrics instead failed for {}", track.getInfo().title, e.getCause() == null ? e : e.getCause());
             return Optional.empty();
         }
     }
@@ -146,6 +147,7 @@ public final class LyricsConverter {
             try {
                 capture = progressive.capture().get(CAPTURE_START_TIMEOUT_S, TimeUnit.SECONDS);
             } catch (ExecutionException | TimeoutException e) {
+                LOGGER.debug("audio capture did not start for {}", title, e);
                 capture = null;
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

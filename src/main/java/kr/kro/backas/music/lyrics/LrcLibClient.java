@@ -240,6 +240,7 @@ public class LrcLibClient {
             });
             return null;
         } catch (ExecutionException e) {
+            LOGGER.warn("ai song lookup for {} failed", info.title, e.getCause() == null ? e : e.getCause());
             return null;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

@@ -12,8 +12,11 @@ import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class PlaySlashCommand implements SlashCommandSource {
+    private static final Logger LOGGER = LoggerFactory.getLogger(PlaySlashCommand.class);
     public static final String COMMAND_NAME = "재생";
     public static final String COMMAND_ARGUMENT = "검색어";
     public static final String SOURCE_ARGUMENT = "출처";
@@ -47,7 +50,8 @@ public class PlaySlashCommand implements SlashCommandSource {
         if (sourceOption != null) {
             try {
                 preferred = Identifier.valueOf(sourceOption.getAsString());
-            } catch (IllegalArgumentException ignore) {
+            } catch (IllegalArgumentException e) {
+                LOGGER.debug("unknown search source {}, using default", sourceOption.getAsString());
             }
         }
         MusicQueryParser.ParsedQuery parsed = MusicQueryParser.parse(option.getAsString(), preferred);
