@@ -13,7 +13,8 @@ public record LuffiaConfig(Bot bot,
                            Lyrics lyrics,
                            Whisper whisper,
                            Cache cache,
-                           Scheduler scheduler) {
+                           Scheduler scheduler,
+                           Logging logging) {
 
     public boolean isServiceGuild(long guildId) {
         List<Long> service = discord.serviceGuilds();
@@ -125,6 +126,13 @@ public record LuffiaConfig(Bot bot,
     }
 
     public record Watchdog(long stallMs, long reportGapMs) {
+    }
+
+    public record Logging(String dir, String level, boolean console) {
+        public Logging {
+            dir = dir == null || dir.isBlank() ? "logs" : dir.trim();
+            level = level == null || level.isBlank() ? "INFO" : level.trim();
+        }
     }
 
     private static String nullToEmpty(String value) {
