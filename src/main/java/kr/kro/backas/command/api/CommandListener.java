@@ -77,11 +77,8 @@ public class CommandListener extends ListenerAdapter {
                 Role role = Main.getLuffia().getDiscordAPI().getRoleById(roleId);
                 if (role == null) continue;
                 if (!event.getMember().getRoles().contains(role)) continue;
-                LOGGER.info("command triggered. {user={}, commandLine={}}",
-                        event.getAuthor(),
-                        event.getMessage().getContentRaw()
-                );
                 try (MDC.MDCCloseable ctx = LogContext.enter(event.getGuild(), event.getAuthor(), commandWord)) {
+                    LOGGER.info("command triggered");
                     try {
                         command.onTriggered(event);
                     } catch (Exception e) {
@@ -93,11 +90,8 @@ public class CommandListener extends ListenerAdapter {
             }
             return;
         }
-        LOGGER.info("command triggered. {user={}, commandLine={}}",
-                event.getAuthor(),
-                event.getMessage().getContentRaw()
-        );
         try (MDC.MDCCloseable ctx = LogContext.enter(event.getGuild(), event.getAuthor(), commandWord)) {
+            LOGGER.info("command triggered");
             command.onTriggered(event);
         }
     }

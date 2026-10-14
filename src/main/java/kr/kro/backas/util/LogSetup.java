@@ -1,5 +1,6 @@
 package kr.kro.backas.util;
 
+import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.joran.JoranConfigurator;
 import ch.qos.logback.core.joran.spi.JoranException;
@@ -25,9 +26,10 @@ public final class LogSetup {
     public static void apply(LuffiaConfig.Logging logging) {
         ILoggerFactory factory = LoggerFactory.getILoggerFactory();
         if (!(factory instanceof LoggerContext context)) return;
+        Level level = Level.toLevel(logging.level(), null);
         context.reset();
         context.putProperty(DIR_PROPERTY, logging.dir());
-        context.putProperty(LEVEL_PROPERTY, logging.level().toUpperCase());
+        context.putProperty(LEVEL_PROPERTY, level == null ? Level.INFO.toString() : level.toString());
         try (InputStream in = LogSetup.class.getResourceAsStream(RESOURCE)) {
             if (in == null) throw new IllegalStateException("로그 설정 리소스가 없습니다: " + RESOURCE);
             JoranConfigurator configurator = new JoranConfigurator();
@@ -40,8 +42,12 @@ public final class LogSetup {
             context.getLogger(Logger.ROOT_LOGGER_NAME).detachAppender("CONSOLE");
         }
         StatusPrinter.printInCaseOfErrorsOrWarnings(context);
-        LoggerFactory.getLogger(LogSetup.class).info("로그 파일을 {} 에 기록합니다 (레벨 {})",
-                Path.of(logging.dir()).toAbsolutePath(), logging.level().toUpperCase());
+        Logger logger = LoggerFactory.getLogger(LogSetup.class);
+        if (level == null) {
+            logger.warn("logging.level 값 '{}' 을 알 수 없어 INFO 로 대신합니다", logging.level());
+        }
+        logger.info("로그 파일을 {} 에 기록합니다 (레벨 {})",
+                Path.of(logging.dir()).toAbsolutePath(), context.getProperty(LEVEL_PROPERTY));
     }
 
     public static void shutdown() {

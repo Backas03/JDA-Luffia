@@ -69,7 +69,6 @@ public class Main {
             LOGGER.info("luffia 시작 완료 (서버 {}개)", jda.getGuilds().size());
         } catch (InterruptedException | IOException e) {
             LOGGER.error("디스코드 연결에 실패해 종료합니다", e);
-            LogSetup.shutdown();
             System.exit(-1);
         }
     }
