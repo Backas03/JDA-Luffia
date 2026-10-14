@@ -103,3 +103,8 @@ scheduler:
   watchdog:
     stall-ms: 5000
     report-gap-ms: 30000
+
+logging:
+  dir: logs
+  level: INFO
+  console: true
