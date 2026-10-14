@@ -67,6 +67,7 @@ public final class WhisperClient {
             String host = URI.create(base).getHost();
             return host == null || host.isBlank() ? base : host;
         } catch (RuntimeException e) {
+            LOGGER.debug("could not read the host of {}", base, e);
             return base;
         }
     }

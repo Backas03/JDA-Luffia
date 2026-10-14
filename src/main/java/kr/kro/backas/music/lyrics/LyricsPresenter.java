@@ -587,7 +587,8 @@ public final class LyricsPresenter {
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         break;
-                    } catch (ExecutionException ignored) {
+                    } catch (ExecutionException e) {
+                        LOGGER.debug("translation job for {} ended with an error", track.getInfo().title, e.getCause() == null ? e : e.getCause());
                         break;
                     }
                 }
