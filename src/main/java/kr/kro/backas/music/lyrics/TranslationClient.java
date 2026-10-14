@@ -248,7 +248,8 @@ public class TranslationClient {
             entry.path("speeds").fields().forEachRemaining(speed -> {
                 try {
                     endpoint.speed().restore(Integer.parseInt(speed.getKey()), speed.getValue().asDouble(0));
-                } catch (NumberFormatException ignored) {
+                } catch (NumberFormatException e) {
+                    LOGGER.debug("ignoring saved speed with invalid token count {} for {}", speed.getKey(), endpoint.label());
                 }
             });
             if (endpoint.speed().isMeasured(1)) {
@@ -359,7 +360,8 @@ public class TranslationClient {
                 try {
                     String text = entry.getValue().asText("");
                     if (!text.isBlank()) lines.put(Integer.parseInt(entry.getKey()), text);
-                } catch (NumberFormatException ignored) {
+                } catch (NumberFormatException e) {
+                    LOGGER.debug("ignoring cached translation with invalid line number {} for {}", entry.getKey(), trackKey);
                 }
             });
             if (!lines.isEmpty()) LOGGER.info("loaded {} cached translated line(s) for {}", lines.size(), trackKey);
@@ -400,6 +402,7 @@ public class TranslationClient {
             try {
                 detect(endpoint);
             } catch (IOException | RuntimeException e) {
+                LOGGER.debug("translator endpoint {} is still unreachable: {}", endpoint.baseUrl(), e.toString());
                 continue;
             }
             LOGGER.info("translator endpoint {} is reachable again", endpoint.baseUrl());
@@ -456,6 +459,7 @@ public class TranslationClient {
                     .build();
             return send(request).statusCode() == 200;
         } catch (IOException | RuntimeException e) {
+            LOGGER.debug("translator endpoint {} did not respond: {}", endpoint.baseUrl(), e.toString());
             return false;
         }
     }
@@ -546,6 +550,7 @@ public class TranslationClient {
         try {
             return MAPPER.readTree(body).path("data").path(0).path("id").asText("");
         } catch (IOException e) {
+            LOGGER.debug("could not read the model id from the llm response", e);
             return "";
         }
     }
@@ -556,6 +561,7 @@ public class TranslationClient {
                     .timeout(Duration.ofSeconds(5)).GET().build());
             return cleanModelName(MAPPER.readTree(response.body()).path("model").asText(""));
         } catch (IOException e) {
+            LOGGER.debug("could not read the model name from {}", endpoint.baseUrl(), e);
             return "";
         }
     }
@@ -995,6 +1001,7 @@ public class TranslationClient {
                     try {
                         entry = MAPPER.readTree(objectLiteral);
                     } catch (IOException e) {
+                        LOGGER.debug("skipping a streamed translation entry that is not valid json", e);
                         continue;
                     }
                     for (int n : collectAligned(List.of(entry), byNumber, lines)) {

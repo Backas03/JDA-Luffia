@@ -1,6 +1,8 @@
 package kr.kro.backas.music.llm;
 
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -8,6 +10,8 @@ import java.util.List;
 import java.util.Locale;
 
 public final class LlmEndpoints {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(LlmEndpoints.class);
 
     public static final int MAX_SLOTS = SpeedModel.MAX_LEVEL;
     private static final String FALLBACK_MARK = "fallback";
@@ -47,6 +51,7 @@ public final class LlmEndpoints {
             String host = URI.create(base).getHost();
             return host == null || host.isBlank() ? base : host;
         } catch (RuntimeException e) {
+            LOGGER.warn("invalid ai endpoint url {}, using it as the label", base, e);
             return base;
         }
     }
@@ -56,6 +61,7 @@ public final class LlmEndpoints {
         try {
             return Math.max(1, Math.min(MAX_SLOTS, Integer.parseInt(value)));
         } catch (NumberFormatException e) {
+            LOGGER.warn("invalid ai endpoint slot count {}, using 1", value, e);
             return 1;
         }
     }

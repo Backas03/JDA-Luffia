@@ -163,13 +163,15 @@ public final class Config {
         if (previous.isIntegralNumber()) {
             try {
                 return YAML.getNodeFactory().numberNode(Long.parseLong(value.trim()));
-            } catch (NumberFormatException ignored) {
+            } catch (NumberFormatException e) {
+                LOGGER.debug("정수로 바꿀 수 없어 문자열로 저장합니다: {}", value);
             }
         }
         if (previous.isFloatingPointNumber()) {
             try {
                 return YAML.getNodeFactory().numberNode(Double.parseDouble(value.trim()));
-            } catch (NumberFormatException ignored) {
+            } catch (NumberFormatException e) {
+                LOGGER.debug("실수로 바꿀 수 없어 문자열로 저장합니다: {}", value);
             }
         }
         return YAML.getNodeFactory().textNode(value);
