@@ -1,6 +1,8 @@
 package kr.kro.backas.util;
 
 import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.util.ContextInitializer;
+import ch.qos.logback.core.joran.spi.JoranException;
 import kr.kro.backas.config.LuffiaConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -21,11 +23,12 @@ class LogSetupTest {
     Path dir;
 
     @AfterEach
-    void restore() {
+    void restore() throws JoranException {
         LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
         context.stop();
         context.reset();
         context.start();
+        new ContextInitializer(context).autoConfig();
     }
 
     @Test

@@ -123,7 +123,7 @@ public final class LyricsConverter {
             }
             return transcribed;
         } catch (CompletionException e) {
-            LOGGER.warn("transcribing lyrics instead failed for {}", track.getInfo().title, e.getCause() == null ? e : e.getCause());
+            LOGGER.debug("transcribing lyrics instead failed for {}", track.getInfo().title, e.getCause() == null ? e : e.getCause());
             return Optional.empty();
         }
     }
