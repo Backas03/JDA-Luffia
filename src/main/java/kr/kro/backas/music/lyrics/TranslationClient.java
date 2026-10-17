@@ -52,7 +52,7 @@ public class TranslationClient {
     private static final int TRANSLATION_GROWTH_SLACK = 30;
     private static final int ALIGN_WINDOW = 3;
     private static final int TOKENS_PER_LINE = 25;
-    private static final int TRANSLATION_VERSION = 2;
+    private static final int TRANSLATION_VERSION = 3;
     private static final long ENDPOINT_RECHECK_SECONDS = Math.max(5, Config.get().llm().recheckSeconds());
     private static final String SPEEDS_PATH = "llm/speeds.json";
     private static final java.util.regex.Pattern MARKUP_TAG = java.util.regex.Pattern.compile("</?[A-Za-z][A-Za-z0-9-]*(\\s[^<>]*)?/?>");
