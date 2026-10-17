@@ -97,7 +97,7 @@ whisper:
 | Ollama (GPU, 가장 빠름) | ``ollama pull gemma4:12b`` | ``http://127.0.0.1:11434`` |
 
 - llama.cpp 는 RAM 약 6GB 를 씁니다. 포트는 ``TRANSLATOR_PORT``, 스레드는 ``LLM_THREADS`` 로 바꿉니다. Windows GPU PC 는 llama.cpp CUDA 릴리스를 ``translator/llm/bin`` 에 풀고 ``run-gpu.bat`` 로 실행합니다.
-- Ollama 는 ``OLLAMA_CONTEXT_LENGTH=8192``, ``OLLAMA_KEEP_ALIVE=-1`` 을 권장합니다. 다른 PC 에서 접속하면 ``OLLAMA_HOST=0.0.0.0`` 도 설정합니다. Linux 에서는 ``bash translator/ollama/run.sh`` 로 tmux 에 띄울 수 있습니다.
+- Ollama 는 ``OLLAMA_CONTEXT_LENGTH=8192``, ``OLLAMA_KEEP_ALIVE=-1`` 을 권장합니다. 다른 PC 에서 접속하면 ``OLLAMA_HOST=0.0.0.0`` 도 설정합니다. Linux 에서는 ``bash translator/ollama/run.sh`` 로 tmux 에 띄울 수 있습니다 (``start|stop|restart|view``). 같은 세션에 Qwen3-ASR 서버도 함께 올리며, ``QWEN_ASR_DIR`` (기본 ``~/kimnore``) 의 ``.venv-qwen`` 을 쓰고 ``QWEN_ASR_ENABLED=0`` 으로 끕니다.
 - 모델은 ``llm.model-override`` 로 고정합니다 (서버별 ``model`` 이 우선).
 
 ### 여러 GPU 서버
