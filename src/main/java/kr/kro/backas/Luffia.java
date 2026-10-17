@@ -66,7 +66,7 @@ public class Luffia {
         this.musicPlayerController = new MusicPlayerController(
                 new MusicSourceRegistry(spotify.clientId(), spotify.clientSecret(), spotify.refreshToken(), spotify.spDc(), spotify.tokenEndpoint()),
                 translatorUrl,
-                config.whisper().endpointSpec());
+                config.asr().endpointSpec());
         this.musicPlayerController.register(discordAPI);
         for (String token : config.discord().musicBotTokens()) {
             if (token == null || token.isBlank()) continue;

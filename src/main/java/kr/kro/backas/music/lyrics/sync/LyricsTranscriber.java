@@ -66,7 +66,7 @@ public final class LyricsTranscriber {
     }
 
     public static boolean isEnabled() {
-        return Config.get().whisper().transcribe().enabled() && LyricsConverter.isAvailable();
+        return Config.get().asr().transcribe().enabled() && LyricsConverter.isAvailable();
     }
 
     @Nullable
@@ -81,15 +81,15 @@ public final class LyricsTranscriber {
     public static CompletableFuture<Optional<Lyrics>> transcribe(MusicPlayerClient client, AudioTrack track) {
         Stored stored = DiskCache.defaultCache().read(path(track), Stored.class);
         if (stored != null && stored.version() == VERSION) return CompletableFuture.completedFuture(Optional.ofNullable(cached(track)));
-        WhisperClient whisper = whisper();
-        if (whisper == null || !whisper.isAvailable()) return CompletableFuture.completedFuture(Optional.empty());
+        AsrClient asr = asr();
+        if (asr == null || !asr.isAvailable()) return CompletableFuture.completedFuture(Optional.empty());
         String identifier = track.getIdentifier();
-        CompletableFuture<Optional<Lyrics>> job = IN_FLIGHT.computeIfAbsent(identifier, key -> start(client, whisper, track));
+        CompletableFuture<Optional<Lyrics>> job = IN_FLIGHT.computeIfAbsent(identifier, key -> start(client, asr, track));
         job.whenComplete((result, error) -> IN_FLIGHT.remove(identifier, job));
         return job;
     }
 
-    private static CompletableFuture<Optional<Lyrics>> start(MusicPlayerClient client, WhisperClient whisper, AudioTrack track) {
+    private static CompletableFuture<Optional<Lyrics>> start(MusicPlayerClient client, AsrClient asr, AudioTrack track) {
         AudioTrackInfo info = track.getInfo();
         long length = info.length;
         int seconds = (int) (length <= 0 ? LyricsConverter.MAX_SECONDS : Math.min(LyricsConverter.MAX_SECONDS, length / 1000 + 2));
@@ -107,14 +107,14 @@ public final class LyricsTranscriber {
                         return Optional.<Lyrics>empty();
                     }
                     String language = languageHint(info, spoken.join());
-                    WhisperClient.Transcript transcript;
+                    AsrClient.Transcript transcript;
                     try {
-                        transcript = whisper.transcribeDetailed(captured.wav(), language, prompt);
+                        transcript = asr.transcribeDetailed(captured.wav(), language, prompt);
                     } catch (IOException e) {
                         throw new UncheckedIOException(e);
                     }
                     List<LyricLine> lines = LyricsTimestamper.placeRests(lines(transcript, captured.capturedMs()), VocalActivity.of(captured.wav()));
-                    boolean usable = letters(lines) >= Config.get().whisper().transcribe().minLetters();
+                    boolean usable = letters(lines) >= Config.get().asr().transcribe().minLetters();
                     List<AiLyricsStore.Line> stored = new ArrayList<>();
                     for (LyricLine line : lines) stored.add(new AiLyricsStore.Line(line.timeMs(), line.text()));
                     DiskCache.defaultCache().write(path(track), new Stored(usable ? stored : null, System.currentTimeMillis(), VERSION));
@@ -129,13 +129,13 @@ public final class LyricsTranscriber {
         return job;
     }
 
-    static List<LyricLine> lines(WhisperClient.Transcript transcript, long audioMs) {
+    static List<LyricLine> lines(AsrClient.Transcript transcript, long audioMs) {
         List<LyricLine> lines = new ArrayList<>();
         long lastEnd = -1;
-        for (WhisperClient.Segment segment : transcript.segments()) {
+        for (AsrClient.Segment segment : transcript.segments()) {
             String text = segment.text().strip();
             if (!isLyric(text)) continue;
-            List<WhisperClient.Word> words = sungWords(transcript.words(), segment);
+            List<AsrClient.Word> words = sungWords(transcript.words(), segment);
             Sung sung = words.isEmpty() ? new Sung(segment.startMs(), segment.endMs()) : sung(segment, words);
             if (lastEnd < 0 && sung.onsetMs() > REST_GAP_MS) add(lines, 0, "");
             if (lastEnd >= 0 && sung.onsetMs() - lastEnd > REST_GAP_MS) add(lines, lastEnd + REST_DELAY_MS, "");
@@ -146,21 +146,21 @@ public final class LyricsTranscriber {
         return lines;
     }
 
-    private static List<WhisperClient.Word> sungWords(List<WhisperClient.Word> words, WhisperClient.Segment segment) {
-        List<WhisperClient.Word> sung = new ArrayList<>();
-        for (WhisperClient.Word word : words) {
+    private static List<AsrClient.Word> sungWords(List<AsrClient.Word> words, AsrClient.Segment segment) {
+        List<AsrClient.Word> sung = new ArrayList<>();
+        for (AsrClient.Word word : words) {
             if (word.startMs() < segment.startMs() || word.startMs() >= segment.endMs()) continue;
             if (!LyricsAligner.normalize(word.text()).isEmpty()) sung.add(word);
         }
         return sung;
     }
 
-    private static Sung sung(WhisperClient.Segment segment, List<WhisperClient.Word> words) {
+    private static Sung sung(AsrClient.Segment segment, List<AsrClient.Word> words) {
         int head = 0;
         while (head < words.size() && smeared(words.get(head))) head++;
         int tail = words.size();
         while (tail > head && smeared(words.get(tail - 1))) tail--;
-        WhisperClient.Word last = words.getLast();
+        AsrClient.Word last = words.getLast();
         if (head == words.size() && last.endMs() - words.getFirst().startMs() >= SMEAR_MS) {
             return new Sung(last.endMs() - sungMs(words, 0, words.size()), last.endMs());
         }
@@ -173,18 +173,18 @@ public final class LyricsTranscriber {
         return new Sung(onset, Math.max(onset, end));
     }
 
-    private static boolean smeared(WhisperClient.Word word) {
+    private static boolean smeared(AsrClient.Word word) {
         return word.endMs() - word.startMs() >= SMEAR_RATIO * sungMs(word.text());
     }
 
-    private static long sungMs(List<WhisperClient.Word> words, int from, int to) {
+    private static long sungMs(List<AsrClient.Word> words, int from, int to) {
         long total = 0;
         for (int i = from; i < to; i++) total += sungMs(words.get(i).text());
         return total;
     }
 
-    private static long onsetMs(WhisperClient.Segment segment, List<WhisperClient.Word> words) {
-        WhisperClient.Word first = words.getFirst();
+    private static long onsetMs(AsrClient.Segment segment, List<AsrClient.Word> words) {
+        AsrClient.Word first = words.getFirst();
         long duration = sungMs(first.text());
         boolean snapped = first.startMs() - segment.startMs() <= SNAP_MS;
         long onset = Math.max(first.startMs(), first.endMs() - (snapped ? 0 : duration));
@@ -288,8 +288,8 @@ public final class LyricsTranscriber {
     }
 
     @Nullable
-    private static WhisperClient whisper() {
+    private static AsrClient asr() {
         Luffia luffia = Main.getLuffia();
-        return luffia == null ? null : luffia.getMusicPlayerController().getWhisperClient();
+        return luffia == null ? null : luffia.getMusicPlayerController().getAsrClient();
     }
 }

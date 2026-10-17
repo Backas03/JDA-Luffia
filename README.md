@@ -51,7 +51,7 @@ sources:
 llm:
   endpoints:
     - url: http://127.0.0.1:8765
-whisper:
+asr:
   endpoints: []
 ```
 
@@ -64,9 +64,9 @@ whisper:
 | ``riot.api-key`` | 롤 전적 검색 |
 | ``sources.spotify.*`` | 스포티파이 지원. 비우면 스포티파이만 꺼짐 (앱 소유자 Premium 필요) |
 | ``llm.*`` | 가사 번역·AI 서버. 아래 "가사 번역" |
-| ``whisper.endpoints`` | 가사 싱크 보정·AI 가사 변환. 아래 "Whisper" |
+| ``asr.endpoints`` | 가사 싱크 보정·AI 가사 변환·AI 가사 전사. 아래 "ASR 서버" |
 
-모든 키는 ``LUFFIA_<경로>`` 환경 변수로 덮어쓸 수 있습니다 (예: ``LUFFIA_DISCORD_TOKEN``, 목록은 쉼표 구분). ``llm.endpoints``, ``whisper.endpoints`` 는 파일에만 적을 수 있습니다.
+모든 키는 ``LUFFIA_<경로>`` 환경 변수로 덮어쓸 수 있습니다 (예: ``LUFFIA_DISCORD_TOKEN``, 목록은 쉼표 구분). ``llm.endpoints``, ``asr.endpoints`` 는 파일에만 적을 수 있습니다.
 
 ### 2. 실행
 - JDK 25 이상이 필요합니다 (디스코드 음성 암호화 라이브러리 JDAVE 요구사항).
@@ -126,11 +126,11 @@ FROM gemma4:12b
 PARAMETER num_ctx 8192
 ```
 
-### Whisper
-``whisper.endpoints`` 에 서버(``url``, ``label``)를 적으면 가사 싱크 자동 보정과 AI 가사 변환(타임스탬프 없는 가사에 시각 붙이기)이 켜집니다. 서버는 OpenAI 호환 ``/v1/audio/transcriptions`` 로 단어별 타임스탬프(``words``)를 돌려줘야 합니다. whisper.cpp 서버는 ``url`` 에 ``/inference`` 까지 적습니다 (예: ``http://gpu-pc-2:8178/inference``).
+### ASR 서버
+``asr.endpoints`` 에 서버(``url``, ``label``)를 적으면 가사 싱크 자동 보정, AI 가사 변환(타임스탬프 없는 가사에 시각 붙이기), 가사가 없을 때의 AI 전사가 켜집니다. 예전 키 ``whisper`` 와 ``LUFFIA_WHISPER_*`` 도 당분간 읽습니다. 서버는 OpenAI 호환 ``/v1/audio/transcriptions`` 로 단어별 타임스탬프(``words``)를 돌려줘야 합니다. whisper.cpp 서버는 ``url`` 에 ``/inference`` 까지 적습니다 (예: ``http://gpu-pc-2:8178/inference``).
 
 ### Qwen3-ASR 서버
-``tools/qwen_asr_server.py`` 는 Qwen3-ASR + Qwen3-ForcedAligner 로 같은 ``/v1/audio/transcriptions`` 응답을 만드는 서버라 ``whisper.endpoints`` 에 그대로 적으면 됩니다.
+``tools/qwen_asr_server.py`` 는 Qwen3-ASR + Qwen3-ForcedAligner 로 같은 ``/v1/audio/transcriptions`` 응답을 만드는 서버라 ``asr.endpoints`` 에 그대로 적으면 됩니다.
 ```
 pip install torch --index-url https://download.pytorch.org/whl/cu128
 pip install -r tools/qwen_asr_requirements.txt

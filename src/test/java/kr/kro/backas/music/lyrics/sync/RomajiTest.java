@@ -37,13 +37,13 @@ class RomajiTest {
             "I thought I heard your voice tonight",
             "In a quiet room I close my eyes");
 
-    private static List<WhisperClient.Word> heard(List<String> lines, long firstMs, long gapMs) {
-        List<WhisperClient.Word> words = new ArrayList<>();
+    private static List<AsrClient.Word> heard(List<String> lines, long firstMs, long gapMs) {
+        List<AsrClient.Word> words = new ArrayList<>();
         long lineAt = firstMs;
         for (String line : lines) {
             long at = lineAt;
             for (int i = 0; i < line.length(); i++) {
-                words.add(new WhisperClient.Word(String.valueOf(line.charAt(i)), at, at + 200));
+                words.add(new AsrClient.Word(String.valueOf(line.charAt(i)), at, at + 200));
                 at += 250;
             }
             lineAt += gapMs;
@@ -82,9 +82,9 @@ class RomajiTest {
 
     @Test
     void readsWhisperJapaneseWordsAsRomajiKeepingTheirTimes() {
-        List<WhisperClient.Word> words = Romaji.words(heard(List.of("夜の街を歩いた"), 5_000, 0));
+        List<AsrClient.Word> words = Romaji.words(heard(List.of("夜の街を歩いた"), 5_000, 0));
         StringBuilder joined = new StringBuilder();
-        for (WhisperClient.Word word : words) joined.append(word.text());
+        for (AsrClient.Word word : words) joined.append(word.text());
         assertEquals(Romaji.canonical("yoru no machi wo aruita"), joined.toString());
         assertEquals(5_000, words.get(0).startMs());
     }

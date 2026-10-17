@@ -11,8 +11,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LyricsConverterTest {
 
-    private static WhisperClient.Segment segment(String text) {
-        return new WhisperClient.Segment(0, 1_000, text);
+    private static AsrClient.Segment segment(String text) {
+        return new AsrClient.Segment(0, 1_000, text);
     }
 
     @Test
