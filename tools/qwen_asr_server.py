@@ -338,6 +338,30 @@ class Engine:
         return vocals[:length]
 
 
+def model_device(model):
+    for candidate in (model, getattr(model, "model", None)):
+        parameters = getattr(candidate, "parameters", None)
+        if callable(parameters):
+            try:
+                return str(next(parameters()).device)
+            except (StopIteration, TypeError):
+                continue
+    return None
+
+
+def device_info(engine):
+    import torch
+
+    info = {"requested": engine.settings.device, "cuda_available": torch.cuda.is_available()}
+    if torch.cuda.is_available():
+        info["gpu"] = torch.cuda.get_device_name(0)
+        info["vram_used_mb"] = round(torch.cuda.memory_allocated() / 1024 / 1024)
+    placed = model_device(engine.model)
+    if placed is not None:
+        info["model_on"] = placed
+    return info
+
+
 def create_app(engine, settings):
     from fastapi import FastAPI, File, Form, UploadFile
     from fastapi.responses import JSONResponse
@@ -352,6 +376,7 @@ def create_app(engine, settings):
             "aligner": settings.aligner if settings.align else None,
             "backend": settings.backend,
             "separate": settings.separate,
+            "device": device_info(engine),
         }
 
     @app.post("/v1/audio/transcriptions")
