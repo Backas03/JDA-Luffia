@@ -119,6 +119,15 @@ stop_session() {
   else
     echo "${SESSION} is not running."
   fi
+  kill_leftovers
+}
+
+kill_leftovers() {
+  local port
+  pkill -f 'ollama runner' 2>/dev/null
+  for port in "${PORTS[@]}"; do
+    fuser -k -TERM "${port}/tcp" >/dev/null 2>&1
+  done
 }
 
 port_of() {
