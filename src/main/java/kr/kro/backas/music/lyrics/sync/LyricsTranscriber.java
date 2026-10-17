@@ -6,6 +6,7 @@ import kr.kro.backas.Luffia;
 import kr.kro.backas.Main;
 import kr.kro.backas.config.Config;
 import kr.kro.backas.music.MusicPlayerClient;
+import kr.kro.backas.music.ai.AiTrackTagger;
 import kr.kro.backas.music.cache.DiskCache;
 import kr.kro.backas.music.lyrics.LyricLine;
 import kr.kro.backas.music.lyrics.Lyrics;
@@ -21,8 +22,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 public final class LyricsTranscriber {
@@ -44,6 +47,14 @@ public final class LyricsTranscriber {
     static final long SMEAR_RATIO = 5;
     static final long SMEAR_MS = 3_000;
     private static final Pattern BRACKETED = Pattern.compile("^[\\[(（【♪].*[\\])）】♪]$");
+    static final int MAX_PROMPT_LENGTH = 100;
+    static final long LANGUAGE_GUESS_TIMEOUT_MS = 30_000;
+    private static final Set<String> HINTABLE_LANGUAGES = Set.of("ko", "ja", "en", "zh");
+    private static final Pattern PROMPT_BRACKETS = Pattern.compile("\\([^)]*\\)|\\[[^\\]]*\\]|【[^】]*】|（[^）]*）|［[^］]*］|〔[^〕]*〕");
+    private static final Pattern PROMPT_NOISE = Pattern.compile("(?iu)\\b(official|music\\s*video|lyric\\s*video|lyrics?|visualizer|audio|mv|m/v|hd|4k|full\\s*ver\\.?|ver\\.)\\b"
+            + "|ミュージックビデオ|歌詞付き|フルver|公式|뮤직비디오|가사");
+    private static final Pattern PROMPT_AUTHOR_NOISE = Pattern.compile("(?iu)\\s*-\\s*topic$|vevo$|\\s+official(\\s+channel)?$");
+    private static final Pattern PROMPT_EDGES = Pattern.compile("^[\\s\\-–—|｜/:：・]+|[\\s\\-–—|｜/:：・]+$");
     private static final List<String> HALLUCINATIONS = List.of(
             "ご視聴ありがとう", "ご清聴ありがとう", "チャンネル登録", "高評価", "作詞", "作曲", "編曲", "字幕",
             "시청해 주셔서", "구독", "좋아요와", "자막",
@@ -83,15 +94,20 @@ public final class LyricsTranscriber {
         long length = info.length;
         int seconds = (int) (length <= 0 ? LyricsConverter.MAX_SECONDS : Math.min(LyricsConverter.MAX_SECONDS, length / 1000 + 2));
         long started = System.currentTimeMillis();
+        CompletableFuture<String> spoken = CompletableFuture.supplyAsync(() -> spokenLanguage(track), TranslationJobs.EXECUTOR)
+                .completeOnTimeout(null, LANGUAGE_GUESS_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                .exceptionally(error -> null);
+        String prompt = prompt(info);
         CompletableFuture<Optional<Lyrics>> job = ScratchCapture.capture(client.getAudioPlayerManager(), track, seconds)
                 .thenApplyAsync(captured -> {
                     if (captured == null) {
                         LOGGER.info("not enough audio captured to transcribe lyrics for {}", info.title);
                         return Optional.<Lyrics>empty();
                     }
+                    String language = languageHint(info, spoken.join());
                     WhisperClient.Transcript transcript;
                     try {
-                        transcript = whisper.transcribeDetailed(captured.wav(), languageHint(info));
+                        transcript = whisper.transcribeDetailed(captured.wav(), language, prompt);
                     } catch (IOException e) {
                         throw new UncheckedIOException(e);
                     }
@@ -100,7 +116,8 @@ public final class LyricsTranscriber {
                     List<AiLyricsStore.Line> stored = new ArrayList<>();
                     for (LyricLine line : lines) stored.add(new AiLyricsStore.Line(line.timeMs(), line.text()));
                     DiskCache.defaultCache().write(path(track), new Stored(usable ? stored : null, System.currentTimeMillis(), VERSION));
-                    LOGGER.info("transcribed lyrics for {}: {} line(s), {} letters, {} ({}ms)", info.title, lines.size(), letters(lines),
+                    LOGGER.info("transcribed lyrics for {} ({}, prompt {}): {} line(s), {} letters, {} ({}ms)", info.title,
+                            language == null ? "auto" : language, prompt == null ? "none" : "'" + prompt + "'", lines.size(), letters(lines),
                             usable ? "shown" : "too little to show", System.currentTimeMillis() - started);
                     return usable ? Optional.of(lyrics(info, lines)) : Optional.<Lyrics>empty();
                 }, TranslationJobs.EXECUTOR);
@@ -205,7 +222,7 @@ public final class LyricsTranscriber {
     }
 
     @Nullable
-    static String languageHint(AudioTrackInfo info) {
+    static String languageHint(AudioTrackInfo info, @Nullable String spoken) {
         String text = info.title + " " + info.author;
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
@@ -215,7 +232,45 @@ public final class LyricsTranscriber {
             char c = text.charAt(i);
             if (c >= 0xAC00 && c <= 0xD7A3) return "ko";
         }
-        return null;
+        return spoken != null && HINTABLE_LANGUAGES.contains(spoken) ? spoken : null;
+    }
+
+    @Nullable
+    private static String spokenLanguage(AudioTrack track) {
+        Luffia luffia = Main.getLuffia();
+        if (luffia == null || !luffia.getMusicPlayerController().getTranslationClient().isAvailable()) return null;
+        AiTrackTagger tagger = luffia.getMusicPlayerController().getAiTrackTagger();
+        try {
+            AiTrackTagger.Tag tag = tagger.tag(List.of(track), done -> {
+            }).get(track);
+            return tag == null ? null : tag.language();
+        } catch (IOException | RuntimeException e) {
+            LOGGER.info("could not guess the vocal language of {}: {}", track.getInfo().title, e.toString());
+            return null;
+        }
+    }
+
+    @Nullable
+    static String prompt(AudioTrackInfo info) {
+        String title = cleanPrompt(info.title, PROMPT_NOISE);
+        String author = cleanPrompt(info.author, PROMPT_AUTHOR_NOISE);
+        String line;
+        if (title.isEmpty()) line = author;
+        else if (author.isEmpty() || title.toLowerCase(Locale.ROOT).contains(author.toLowerCase(Locale.ROOT))) line = title;
+        else line = author + " - " + title;
+        if (line.isEmpty()) return null;
+        if (line.codePointCount(0, line.length()) > MAX_PROMPT_LENGTH) {
+            line = line.substring(0, line.offsetByCodePoints(0, MAX_PROMPT_LENGTH)).strip();
+        }
+        return line;
+    }
+
+    private static String cleanPrompt(@Nullable String text, Pattern noise) {
+        if (text == null) return "";
+        String cleaned = PROMPT_BRACKETS.matcher(text).replaceAll(" ");
+        cleaned = noise.matcher(cleaned).replaceAll(" ");
+        cleaned = cleaned.replaceAll("[\\s\\u3000]+", " ").strip();
+        return PROMPT_EDGES.matcher(cleaned).replaceAll("").strip();
     }
 
     private static Lyrics lyrics(AudioTrackInfo info, List<LyricLine> lines) {

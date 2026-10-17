@@ -71,12 +71,23 @@ class WhisperClientTest {
 
     @Test
     void multipartBodyCarriesTheWavAndTheLanguageHint() throws Exception {
-        byte[] body = WhisperClient.multipart("xyz", new byte[]{1, 2, 3}, "ja");
+        byte[] body = WhisperClient.multipart("xyz", new byte[]{1, 2, 3}, "ja", null);
         String text = new String(body, StandardCharsets.ISO_8859_1);
         assertTrue(text.startsWith("--xyz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.wav\""));
         assertTrue(text.contains("name=\"language\"\r\n\r\nja\r\n"));
         assertTrue(text.contains("name=\"response_format\"\r\n\r\nverbose_json\r\n"));
         assertTrue(text.contains("name=\"max_context\"\r\n\r\n0\r\n"));
+        assertFalse(text.contains("name=\"prompt\""));
         assertTrue(text.endsWith("--xyz--\r\n"));
+    }
+
+    @Test
+    void multipartBodyCarriesThePromptAsUtf8WhenGiven() throws Exception {
+        byte[] body = WhisperClient.multipart("xyz", new byte[]{1}, null, " YOASOBI - 夜に駆ける ");
+        String text = new String(body, StandardCharsets.UTF_8);
+        assertTrue(text.contains("--xyz\r\nContent-Disposition: form-data; name=\"prompt\"\r\n\r\nYOASOBI - 夜に駆ける\r\n"));
+        assertFalse(text.contains("name=\"language\""));
+        String blank = new String(WhisperClient.multipart("xyz", new byte[]{1}, null, "   "), StandardCharsets.UTF_8);
+        assertFalse(blank.contains("name=\"prompt\""));
     }
 }
