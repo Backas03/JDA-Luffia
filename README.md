@@ -160,7 +160,7 @@ QWEN_ASR_PORT=8001 python tools/qwen_asr_server.py
 ```
 python tools/asr_eval.py --dir songs --endpoint whisper=http://gpu-pc-1:8000 --endpoint qwen=http://gpu-pc-1:8001 --out results.json
 ```
-RTX 5080, 언어 힌트 포함, 영어·한국어·일본어 1곡씩 잰 CER 과 곡당 소요 시간입니다 (표본이 작으니 참고만).
+언어 힌트 포함, 영어·한국어·일본어 1곡씩 잰 CER 과 곡당 소요 시간입니다 (마지막 행 외에는 RTX 5080, 표본이 작으니 참고만).
 
 | 설정 | 영어 | 한국어 | 일본어 | 곡당 |
 |---|---|---|---|---|
@@ -168,6 +168,7 @@ RTX 5080, 언어 힌트 포함, 영어·한국어·일본어 1곡씩 잰 CER 과
 | ``SEPARATE=vad`` + htdemucs | 1.7% | 11.7% | 9.4% | 17~20초 |
 | ``SEPARATE=vad`` + BS-RoFormer | 1.3% | 12.1% | 7.5% | 약 40초 |
 | ``SEPARATE=input`` + htdemucs | 2.7% | 13.3% | 12.0% | 14~16초 |
+| ``BACKEND=llamacpp`` Q8_0 (RX 7800 XT, Vulkan) | 3.0% | 7.7% | 7.2% | 6~9초 |
 
 힌트 없이 일본어 곡을 넣으면 ``off`` 기준 12.4% 로 떨어지므로 Java 가 보내는 언어 힌트가 중요합니다.
 
