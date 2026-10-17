@@ -192,7 +192,7 @@ public final class LyricsConverter {
                 long whisperStarted = System.currentTimeMillis();
                 WhisperClient.Transcript transcript;
                 try {
-                    transcript = whisper.transcribeDetailed(wav, detected ? hint : null);
+                    transcript = whisper.transcribeDetailed(wav, detected ? hint : null, null);
                 } catch (IOException e) {
                     throw new UncheckedIOException(e);
                 }
