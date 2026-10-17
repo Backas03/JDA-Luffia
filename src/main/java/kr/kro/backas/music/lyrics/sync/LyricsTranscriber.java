@@ -94,7 +94,9 @@ public final class LyricsTranscriber {
         long length = info.length;
         int seconds = (int) (length <= 0 ? LyricsConverter.MAX_SECONDS : Math.min(LyricsConverter.MAX_SECONDS, length / 1000 + 2));
         long started = System.currentTimeMillis();
-        CompletableFuture<String> spoken = CompletableFuture.supplyAsync(() -> spokenLanguage(track), TranslationJobs.EXECUTOR)
+        CompletableFuture<String> spoken = languageHint(info, null) != null
+                ? CompletableFuture.completedFuture(null)
+                : CompletableFuture.supplyAsync(() -> spokenLanguage(track), TranslationJobs.EXECUTOR)
                 .completeOnTimeout(null, LANGUAGE_GUESS_TIMEOUT_MS, TimeUnit.MILLISECONDS)
                 .exceptionally(error -> null);
         String prompt = prompt(info);
