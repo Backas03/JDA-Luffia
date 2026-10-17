@@ -46,18 +46,18 @@ public final class LyricsTimestamper {
         return lines;
     }
 
-    public static Optional<Result> timestamp(List<String> lines, List<WhisperClient.Word> words, long durationMs) {
+    public static Optional<Result> timestamp(List<String> lines, List<AsrClient.Word> words, long durationMs) {
         return timestamp(lines, words, durationMs, false);
     }
 
-    public static Optional<Result> timestamp(List<String> lines, List<WhisperClient.Word> words, long durationMs, boolean partial) {
+    public static Optional<Result> timestamp(List<String> lines, List<AsrClient.Word> words, long durationMs, boolean partial) {
         boolean romaji = Romaji.looksLike(lines);
         List<String> targets = romaji ? Romaji.lines(lines) : lines;
         if (romaji) words = Romaji.words(words);
         List<Integer> tokenIndex = new ArrayList<>();
-        List<WhisperClient.Word> tokenWords = new ArrayList<>();
+        List<AsrClient.Word> tokenWords = new ArrayList<>();
         StringBuilder transcript = new StringBuilder();
-        for (WhisperClient.Word word : words) {
+        for (AsrClient.Word word : words) {
             String normalized = LyricsAligner.normalize(word.text());
             if (normalized.isEmpty()) continue;
             tokenIndex.add(transcript.length());
@@ -222,7 +222,7 @@ public final class LyricsTimestamper {
         return first;
     }
 
-    static long lineOnsetMs(String text, List<Integer> tokenIndex, List<WhisperClient.Word> words, int first, int last) {
+    static long lineOnsetMs(String text, List<Integer> tokenIndex, List<AsrClient.Word> words, int first, int last) {
         long onset = LyricsAligner.onsetMs(words.get(first));
         long silenceBefore = words.get(first).startMs() - (first == 0 ? 0 : words.get(first - 1).endMs());
         if (silenceBefore < PAUSE_MS) return onset;
@@ -233,7 +233,7 @@ public final class LyricsTimestamper {
         return onset;
     }
 
-    static boolean isStretched(WhisperClient.Word word) {
+    static boolean isStretched(AsrClient.Word word) {
         return word.endMs() - word.startMs() >= STRETCH_RATIO * LyricsAligner.plausibleDurationMs(word.text());
     }
 

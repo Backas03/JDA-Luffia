@@ -55,7 +55,7 @@ public final class Romaji {
         return converted;
     }
 
-    public static List<WhisperClient.Word> words(List<WhisperClient.Word> words) {
+    public static List<AsrClient.Word> words(List<AsrClient.Word> words) {
         StringBuilder text = new StringBuilder();
         int[] starts = new int[words.size()];
         for (int i = 0; i < words.size(); i++) {
@@ -73,12 +73,12 @@ public final class Romaji {
                 readings[owner(starts, token.getPosition())].append(read(token));
             }
         }
-        List<WhisperClient.Word> converted = new ArrayList<>(words.size());
+        List<AsrClient.Word> converted = new ArrayList<>(words.size());
         for (int i = 0; i < words.size(); i++) {
             String reading = canonical(readings[i].toString());
             if (reading.isEmpty()) continue;
-            WhisperClient.Word word = words.get(i);
-            converted.add(new WhisperClient.Word(reading, word.startMs(), word.endMs()));
+            AsrClient.Word word = words.get(i);
+            converted.add(new AsrClient.Word(reading, word.startMs(), word.endMs()));
         }
         return converted;
     }

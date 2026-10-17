@@ -18,13 +18,13 @@ class LyricsTimestamperTest {
             "the lamp post hums a tired tune",
             "we count the cracks along the road");
 
-    private static List<WhisperClient.Word> heard(List<Integer> skip, long startMs) {
-        List<WhisperClient.Word> words = new ArrayList<>();
+    private static List<AsrClient.Word> heard(List<Integer> skip, long startMs) {
+        List<AsrClient.Word> words = new ArrayList<>();
         long at = startMs;
         for (int i = 0; i < LINES.size(); i++) {
             if (!skip.contains(i)) {
                 for (String word : LINES.get(i).split(" ")) {
-                    words.add(new WhisperClient.Word(word, at, at + 250));
+                    words.add(new AsrClient.Word(word, at, at + 250));
                     at += 300;
                 }
             }
@@ -47,12 +47,12 @@ class LyricsTimestamperTest {
     void fillsUnheardLinesBetweenTheirNeighbours() {
         List<String> five = new ArrayList<>(LINES);
         five.add(2, "a line the singer swallowed");
-        List<WhisperClient.Word> words = new ArrayList<>();
+        List<AsrClient.Word> words = new ArrayList<>();
         long at = 5_000;
         for (int i = 0; i < five.size(); i++) {
             if (i != 2) {
                 for (String word : five.get(i).split(" ")) {
-                    words.add(new WhisperClient.Word(word, at, at + 250));
+                    words.add(new AsrClient.Word(word, at, at + 250));
                     at += 300;
                 }
             }
@@ -67,13 +67,13 @@ class LyricsTimestamperTest {
         assertTrue(before < filled && filled < after, before + " " + filled + " " + after);
     }
 
-    private static List<WhisperClient.Word> sung(List<String> lines, List<Long> startsMs) {
-        List<WhisperClient.Word> words = new ArrayList<>();
+    private static List<AsrClient.Word> sung(List<String> lines, List<Long> startsMs) {
+        List<AsrClient.Word> words = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
             if (startsMs.get(i) == null) continue;
             long at = startsMs.get(i);
             for (String word : lines.get(i).split(" ")) {
-                words.add(new WhisperClient.Word(word, at, at + 250));
+                words.add(new AsrClient.Word(word, at, at + 250));
                 at += 300;
             }
         }
@@ -154,13 +154,13 @@ class LyricsTimestamperTest {
         assertEquals(LINES, texts(result.lines()));
     }
 
-    private static WhisperClient.Word word(String text, long startMs, long endMs) {
-        return new WhisperClient.Word(text, startMs, endMs);
+    private static AsrClient.Word word(String text, long startMs, long endMs) {
+        return new AsrClient.Word(text, startMs, endMs);
     }
 
     @Test
     void aLineSmearedOverTheSilenceBeforeItStartsWhereItsWordsSettle() {
-        List<WhisperClient.Word> words = new ArrayList<>(sung(List.of(LINES.get(0)), List.of(5_000L)));
+        List<AsrClient.Word> words = new ArrayList<>(sung(List.of(LINES.get(0)), List.of(5_000L)));
         words.add(word("paper", 8_000, 14_000));
         words.add(word("boats", 14_000, 19_000));
         words.add(word("drift", 19_500, 19_800));
@@ -174,7 +174,7 @@ class LyricsTimestamperTest {
 
     @Test
     void stretchedWordsRightAfterThePreviousLineKeepTheirOwnOnset() {
-        List<WhisperClient.Word> words = new ArrayList<>(sung(List.of(LINES.get(0)), List.of(5_000L)));
+        List<AsrClient.Word> words = new ArrayList<>(sung(List.of(LINES.get(0)), List.of(5_000L)));
         words.add(word("paper", 6_750, 12_000));
         words.add(word("boats", 12_000, 17_000));
         words.add(word("drift", 17_500, 17_800));

@@ -31,14 +31,14 @@ public final class LyricsAutoSync {
     }
 
     public static boolean isEnabled() {
-        WhisperClient whisper = whisper();
-        return whisper != null && whisper.isConfigured() && Config.get().whisper().autoSync().enabled();
+        AsrClient asr = asr();
+        return asr != null && asr.isConfigured() && Config.get().asr().autoSync().enabled();
     }
 
     @Nullable
-    private static WhisperClient whisper() {
+    private static AsrClient asr() {
         Luffia luffia = Main.getLuffia();
-        return luffia == null ? null : luffia.getMusicPlayerController().getWhisperClient();
+        return luffia == null ? null : luffia.getMusicPlayerController().getAsrClient();
     }
 
     public static void apply(MusicPlayerClient client, AudioTrack track, Lyrics lyrics, LyricsSession session) {
@@ -61,16 +61,16 @@ public final class LyricsAutoSync {
 
     @Nullable
     private static CompletableFuture<Optional<LyricsAligner.Alignment>> schedule(MusicPlayerClient client, AudioTrack track, Lyrics lyrics) {
-        WhisperClient whisper = whisper();
-        if (whisper == null || !whisper.isAvailable() || !lyrics.hasSynced()) return null;
+        AsrClient asr = asr();
+        if (asr == null || !asr.isAvailable() || !lyrics.hasSynced()) return null;
         String identifier = track.getIdentifier();
         CompletableFuture<Optional<LyricsAligner.Alignment>> job =
-                IN_FLIGHT.computeIfAbsent(identifier, key -> start(key, client, whisper, lyrics, track));
+                IN_FLIGHT.computeIfAbsent(identifier, key -> start(key, client, asr, lyrics, track));
         job.whenComplete((result, error) -> IN_FLIGHT.remove(identifier, job));
         return job;
     }
 
-    private static CompletableFuture<Optional<LyricsAligner.Alignment>> start(String identifier, MusicPlayerClient client, WhisperClient whisper,
+    private static CompletableFuture<Optional<LyricsAligner.Alignment>> start(String identifier, MusicPlayerClient client, AsrClient asr,
                                                                               Lyrics lyrics, AudioTrack track) {
         LyricsOffsets store = LyricsOffsets.defaultStore();
         String hint = LyricsAligner.languageHint(lyrics.synced());
@@ -83,9 +83,9 @@ public final class LyricsAutoSync {
                         LOGGER.info("not enough audio captured to align lyrics for {}", title);
                         return Optional.<LyricsAligner.Alignment>empty();
                     }
-                    List<WhisperClient.Word> words;
+                    List<AsrClient.Word> words;
                     try {
-                        words = whisper.transcribe(captured.wav(), hint, null);
+                        words = asr.transcribe(captured.wav(), hint, null);
                     } catch (IOException e) {
                         throw new UncheckedIOException(e);
                     }
@@ -97,7 +97,7 @@ public final class LyricsAutoSync {
                         long offset = OffsetPolicy.resolve(coarse.offsetMs(), fine);
                         result = Optional.of(new LyricsAligner.Alignment(offset, coarse.matchedLines(), coarse.spreadMs()));
                         store.put(identifier, offset, LyricsOffsets.SOURCE_AUTO);
-                        LOGGER.info("aligned lyrics for {}: offset {}ms (whisper {}ms from {} lines, spread {}ms; onsets {}; {}s audio, {}ms)",
+                        LOGGER.info("aligned lyrics for {}: offset {}ms (asr {}ms from {} lines, spread {}ms; onsets {}; {}s audio, {}ms)",
                                 title, offset, coarse.offsetMs(), coarse.matchedLines(), coarse.spreadMs(),
                                 fine == null ? "no clear peak" : fine.offsetMs() + "ms z=" + String.format("%.1f", fine.confidence()),
                                 captured.capturedMs() / 1000, elapsed);

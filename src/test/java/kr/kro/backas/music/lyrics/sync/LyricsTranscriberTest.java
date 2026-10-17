@@ -13,17 +13,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LyricsTranscriberTest {
 
-    private static WhisperClient.Segment segment(long start, long end, String text) {
-        return new WhisperClient.Segment(start, end, text);
+    private static AsrClient.Segment segment(long start, long end, String text) {
+        return new AsrClient.Segment(start, end, text);
     }
 
-    private static WhisperClient.Word word(String text, long start, long end) {
-        return new WhisperClient.Word(text, start, end);
+    private static AsrClient.Word word(String text, long start, long end) {
+        return new AsrClient.Word(text, start, end);
     }
 
     @Test
     void turnsSegmentsIntoLinesWithRestsBeforeAfterAndBetweenTheSinging() {
-        WhisperClient.Transcript transcript = new WhisperClient.Transcript(
+        AsrClient.Transcript transcript = new AsrClient.Transcript(
                 List.of(word("君", 10_000, 10_200), word("の", 10_200, 10_400), word("声", 10_400, 10_800),
                         word("が", 10_800, 11_000), word("聞", 11_000, 11_400), word("こえる", 11_400, 12_000),
                         word("夜", 21_500, 21_700), word("を", 21_700, 21_900), word("越", 21_900, 22_300), word("えて", 22_300, 23_000)),
@@ -39,7 +39,7 @@ class LyricsTranscriberTest {
 
     @Test
     void keepsLinesInOrderAndSkipsTheOutroBlankWhenTheSongEndsRightAfter() {
-        WhisperClient.Transcript transcript = new WhisperClient.Transcript(
+        AsrClient.Transcript transcript = new AsrClient.Transcript(
                 List.of(),
                 List.of(segment(2_000, 3_000, "first"), segment(2_000, 4_000, "second")));
         List<LyricLine> lines = LyricsTranscriber.lines(transcript, 5_000);
@@ -48,7 +48,7 @@ class LyricsTranscriberTest {
 
     @Test
     void startsLinesLateEnoughWhenTheFirstWordIsSnappedToTheSegmentOrStretchedBackwards() {
-        WhisperClient.Transcript transcript = new WhisperClient.Transcript(
+        AsrClient.Transcript transcript = new AsrClient.Transcript(
                 List.of(word("思", 1_000, 1_400), word("い", 1_760, 1_800), word("切", 2_010, 2_200), word("って", 2_400, 3_000),
                         word("また", 3_800, 4_900), word("明", 4_900, 5_300), word("日", 5_300, 5_700), word("の", 5_700, 6_000),
                         word("夜", 6_000, 6_500), word("に", 6_500, 7_000),
@@ -60,7 +60,7 @@ class LyricsTranscriberTest {
 
     @Test
     void movesLinesSmearedOverAnInterludeToTheirEndAndCutsSmearedTailsShort() {
-        WhisperClient.Transcript transcript = new WhisperClient.Transcript(
+        AsrClient.Transcript transcript = new AsrClient.Transcript(
                 List.of(word("笑", 53_860, 54_860), word("わ", 54_860, 55_860), word("せて", 55_860, 57_860),
                         word("あれ", 59_650, 63_440), word("から", 63_440, 68_020), word("世界", 68_020, 72_600), word("は", 72_600, 74_890),
                         word("変", 74_890, 77_170), word("わ", 77_180, 79_470), word("った", 79_470, 84_050), word("って", 84_050, 88_640),
