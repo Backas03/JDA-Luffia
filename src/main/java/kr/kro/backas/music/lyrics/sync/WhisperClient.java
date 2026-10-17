@@ -92,16 +92,16 @@ public final class WhisperClient {
         return failed != null && System.currentTimeMillis() - failed < RETRY_FAILED_MS;
     }
 
-    public List<Word> transcribe(byte[] wav, @Nullable String language) throws IOException {
-        return transcribeDetailed(wav, language).words();
+    public List<Word> transcribe(byte[] wav, @Nullable String language, @Nullable String prompt) throws IOException {
+        return transcribeDetailed(wav, language, prompt).words();
     }
 
-    public Transcript transcribeDetailed(byte[] wav, @Nullable String language) throws IOException {
+    public Transcript transcribeDetailed(byte[] wav, @Nullable String language, @Nullable String prompt) throws IOException {
         IOException last = null;
         for (Endpoint endpoint : endpoints) {
             if (isDown(endpoint)) continue;
             try {
-                Transcript transcript = request(endpoint, wav, language);
+                Transcript transcript = request(endpoint, wav, language, prompt);
                 failedAt.remove(endpoint.baseUrl());
                 return transcript;
             } catch (IOException e) {
@@ -116,12 +116,12 @@ public final class WhisperClient {
         throw last == null ? new IOException("no whisper endpoint available") : last;
     }
 
-    private Transcript request(Endpoint endpoint, byte[] wav, @Nullable String language) throws IOException, InterruptedException {
+    private Transcript request(Endpoint endpoint, byte[] wav, @Nullable String language, @Nullable String prompt) throws IOException, InterruptedException {
         String boundary = "luffia-" + UUID.randomUUID();
         HttpRequest request = HttpRequest.newBuilder(URI.create(transcriptionUrl(endpoint.baseUrl())))
                 .timeout(REQUEST_TIMEOUT)
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
-                .POST(HttpRequest.BodyPublishers.ofByteArray(multipart(boundary, wav, language)))
+                .POST(HttpRequest.BodyPublishers.ofByteArray(multipart(boundary, wav, language, prompt)))
                 .build();
         HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         if (response.statusCode() != 200) {
@@ -135,7 +135,7 @@ public final class WhisperClient {
         return path == null || path.isEmpty() || path.equals("/") ? base + "/v1/audio/transcriptions" : base;
     }
 
-    static byte[] multipart(String boundary, byte[] wav, @Nullable String language) throws IOException {
+    static byte[] multipart(String boundary, byte[] wav, @Nullable String language, @Nullable String prompt) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream(wav.length + 512);
         out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n"
                 + "Content-Type: audio/wav\r\n\r\n").getBytes(StandardCharsets.UTF_8));
@@ -143,6 +143,10 @@ public final class WhisperClient {
         out.write("\r\n".getBytes(StandardCharsets.UTF_8));
         if (language != null && !language.isBlank()) {
             out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"language\"\r\n\r\n" + language + "\r\n")
+                    .getBytes(StandardCharsets.UTF_8));
+        }
+        if (prompt != null && !prompt.isBlank()) {
+            out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"prompt\"\r\n\r\n" + prompt.strip() + "\r\n")
                     .getBytes(StandardCharsets.UTF_8));
         }
         out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\nverbose_json\r\n")

@@ -85,7 +85,7 @@ public final class LyricsAutoSync {
                     }
                     List<WhisperClient.Word> words;
                     try {
-                        words = whisper.transcribe(captured.wav(), hint);
+                        words = whisper.transcribe(captured.wav(), hint, null);
                     } catch (IOException e) {
                         throw new UncheckedIOException(e);
                     }
