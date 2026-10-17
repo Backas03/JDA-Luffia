@@ -1,12 +1,18 @@
 import argparse
+import base64
 import io
+import json
 import logging
 import os
 import subprocess
 import sys
 import tempfile
 import threading
+import urllib.error
+import urllib.request
 import uuid
+import wave
+from array import array
 from dataclasses import dataclass
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -21,17 +27,24 @@ from asr_common import (
     offset_segments,
     stray_indices,
     restore_spacing,
+    script_language,
     verbose_json,
     vocal_regions,
 )
 
 SAMPLE_RATE = 16000
 SEPARATE_MODES = ("off", "input", "vad")
-BACKENDS = ("transformers", "vllm")
+BACKENDS = ("transformers", "vllm", "llamacpp")
+ASR_TEXT_TAG = "<asr_text>"
+LANGUAGE_PREFIX = "language "
 LOGGER = logging.getLogger("qwen_asr_server")
 
 
 class AudioError(Exception):
+    pass
+
+
+class BackendError(Exception):
     pass
 
 
@@ -56,6 +69,8 @@ class Settings:
     max_new_tokens: int
     batch_size: int
     gpu_memory_utilization: float
+    llama_url: str
+    llama_timeout: float
     work_dir: str
 
 
@@ -88,6 +103,8 @@ def load_settings(argv=None):
     parser.add_argument("--max-new-tokens", type=int, default=int(env("MAX_NEW_TOKENS", "512")))
     parser.add_argument("--batch-size", type=int, default=int(env("BATCH_SIZE", "8")))
     parser.add_argument("--gpu-memory-utilization", type=float, default=float(env("GPU_MEMORY_UTILIZATION", "0.7")))
+    parser.add_argument("--llama-url", default=env("LLAMA_URL", "http://127.0.0.1:8081"))
+    parser.add_argument("--llama-timeout", type=float, default=float(env("LLAMA_TIMEOUT", "300")))
     parser.add_argument("--work-dir", default=env("WORK_DIR", os.path.join(tempfile.gettempdir(), "qwen_asr_server")))
     args = parser.parse_args(argv)
     dtype = args.dtype or ("bfloat16" if args.device.startswith("cuda") else "float32")
@@ -97,7 +114,8 @@ def load_settings(argv=None):
         separator_model=args.separator_model, separator_dir=args.separator_dir, separator_overlap=args.separator_overlap,
         separator_batch=args.separator_batch, chunk_seconds=args.chunk_seconds,
         vad_threshold=args.vad_threshold, max_new_tokens=args.max_new_tokens, batch_size=args.batch_size,
-        gpu_memory_utilization=args.gpu_memory_utilization, work_dir=args.work_dir,
+        gpu_memory_utilization=args.gpu_memory_utilization, llama_url=args.llama_url.rstrip("/"),
+        llama_timeout=args.llama_timeout, work_dir=args.work_dir,
     )
 
 
@@ -173,7 +191,145 @@ def chunk_segments(text, items, chunk_seconds):
     return build_segments(words)
 
 
+def wav_bytes(samples, rate=SAMPLE_RATE):
+    if hasattr(samples, "astype"):
+        import numpy as np
+
+        pcm = (np.clip(samples, -1.0, 1.0) * 32767).astype("<i2").tobytes()
+    else:
+        values = array("h", (int(max(-1.0, min(1.0, float(s))) * 32767) for s in samples))
+        if sys.byteorder != "little":
+            values.byteswap()
+        pcm = values.tobytes()
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(rate)
+        handle.writeframes(pcm)
+    return buffer.getvalue()
+
+
+def language_prefill(name):
+    return LANGUAGE_PREFIX + name + ASR_TEXT_TAG
+
+
+def llama_request(audio, name, prompt, max_tokens):
+    encoded = base64.b64encode(audio).decode("ascii")
+    messages = [
+        {"role": "system", "content": prompt or ""},
+        {"role": "user", "content": [{"type": "input_audio", "input_audio": {"data": encoded, "format": "wav"}}]},
+    ]
+    if name:
+        messages.append({"role": "assistant", "content": language_prefill(name)})
+    return {"messages": messages, "temperature": 0, "max_tokens": max_tokens, "stream": False}
+
+
+def parse_asr_output(raw, name=None):
+    content = (raw or "").strip()
+    meta, tag, text = content.partition(ASR_TEXT_TAG)
+    if not tag:
+        return name or "", content
+    if name:
+        return name, text.strip()
+    detected = ""
+    for line in meta.splitlines():
+        line = line.strip()
+        if line.lower().startswith(LANGUAGE_PREFIX):
+            detected = line[len(LANGUAGE_PREFIX):].strip()
+            break
+    if detected.lower() == "none":
+        detected = ""
+    if detected:
+        detected = detected[:1].upper() + detected[1:].lower()
+    return detected, text.strip()
+
+
+def completion_text(payload):
+    choices = payload.get("choices") if isinstance(payload, dict) else None
+    if not choices:
+        raise BackendError("llama-server returned no choices: " + json.dumps(payload, ensure_ascii=False)[:300])
+    message = choices[0].get("message") or {}
+    return message.get("content") or ""
+
+
+def http_json(url, body, timeout):
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    headers = {"Content-Type": "application/json"} if data else {}
+    request = urllib.request.Request(url, data=data, headers=headers, method="POST" if data else "GET")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        raise BackendError(f"llama-server {e.code} from {url}: {e.read().decode('utf-8', 'replace')[:300]}")
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        raise BackendError(f"llama-server unreachable at {url}: {e}")
+
+
+def llama_health(base, timeout=3.0):
+    info = {"url": base, "reachable": False}
+    try:
+        payload = http_json(base + "/health", None, timeout)
+        info["reachable"] = True
+        info["status"] = payload.get("status")
+        props = http_json(base + "/props", None, timeout)
+        info["model"] = os.path.basename(props.get("model_path") or "") or None
+    except BackendError as e:
+        info["error"] = str(e)
+    return info
+
+
+@dataclass
+class Transcription:
+    language: str
+    text: str
+    time_stamps: object = None
+
+
+class LlamaBackend:
+    def __init__(self, settings, aligner):
+        self.settings = settings
+        self.aligner = aligner
+        self.model = aligner
+        self.url = settings.llama_url + "/v1/chat/completions"
+
+    def transcribe(self, audio, context, language, return_time_stamps):
+        results = []
+        for samples, rate in audio:
+            body = llama_request(wav_bytes(samples, rate), language, context, self.settings.max_new_tokens)
+            raw = completion_text(http_json(self.url, body, self.settings.llama_timeout))
+            detected, text = parse_asr_output(raw, language)
+            results.append(Transcription(detected, text))
+        if return_time_stamps and self.aligner is not None:
+            self.align(audio, results)
+        return results
+
+    def align(self, audio, results):
+        pending = [i for i, result in enumerate(results) if result.text]
+        size = max(1, self.settings.batch_size)
+        for start in range(0, len(pending), size):
+            batch = pending[start:start + size]
+            aligned = self.aligner.align(
+                audio=[audio[i] for i in batch],
+                text=[results[i].text for i in batch],
+                language=[results[i].language or script_language(results[i].text) or "English" for i in batch],
+            )
+            for i, stamps in zip(batch, aligned):
+                results[i].time_stamps = stamps
+
+
+def load_aligner(settings):
+    import torch
+    from qwen_asr.inference.qwen3_forced_aligner import Qwen3ForcedAligner
+
+    return Qwen3ForcedAligner.from_pretrained(
+        settings.aligner, dtype=getattr(torch, settings.dtype), device_map=settings.device, attn_implementation=settings.attn,
+    )
+
+
 def load_model(settings):
+    if settings.backend == "llamacpp":
+        return LlamaBackend(settings, load_aligner(settings) if settings.align else None)
     import torch
     from qwen_asr import Qwen3ASRModel
 
@@ -233,8 +389,15 @@ class Engine:
     def __init__(self, settings):
         self.settings = settings
         self.lock = threading.Lock()
-        LOGGER.info("loading %s (%s, %s, aligner=%s)", settings.model, settings.backend, settings.device, settings.aligner if settings.align else "off")
+        target = settings.llama_url if settings.backend == "llamacpp" else settings.model
+        LOGGER.info("loading %s (%s, %s, aligner=%s)", target, settings.backend, settings.device, settings.aligner if settings.align else "off")
         self.model = load_model(settings)
+        if settings.backend == "llamacpp":
+            health = llama_health(settings.llama_url)
+            if health["reachable"]:
+                LOGGER.info("llama-server at %s is up (%s)", settings.llama_url, health.get("model") or health.get("status"))
+            else:
+                LOGGER.warning("llama-server not reachable yet: %s", health.get("error"))
         self.separator = load_separator(settings) if settings.separate != "off" else None
         if self.separator is not None:
             LOGGER.info("separator %s ready (mode=%s)", settings.separator_model, settings.separate)
@@ -339,13 +502,17 @@ class Engine:
 
 
 def model_device(model):
-    for candidate in (model, getattr(model, "model", None)):
+    candidate = model
+    for _ in range(3):
+        if candidate is None:
+            break
         parameters = getattr(candidate, "parameters", None)
         if callable(parameters):
             try:
                 return str(next(parameters()).device)
             except (StopIteration, TypeError):
-                continue
+                pass
+        candidate = getattr(candidate, "model", None)
     return None
 
 
@@ -370,7 +537,7 @@ def create_app(engine, settings):
 
     @app.get("/health")
     def health():
-        return {
+        info = {
             "status": "ok",
             "model": settings.model,
             "aligner": settings.aligner if settings.align else None,
@@ -378,6 +545,9 @@ def create_app(engine, settings):
             "separate": settings.separate,
             "device": device_info(engine),
         }
+        if settings.backend == "llamacpp":
+            info["llama"] = llama_health(settings.llama_url)
+        return info
 
     @app.post("/v1/audio/transcriptions")
     def transcribe(file: UploadFile = File(...), language: str | None = Form(None), prompt: str | None = Form(None)):
@@ -386,6 +556,9 @@ def create_app(engine, settings):
             return engine.transcribe(data, file.filename, language, prompt)
         except AudioError as e:
             return JSONResponse({"error": str(e)}, status_code=400)
+        except BackendError as e:
+            LOGGER.error("%s", e)
+            return JSONResponse({"error": str(e)}, status_code=502)
         except Exception as e:
             LOGGER.exception("transcription failed")
             return JSONResponse({"error": f"{type(e).__name__}: {e}"}, status_code=500)
