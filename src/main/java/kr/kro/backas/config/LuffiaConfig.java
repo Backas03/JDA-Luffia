@@ -11,7 +11,7 @@ public record LuffiaConfig(Bot bot,
                            Autoplay autoplay,
                            Llm llm,
                            Lyrics lyrics,
-                           Whisper whisper,
+                           Asr asr,
                            Cache cache,
                            Scheduler scheduler,
                            Logging logging) {
@@ -94,11 +94,11 @@ public record LuffiaConfig(Bot bot,
     public record Prefetch(int count, int countFast, int lookupThreads) {
     }
 
-    public record Whisper(List<WhisperEndpoint> endpoints, int retryFailedSeconds, AutoSync autoSync, Convert convert, Transcribe transcribe) {
+    public record Asr(List<AsrEndpoint> endpoints, int retryFailedSeconds, AutoSync autoSync, Convert convert, Transcribe transcribe) {
         public String endpointSpec() {
             List<String> parts = new ArrayList<>();
             if (endpoints != null) {
-                for (WhisperEndpoint endpoint : endpoints) {
+                for (AsrEndpoint endpoint : endpoints) {
                     if (endpoint.url() == null || endpoint.url().isBlank()) continue;
                     parts.add(endpoint.url().trim() + "|" + nullToEmpty(endpoint.label()));
                 }
@@ -107,7 +107,7 @@ public record LuffiaConfig(Bot bot,
         }
     }
 
-    public record WhisperEndpoint(String url, String label) {
+    public record AsrEndpoint(String url, String label) {
     }
 
     public record AutoSync(boolean enabled, int captureSeconds, long trustLyricsWithinFineMs, long trustLyricsWithinCoarseMs, int noneRetryHours) {

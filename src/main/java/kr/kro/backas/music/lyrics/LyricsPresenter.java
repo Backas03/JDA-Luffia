@@ -242,7 +242,7 @@ public final class LyricsPresenter {
             CardFullView view = new CardFullView(client, track, lyrics, card, Main.getLuffia().getMusicPlayerController().getLyricsExpansions(),
                     Main.getLuffia().getMusicPlayerController().getLyricsConversions());
             showFull(client, track, lyrics, null, true, view, translator);
-            if (Config.get().whisper().convert().auto()) view.requestConversion();
+            if (Config.get().asr().convert().auto()) view.requestConversion();
         });
     }
 

@@ -28,6 +28,8 @@ public final class Config {
     public static final String DEFAULTS_RESOURCE = "/config.yaml";
     public static final String PATH_PROPERTY = "luffia.config";
     public static final String ENV_PREFIX = "LUFFIA_";
+    static final String ASR_KEY = "asr";
+    static final String LEGACY_ASR_KEY = "whisper";
     private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory())
             .setPropertyNamingStrategy(PropertyNamingStrategies.KEBAB_CASE)
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -55,7 +57,7 @@ public final class Config {
         if (external != null && Files.isRegularFile(external)) {
             try {
                 JsonNode overrides = YAML.readTree(Files.readString(external));
-                if (overrides != null && overrides.isObject()) merge(merged, (ObjectNode) overrides);
+                if (overrides != null && overrides.isObject()) merge(merged, renameLegacy((ObjectNode) overrides));
                 LOGGER.info("설정 파일을 읽었습니다: {}", external.toAbsolutePath());
             } catch (IOException e) {
                 throw new UncheckedIOException("설정 파일을 읽을 수 없습니다: " + external, e);
@@ -126,11 +128,23 @@ public final class Config {
         }
     }
 
+    static ObjectNode renameLegacy(ObjectNode overrides) {
+        JsonNode legacy = overrides.remove(LEGACY_ASR_KEY);
+        if (legacy == null || !legacy.isObject()) return overrides;
+        LOGGER.info("설정 키 {} 는 {} 로 바뀌었습니다. 당분간 읽어 주지만 config.yaml 을 고쳐 주세요.", LEGACY_ASR_KEY, ASR_KEY);
+        ObjectNode asr = legacy.deepCopy();
+        JsonNode explicit = overrides.get(ASR_KEY);
+        if (explicit != null && explicit.isObject()) merge(asr, (ObjectNode) explicit);
+        overrides.set(ASR_KEY, asr);
+        return overrides;
+    }
+
     static void applyEnvironment(ObjectNode root, Map<String, String> environment) {
         for (Map.Entry<String, String> entry : environment.entrySet()) {
             String name = entry.getKey();
             if (!name.startsWith(ENV_PREFIX) || name.length() <= ENV_PREFIX.length()) continue;
             String[] segments = name.substring(ENV_PREFIX.length()).toLowerCase(Locale.ROOT).split("_");
+            if (segments[0].equals(LEGACY_ASR_KEY)) segments[0] = ASR_KEY;
             if (!applyPath(root, segments, 0, entry.getValue())) {
                 LOGGER.warn("환경 변수 {} 에 해당하는 설정 키가 없어 무시합니다.", name);
             }

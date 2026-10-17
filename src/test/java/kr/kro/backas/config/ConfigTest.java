@@ -55,7 +55,7 @@ class ConfigTest {
                 "  fallback:",
                 "    url: http://127.0.0.1:8765",
                 "    label: CPU",
-                "whisper:",
+                "asr:",
                 "  endpoints:",
                 "    - url: http://gpu:8000",
                 "      label: W",
@@ -68,11 +68,44 @@ class ConfigTest {
         assertEquals(25, config.musicPlayer().defaultVolume());
         assertEquals(0.30, config.musicPlayer().karaoke().echoSeconds(), 1e-9);
         assertEquals("http://gpu:11434/|GPU|gemma|4,http://127.0.0.1:8765|CPU||fallback", config.llm().endpointSpec());
-        assertEquals("http://gpu:8000|W", config.whisper().endpointSpec());
-        assertTrue(config.whisper().transcribe().enabled());
-        assertEquals(30, config.whisper().transcribe().minLetters());
+        assertEquals("http://gpu:8000|W", config.asr().endpointSpec());
+        assertTrue(config.asr().transcribe().enabled());
+        assertEquals(30, config.asr().transcribe().minLetters());
         assertTrue(Config.missingRequired(config).isEmpty());
         assertTrue(Config.load(null).isServiceGuild(999));
+    }
+
+    @Test
+    void legacyWhisperKeyStillFeedsAsrAndExplicitAsrWins() throws Exception {
+        Path external = tempDir.resolve("config.yaml");
+        Files.writeString(external, String.join("\n",
+                "whisper:",
+                "  endpoints:",
+                "    - url: http://old:8178",
+                "      label: old",
+                "  retry-failed-seconds: 7",
+                "  transcribe:",
+                "    min-letters: 12",
+                "asr:",
+                "  transcribe:",
+                "    min-letters: 50",
+                ""));
+        LuffiaConfig config = Config.load(external);
+        assertEquals("http://old:8178|old", config.asr().endpointSpec());
+        assertEquals(7, config.asr().retryFailedSeconds());
+        assertEquals(50, config.asr().transcribe().minLetters());
+        assertTrue(config.asr().autoSync().enabled());
+    }
+
+    @Test
+    void legacyWhisperEnvironmentVariablesMapToAsr() {
+        ObjectNode tree = Config.defaults();
+        Config.applyEnvironment(tree, Map.of(
+                "LUFFIA_WHISPER_RETRY_FAILED_SECONDS", "9",
+                "LUFFIA_ASR_TRANSCRIBE_MIN_LETTERS", "40"));
+        LuffiaConfig config = Config.convert(tree);
+        assertEquals(9, config.asr().retryFailedSeconds());
+        assertEquals(40, config.asr().transcribe().minLetters());
     }
 
     @Test

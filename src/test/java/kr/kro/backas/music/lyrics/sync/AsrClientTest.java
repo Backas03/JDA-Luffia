@@ -9,31 +9,31 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class WhisperClientTest {
+class AsrClientTest {
 
     @Test
     void parsesEndpointListWithOptionalLabels() {
-        List<WhisperClient.Endpoint> endpoints = WhisperClient.parse("http://a:8000/|GPU A, http://b.example:8000 ,, ");
+        List<AsrClient.Endpoint> endpoints = AsrClient.parse("http://a:8000/|GPU A, http://b.example:8000 ,, ");
         assertEquals(2, endpoints.size());
         assertEquals("http://a:8000", endpoints.get(0).baseUrl());
         assertEquals("GPU A", endpoints.get(0).label());
         assertEquals("b.example", endpoints.get(1).label());
-        assertTrue(WhisperClient.parse(null).isEmpty());
+        assertTrue(AsrClient.parse(null).isEmpty());
     }
 
     @Test
     void unconfiguredClientIsNeverAvailable() {
-        WhisperClient client = new WhisperClient("");
+        AsrClient client = new AsrClient("");
         assertFalse(client.isConfigured());
         assertFalse(client.isAvailable());
-        assertTrue(new WhisperClient("http://localhost:1").isAvailable());
+        assertTrue(new AsrClient("http://localhost:1").isAvailable());
     }
 
     @Test
     void parsesWordTimestampsFromTheServerResponse() throws Exception {
         String json = "{\"text\":\"hi there\",\"words\":[{\"word\":\" hi\",\"start\":0.5,\"end\":0.8},"
                 + "{\"word\":\"there\",\"start\":0.9,\"end\":1.25},{\"word\":\"   \",\"start\":2,\"end\":2}]}";
-        List<WhisperClient.Word> words = WhisperClient.parseWords(json);
+        List<AsrClient.Word> words = AsrClient.parseWords(json);
         assertEquals(2, words.size());
         assertEquals("hi", words.get(0).text());
         assertEquals(500, words.get(0).startMs());
@@ -45,7 +45,7 @@ class WhisperClientTest {
         String json = "{\"text\":\"君から\",\"segments\":[{\"start\":40.0,\"end\":46.0,\"words\":["
                 + "{\"word\":\"君\",\"start\":40.0,\"end\":40.71,\"t_dtw\":-1},{\"word\":\"�\",\"start\":40.71,\"end\":41.0}]},"
                 + "{\"start\":46.0,\"end\":52.0,\"words\":[{\"word\":\" から\",\"start\":46.29,\"end\":47.13}]}]}";
-        List<WhisperClient.Word> words = WhisperClient.parseWords(json);
+        List<AsrClient.Word> words = AsrClient.parseWords(json);
         assertEquals(2, words.size());
         assertEquals("君", words.get(0).text());
         assertEquals(40_000, words.get(0).startMs());
@@ -57,21 +57,21 @@ class WhisperClientTest {
     void readsSegmentTextAndTimesForTranscription() throws Exception {
         String json = "{\"segments\":[{\"start\":1.5,\"end\":3.25,\"text\":\" 君の声 \"},"
                 + "{\"start\":4,\"end\":5,\"text\":\"�\"},{\"start\":6,\"end\":5.5,\"text\":\"夜\"}]}";
-        List<WhisperClient.Segment> segments = WhisperClient.parseSegments(json);
-        assertEquals(List.of(new WhisperClient.Segment(1_500, 3_250, "君の声"), new WhisperClient.Segment(6_000, 6_000, "夜")), segments);
-        assertTrue(WhisperClient.parseSegments("{\"text\":\"x\"}").isEmpty());
+        List<AsrClient.Segment> segments = AsrClient.parseSegments(json);
+        assertEquals(List.of(new AsrClient.Segment(1_500, 3_250, "君の声"), new AsrClient.Segment(6_000, 6_000, "夜")), segments);
+        assertTrue(AsrClient.parseSegments("{\"text\":\"x\"}").isEmpty());
     }
 
     @Test
     void postsToTheConfiguredPathOrTheOpenAiPath() {
-        assertEquals("http://a:8000/v1/audio/transcriptions", WhisperClient.transcriptionUrl("http://a:8000"));
-        assertEquals("http://b:8178/inference", WhisperClient.transcriptionUrl("http://b:8178/inference"));
-        assertEquals("http://b:8178/inference", WhisperClient.transcriptionUrl(WhisperClient.parse("http://b:8178/inference/").get(0).baseUrl()));
+        assertEquals("http://a:8000/v1/audio/transcriptions", AsrClient.transcriptionUrl("http://a:8000"));
+        assertEquals("http://b:8178/inference", AsrClient.transcriptionUrl("http://b:8178/inference"));
+        assertEquals("http://b:8178/inference", AsrClient.transcriptionUrl(AsrClient.parse("http://b:8178/inference/").get(0).baseUrl()));
     }
 
     @Test
     void multipartBodyCarriesTheWavAndTheLanguageHint() throws Exception {
-        byte[] body = WhisperClient.multipart("xyz", new byte[]{1, 2, 3}, "ja", null);
+        byte[] body = AsrClient.multipart("xyz", new byte[]{1, 2, 3}, "ja", null);
         String text = new String(body, StandardCharsets.ISO_8859_1);
         assertTrue(text.startsWith("--xyz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.wav\""));
         assertTrue(text.contains("name=\"language\"\r\n\r\nja\r\n"));
@@ -83,11 +83,11 @@ class WhisperClientTest {
 
     @Test
     void multipartBodyCarriesThePromptAsUtf8WhenGiven() throws Exception {
-        byte[] body = WhisperClient.multipart("xyz", new byte[]{1}, null, " YOASOBI - 夜に駆ける ");
+        byte[] body = AsrClient.multipart("xyz", new byte[]{1}, null, " YOASOBI - 夜に駆ける ");
         String text = new String(body, StandardCharsets.UTF_8);
         assertTrue(text.contains("--xyz\r\nContent-Disposition: form-data; name=\"prompt\"\r\n\r\nYOASOBI - 夜に駆ける\r\n"));
         assertFalse(text.contains("name=\"language\""));
-        String blank = new String(WhisperClient.multipart("xyz", new byte[]{1}, null, "   "), StandardCharsets.UTF_8);
+        String blank = new String(AsrClient.multipart("xyz", new byte[]{1}, null, "   "), StandardCharsets.UTF_8);
         assertFalse(blank.contains("name=\"prompt\""));
     }
 }

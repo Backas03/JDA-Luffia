@@ -52,3 +52,6 @@ bin/
 
 ### Logs ###
 /logs/
+
+### Local secrets ###
+/src/main/java/kr/kro/backas/secret/

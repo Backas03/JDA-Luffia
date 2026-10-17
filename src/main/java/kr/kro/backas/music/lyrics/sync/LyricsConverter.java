@@ -31,9 +31,9 @@ import java.util.function.Consumer;
 public final class LyricsConverter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LyricsConverter.class);
-    static final int MAX_SECONDS = Config.get().whisper().convert().maxSeconds();
-    static final long FIRST_PASS_MS = Config.get().whisper().convert().firstPassSeconds() * 1000L;
-    static final long PASS_STEP_MS = Config.get().whisper().convert().passStepSeconds() * 1000L;
+    static final int MAX_SECONDS = Config.get().asr().convert().maxSeconds();
+    static final long FIRST_PASS_MS = Config.get().asr().convert().firstPassSeconds() * 1000L;
+    static final long PASS_STEP_MS = Config.get().asr().convert().passStepSeconds() * 1000L;
     private static final long POLL_MS = 1_000;
     private static final long CAPTURE_START_TIMEOUT_S = 60;
     static final int MIN_SPOKEN_LETTERS = 20;
@@ -45,14 +45,14 @@ public final class LyricsConverter {
     }
 
     public static boolean isAvailable() {
-        WhisperClient whisper = whisper();
-        return whisper != null && whisper.isAvailable();
+        AsrClient asr = asr();
+        return asr != null && asr.isAvailable();
     }
 
     @Nullable
-    private static WhisperClient whisper() {
+    private static AsrClient asr() {
         Luffia luffia = Main.getLuffia();
-        return luffia == null ? null : luffia.getMusicPlayerController().getWhisperClient();
+        return luffia == null ? null : luffia.getMusicPlayerController().getAsrClient();
     }
 
     public static CompletableFuture<Optional<Lyrics>> convert(MusicPlayerClient client, AudioTrack track, Lyrics lyrics) {
@@ -69,9 +69,9 @@ public final class LyricsConverter {
         String identifier = track.getIdentifier();
         List<LyricLine> stored = fresh ? null : AiLyricsStore.defaultStore().get(identifier);
         if (stored != null) return CompletableFuture.completedFuture(Optional.of(lyrics.withAiTimestamps(stored)));
-        WhisperClient whisper = whisper();
-        if (whisper == null || !whisper.isAvailable() || !lyrics.hasPlain()) return CompletableFuture.completedFuture(Optional.empty());
-        CompletableFuture<Optional<Lyrics>> job = IN_FLIGHT.computeIfAbsent(identifier, key -> start(key, client, whisper, track, lyrics, onProgress));
+        AsrClient asr = asr();
+        if (asr == null || !asr.isAvailable() || !lyrics.hasPlain()) return CompletableFuture.completedFuture(Optional.empty());
+        CompletableFuture<Optional<Lyrics>> job = IN_FLIGHT.computeIfAbsent(identifier, key -> start(key, client, asr, track, lyrics, onProgress));
         job.whenComplete((result, error) -> IN_FLIGHT.remove(identifier, job));
         return job;
     }
@@ -88,10 +88,10 @@ public final class LyricsConverter {
     }
 
     @Nullable
-    static String spokenLanguage(List<WhisperClient.Segment> segments) {
+    static String spokenLanguage(List<AsrClient.Segment> segments) {
         int hangul = 0;
         int japanese = 0;
-        for (WhisperClient.Segment segment : segments) {
+        for (AsrClient.Segment segment : segments) {
             String text = segment.text();
             if (!LyricsTranscriber.isLyric(text.strip())) continue;
             for (int i = 0; i < text.length(); ) {
@@ -128,7 +128,7 @@ public final class LyricsConverter {
         }
     }
 
-    private static CompletableFuture<Optional<Lyrics>> start(String identifier, MusicPlayerClient client, WhisperClient whisper,
+    private static CompletableFuture<Optional<Lyrics>> start(String identifier, MusicPlayerClient client, AsrClient asr,
                                                              AudioTrack track, Lyrics original, @Nullable Consumer<Lyrics> onProgress) {
         String title = track.getInfo().title;
         if (lyricLines(original).size() < LyricsTimestamper.MIN_MATCHED) return CompletableFuture.completedFuture(Optional.empty());
@@ -159,7 +159,7 @@ public final class LyricsConverter {
             }
             long lastPassMs = 0;
             int passes = 0;
-            long whisperMs = 0;
+            long asrMs = 0;
             Optional<LyricsTimestamper.Result> last = Optional.empty();
             while (true) {
                 boolean finished = progressive.done().isDone();
@@ -189,15 +189,15 @@ public final class LyricsConverter {
                     lastPassMs = have;
                     continue;
                 }
-                long whisperStarted = System.currentTimeMillis();
-                WhisperClient.Transcript transcript;
+                long asrStarted = System.currentTimeMillis();
+                AsrClient.Transcript transcript;
                 try {
-                    transcript = whisper.transcribeDetailed(wav, detected ? hint : null, null);
+                    transcript = asr.transcribeDetailed(wav, detected ? hint : null, null);
                 } catch (IOException e) {
                     throw new UncheckedIOException(e);
                 }
-                List<WhisperClient.Word> words = transcript.words();
-                whisperMs += System.currentTimeMillis() - whisperStarted;
+                List<AsrClient.Word> words = transcript.words();
+                asrMs += System.currentTimeMillis() - asrStarted;
                 passes++;
                 if (!detected) {
                     String spoken = spokenLanguage(transcript.segments());
@@ -232,7 +232,7 @@ public final class LyricsConverter {
                 if (finished) break;
             }
             long elapsed = System.currentTimeMillis() - started;
-            String timing = passes + " pass(es), whisper " + whisperMs + "ms, " + elapsed + "ms total";
+            String timing = passes + " pass(es), asr " + asrMs + "ms, " + elapsed + "ms total";
             if (last.isEmpty()) {
                 LOGGER.info("could not timestamp lyrics for {} ({} lines; {})", title, lines.size(), timing);
                 return Optional.<Lyrics>empty();
