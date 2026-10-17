@@ -21,7 +21,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-public final class WhisperClient {
+public final class AsrClient {
 
     public record Word(String text, long startMs, long endMs) {
     }
@@ -35,9 +35,9 @@ public final class WhisperClient {
     public record Transcript(List<Word> words, List<Segment> segments) {
     }
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(WhisperClient.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(AsrClient.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    static final long RETRY_FAILED_MS = Config.get().whisper().retryFailedSeconds() * 1000L;
+    static final long RETRY_FAILED_MS = Config.get().asr().retryFailedSeconds() * 1000L;
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(3);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(90);
 
@@ -45,7 +45,7 @@ public final class WhisperClient {
     private final Map<String, Long> failedAt = new ConcurrentHashMap<>();
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build();
 
-    public WhisperClient(@Nullable String urls) {
+    public AsrClient(@Nullable String urls) {
         this.endpoints = parse(urls);
     }
 
@@ -106,14 +106,14 @@ public final class WhisperClient {
                 return transcript;
             } catch (IOException e) {
                 failedAt.put(endpoint.baseUrl(), System.currentTimeMillis());
-                LOGGER.info("whisper endpoint {} unavailable, trying the next one: {}", endpoint.label(), e.toString());
+                LOGGER.info("asr endpoint {} unavailable, trying the next one: {}", endpoint.label(), e.toString());
                 last = e;
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw new IOException("whisper request interrupted", e);
+                throw new IOException("asr request interrupted", e);
             }
         }
-        throw last == null ? new IOException("no whisper endpoint available") : last;
+        throw last == null ? new IOException("no asr endpoint available") : last;
     }
 
     private Transcript request(Endpoint endpoint, byte[] wav, @Nullable String language, @Nullable String prompt) throws IOException, InterruptedException {
@@ -125,7 +125,7 @@ public final class WhisperClient {
                 .build();
         HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         if (response.statusCode() != 200) {
-            throw new IOException("whisper " + response.statusCode() + ": " + abbreviate(response.body()));
+            throw new IOException("asr " + response.statusCode() + ": " + abbreviate(response.body()));
         }
         return new Transcript(parseWords(response.body()), parseSegments(response.body()));
     }

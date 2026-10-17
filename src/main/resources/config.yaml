@@ -77,7 +77,7 @@ lyrics:
     count-fast: 20
     lookup-threads: 3
 
-whisper:
+asr:
   endpoints: []
   retry-failed-seconds: 30
   auto-sync:

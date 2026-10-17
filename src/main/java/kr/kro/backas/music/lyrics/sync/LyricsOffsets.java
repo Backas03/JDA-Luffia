@@ -9,7 +9,7 @@ public final class LyricsOffsets {
     public static final String SOURCE_AUTO = "auto";
     public static final String SOURCE_NONE = "none";
     public static final int VERSION = 6;
-    static final long NONE_RETRY_MS = Config.get().whisper().autoSync().noneRetryHours() * 60L * 60L * 1000L;
+    static final long NONE_RETRY_MS = Config.get().asr().autoSync().noneRetryHours() * 60L * 60L * 1000L;
 
     public record Entry(long offsetMs, String source, long at, int version) {
     }

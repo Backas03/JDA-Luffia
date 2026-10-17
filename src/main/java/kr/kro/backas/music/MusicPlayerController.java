@@ -17,7 +17,7 @@ import kr.kro.backas.music.lyrics.LyricsExpansions;
 import kr.kro.backas.music.lyrics.LyricsSources;
 import kr.kro.backas.music.lyrics.SpotifyLyricsClient;
 import kr.kro.backas.music.lyrics.TranslationClient;
-import kr.kro.backas.music.lyrics.sync.WhisperClient;
+import kr.kro.backas.music.lyrics.sync.AsrClient;
 import kr.kro.backas.music.source.MusicSourceRegistry;
 import kr.kro.backas.util.BotShutdown;
 import kr.kro.backas.util.MemberUtil;
@@ -70,7 +70,7 @@ public class MusicPlayerController extends ListenerAdapter {
     private final ScheduledExecutorService scheduler;
     private final LyricsSources lyricsSources;
     private final TranslationClient translationClient;
-    private final WhisperClient whisperClient;
+    private final AsrClient asrClient;
     private final AiShuffleClassifier aiShuffleClassifier;
     private final AiTrackTagger aiTrackTagger;
     private final AiPlaylistBuilder aiPlaylistBuilder;
@@ -88,14 +88,14 @@ public class MusicPlayerController extends ListenerAdapter {
     private static final long WATCHDOG_STALL_MS = Config.get().scheduler().watchdog().stallMs();
     private static final long WATCHDOG_REPORT_GAP_MS = Config.get().scheduler().watchdog().reportGapMs();
 
-    public MusicPlayerController(MusicSourceRegistry sourceRegistry, String translatorUrl, @Nullable String whisperUrl) {
+    public MusicPlayerController(MusicSourceRegistry sourceRegistry, String translatorUrl, @Nullable String asrUrl) {
         this.sourceRegistry = sourceRegistry;
         this.translationClient = new TranslationClient(translatorUrl);
-        this.whisperClient = new WhisperClient(whisperUrl);
-        if (whisperClient.isConfigured()) {
-            LOGGER.info("가사 자동 보정용 whisper 서버 {}개 등록", whisperClient.endpoints().size());
+        this.asrClient = new AsrClient(asrUrl);
+        if (asrClient.isConfigured()) {
+            LOGGER.info("가사 자동 보정용 asr 서버 {}개 등록", asrClient.endpoints().size());
         } else {
-            LOGGER.info("config.yaml 의 whisper.endpoints 가 비어 있어 가사 자동 보정을 비활성화합니다.");
+            LOGGER.info("config.yaml 의 asr.endpoints 가 비어 있어 가사 자동 보정을 비활성화합니다.");
         }
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread thread = new Thread(r, "music-scheduler");
@@ -189,8 +189,8 @@ public class MusicPlayerController extends ListenerAdapter {
         return lyricsSources;
     }
 
-    public WhisperClient getWhisperClient() {
-        return whisperClient;
+    public AsrClient getAsrClient() {
+        return asrClient;
     }
 
     public TranslationClient getTranslationClient() {

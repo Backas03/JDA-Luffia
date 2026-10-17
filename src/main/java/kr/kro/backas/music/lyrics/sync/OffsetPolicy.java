@@ -5,8 +5,8 @@ import org.jetbrains.annotations.Nullable;
 
 public final class OffsetPolicy {
 
-    public static final long TRUST_LYRICS_WITHIN_FINE_MS = Config.get().whisper().autoSync().trustLyricsWithinFineMs();
-    public static final long TRUST_LYRICS_WITHIN_COARSE_MS = Config.get().whisper().autoSync().trustLyricsWithinCoarseMs();
+    public static final long TRUST_LYRICS_WITHIN_FINE_MS = Config.get().asr().autoSync().trustLyricsWithinFineMs();
+    public static final long TRUST_LYRICS_WITHIN_COARSE_MS = Config.get().asr().autoSync().trustLyricsWithinCoarseMs();
 
     private OffsetPolicy() {
     }

@@ -31,7 +31,7 @@ public final class LyricsAligner {
     private LyricsAligner() {
     }
 
-    public static Optional<Alignment> align(List<WhisperClient.Word> words, List<LyricLine> lines, long capturedMs) {
+    public static Optional<Alignment> align(List<AsrClient.Word> words, List<LyricLine> lines, long capturedMs) {
         List<String> texts = texts(lines);
         if (Romaji.looksLike(texts)) {
             List<String> romanized = Romaji.lines(texts);
@@ -41,9 +41,9 @@ public final class LyricsAligner {
             words = Romaji.words(words);
         }
         List<Integer> tokenIndex = new ArrayList<>();
-        List<WhisperClient.Word> tokenWords = new ArrayList<>();
+        List<AsrClient.Word> tokenWords = new ArrayList<>();
         StringBuilder transcript = new StringBuilder();
-        for (WhisperClient.Word word : words) {
+        for (AsrClient.Word word : words) {
             String normalized = normalize(word.text());
             if (normalized.isEmpty()) continue;
             tokenIndex.add(transcript.length());
@@ -113,7 +113,7 @@ public final class LyricsAligner {
         }
     }
 
-    private static List<Candidate> occurrences(String text, List<Integer> tokenIndex, List<WhisperClient.Word> tokenWords,
+    private static List<Candidate> occurrences(String text, List<Integer> tokenIndex, List<AsrClient.Word> tokenWords,
                                                String target, long lineMs) {
         double[] scores = new double[tokenIndex.size()];
         int scored = 0;
@@ -159,7 +159,7 @@ public final class LyricsAligner {
         return new Support(offsets, total);
     }
 
-    static long onsetMs(WhisperClient.Word word) {
+    static long onsetMs(AsrClient.Word word) {
         return Math.max(word.startMs(), word.endMs() - plausibleDurationMs(word.text()));
     }
 
