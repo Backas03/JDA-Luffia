@@ -82,10 +82,42 @@ class LyricsTranscriberTest {
         assertFalse(LyricsTranscriber.isLyric("...♪"));
     }
 
+    private static AudioTrackInfo info(String title, String author) {
+        return new AudioTrackInfo(title, author, 200_000, "id", false, null);
+    }
+
     @Test
-    void hintsTheLanguageFromKanaOrHangulInTheTitle() {
-        assertEquals("ja", LyricsTranscriber.languageHint(new AudioTrackInfo("ハッピーシンセサイザ", "EasyPop", 200_000, "a", false, null)));
-        assertEquals("ko", LyricsTranscriber.languageHint(new AudioTrackInfo("나는 반딧불", "황가람", 200_000, "b", false, null)));
-        assertNull(LyricsTranscriber.languageHint(new AudioTrackInfo("Retry Now", "Artist", 200_000, "c", false, null)));
+    void hintsTheLanguageFromKanaOrHangulInTheTitleBeforeTheTaggedLanguage() {
+        assertEquals("ja", LyricsTranscriber.languageHint(info("ハッピーシンセサイザ", "EasyPop"), "en"));
+        assertEquals("ko", LyricsTranscriber.languageHint(info("나는 반딧불", "황가람"), null));
+        assertNull(LyricsTranscriber.languageHint(info("Retry Now", "Artist"), null));
+    }
+
+    @Test
+    void fallsBackToTheTaggedVocalLanguageForLatinTitles() {
+        assertEquals("ja", LyricsTranscriber.languageHint(info("Idol", "YOASOBI"), "ja"));
+        assertEquals("en", LyricsTranscriber.languageHint(info("Shape of You", "Ed Sheeran"), "en"));
+        assertEquals("zh", LyricsTranscriber.languageHint(info("Tian Mi Mi", "Teresa Teng"), "zh"));
+        assertNull(LyricsTranscriber.languageHint(info("Nocturne", "Chopin"), "instrumental"));
+        assertNull(LyricsTranscriber.languageHint(info("Unknown", "Artist"), "other"));
+    }
+
+    @Test
+    void promptsWithTheArtistAndTitleStrippedOfVideoNoise() {
+        assertEquals("Ayase / YOASOBI - YOASOBI「夜に駆ける」", LyricsTranscriber.prompt(info("YOASOBI「夜に駆ける」 Official Music Video", "Ayase / YOASOBI")));
+        assertEquals("Ed Sheeran - Shape of You", LyricsTranscriber.prompt(info("Shape of You [Official Video] (Lyrics)", "Ed Sheeran - Topic")));
+        assertEquals("아이유 - 좋은 날", LyricsTranscriber.prompt(info("좋은 날 (Good Day) MV", "아이유 Official")));
+        assertEquals("Ayase - YOASOBI - アイドル", LyricsTranscriber.prompt(info("YOASOBI - アイドル (Idol) 【Music Video】", "Ayase")));
+        assertEquals("YOASOBI - アイドル", LyricsTranscriber.prompt(info("YOASOBI - アイドル (Idol) 【Music Video】", "YOASOBI")));
+        assertEquals("Official髭男dism - Pretender", LyricsTranscriber.prompt(info("Pretender", "Official髭男dism")));
+    }
+
+    @Test
+    void promptIsCappedAndEmptyTitlesGiveNoPrompt() {
+        String prompt = LyricsTranscriber.prompt(info("a".repeat(150), "b".repeat(20)));
+        assertEquals(LyricsTranscriber.MAX_PROMPT_LENGTH, prompt.codePointCount(0, prompt.length()));
+        assertTrue(prompt.startsWith("bbbb"));
+        assertNull(LyricsTranscriber.prompt(info("[Official MV]", "")));
+        assertEquals("Artist", LyricsTranscriber.prompt(info("(Audio)", "Artist")));
     }
 }
