@@ -36,7 +36,7 @@ serve_asr() {
   fi
   if [ ! -x "${QWEN_ASR_VENV}/bin/python" ]; then
     echo "${QWEN_ASR_VENV} not found. create it:"
-    echo "  python3 -m venv '${QWEN_ASR_VENV}' && . '${QWEN_ASR_VENV}/bin/activate' && pip install torch --index-url https://download.pytorch.org/whl/rocm6.4 && pip install -r '${QWEN_ASR_DIR}/tools/qwen_asr_requirements.txt'"
+    echo "  curl -LsSf https://astral.sh/uv/install.sh | sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && uv venv --python 3.12 '${QWEN_ASR_VENV}' && uv pip install --python '${QWEN_ASR_VENV}/bin/python' torch --index-url https://download.pytorch.org/whl/rocm6.4 && uv pip install --python '${QWEN_ASR_VENV}/bin/python' -r '${QWEN_ASR_DIR}/tools/qwen_asr_requirements.txt'"
     return 1
   fi
   cd "${QWEN_ASR_DIR}" || return 1
