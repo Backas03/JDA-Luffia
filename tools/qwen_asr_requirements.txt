@@ -1,0 +1,7 @@
+qwen-asr
+torch
+soundfile
+librosa
+fastapi
+uvicorn
+python-multipart
