@@ -142,7 +142,8 @@ QWEN_ASR_PORT=8001 python tools/qwen_asr_server.py
 | ``QWEN_ASR_MODEL`` | ``Qwen/Qwen3-ASR-1.7B`` | ASR 모델 |
 | ``QWEN_ASR_ALIGNER`` | ``Qwen/Qwen3-ForcedAligner-0.6B`` | 단어 타임스탬프용 정렬 모델 |
 | ``QWEN_ASR_ALIGN`` | ``1`` | ``0`` 이면 정렬을 끄고 세그먼트 텍스트만 돌려줌 (평가용) |
-| ``QWEN_ASR_BACKEND`` | ``transformers`` | ``vllm`` 은 Linux 에서만 |
+| ``QWEN_ASR_BACKEND`` | ``transformers`` | ``vllm`` 은 Linux 에서만. ``llamacpp`` 는 인식을 llama-server(Qwen3-ASR GGUF)에 맡기고 정렬만 PyTorch 로 해 VRAM 을 아낌 |
+| ``QWEN_ASR_LLAMA_URL`` | ``http://127.0.0.1:8081`` | ``llamacpp`` 백엔드가 쓰는 llama-server 주소 (2026-05 이후 빌드 b9173+ 필요) |
 | ``QWEN_ASR_DEVICE`` / ``QWEN_ASR_ATTN`` | ``cuda`` / ``sdpa`` | Windows 에는 flash-attn 이 없으므로 ``sdpa`` 유지 |
 | ``QWEN_ASR_SEPARATE`` | ``off`` | ``off``: 원음 그대로. ``input``: 보컬만 분리해 인식. ``vad``: 보컬 에너지로 노래 구간만 찾아 원음을 그 구간만 인식 (환각 억제) |
 | ``QWEN_ASR_SEPARATOR_MODEL`` | ``htdemucs.yaml`` | 분리 모델. ``model_bs_roformer_ep_317_sdr_12.9755.ckpt`` 가 조금 더 정확하지만 2배 느림 |
@@ -150,6 +151,8 @@ QWEN_ASR_PORT=8001 python tools/qwen_asr_server.py
 | ``QWEN_ASR_CHUNK_SECONDS`` | ``30`` | 조용한 지점에서 자르는 길이. ``0`` 이면 자르지 않음 |
 | ``QWEN_ASR_VAD_THRESHOLD`` | ``0.1`` | ``vad`` 모드에서 노래로 볼 에너지 비율 |
 | ``QWEN_ASR_HOST`` / ``QWEN_ASR_PORT`` | ``0.0.0.0`` / ``8000`` | 바인드 주소 |
+
+런처에서 ``QWEN_ASR_LLAMA_ENABLED=1`` 로 두면 네 번째 pane 에 ``QWEN_ASR_LLAMA_BIN``(기본 ``llama-server``, ROCm HIP 빌드)으로 ``QWEN_ASR_LLAMA_MODEL``(기본 ``ggml-org/Qwen3-ASR-1.7B-GGUF:Q8_0``)을 띄우고 백엔드를 ``llamacpp`` 로 맞춥니다.
 
 ``prompt`` 폼 필드를 보내면 인식 문맥으로 전달합니다. ``language`` 가 없으면 청크별 감지 결과의 다수 언어로 고정해 어긋난 청크를 다시 인식하지만, 힌트를 주는 쪽이 훨씬 정확합니다. 정렬 모델은 한국어·일본어·영어·중국어 등 11개 언어만 지원하므로 그 밖의 언어는 ``QWEN_ASR_ALIGN=0`` 으로 씁니다.
 

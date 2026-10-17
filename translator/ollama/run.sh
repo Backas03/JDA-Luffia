@@ -13,12 +13,19 @@ export QWEN_ASR_VENV="${QWEN_ASR_VENV:-${QWEN_ASR_DIR}/.venv-qwen}"
 export QWEN_ASR_HOST="${QWEN_ASR_HOST:-0.0.0.0}"
 export QWEN_ASR_PORT="${QWEN_ASR_PORT:-8178}"
 export QWEN_ASR_SEPARATE="${QWEN_ASR_SEPARATE:-off}"
+export QWEN_ASR_LLAMA_ENABLED="${QWEN_ASR_LLAMA_ENABLED:-0}"
+export QWEN_ASR_LLAMA_BIN="${QWEN_ASR_LLAMA_BIN:-llama-server}"
+export QWEN_ASR_LLAMA_MODEL="${QWEN_ASR_LLAMA_MODEL:-ggml-org/Qwen3-ASR-1.7B-GGUF:Q8_0}"
+export QWEN_ASR_LLAMA_PORT="${QWEN_ASR_LLAMA_PORT:-8081}"
+export QWEN_ASR_LLAMA_URL="${QWEN_ASR_LLAMA_URL:-http://127.0.0.1:${QWEN_ASR_LLAMA_PORT}}"
+[ "${QWEN_ASR_LLAMA_ENABLED}" != "0" ] && export QWEN_ASR_BACKEND="${QWEN_ASR_BACKEND:-llamacpp}"
 SESSION="${AI_SERVER_TMUX_SESSION:-ai-server}"
 SCRIPT="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 OLLAMA_ENV=(OLLAMA_HOST OLLAMA_CONTEXT_LENGTH OLLAMA_KEEP_ALIVE OLLAMA_NUM_PARALLEL OLLAMA_MAX_LOADED_MODELS)
 QWEN_ENV=(QWEN_ASR_DIR QWEN_ASR_REPO QWEN_ASR_VENV QWEN_ASR_HOST QWEN_ASR_PORT QWEN_ASR_SEPARATE QWEN_ASR_MODEL QWEN_ASR_ALIGNER QWEN_ASR_ALIGN
   QWEN_ASR_ATTN QWEN_ASR_DEVICE QWEN_ASR_SEPARATOR_MODEL QWEN_ASR_SEPARATOR_OVERLAP QWEN_ASR_SEPARATOR_BATCH QWEN_ASR_CHUNK_SECONDS
-  QWEN_ASR_VAD_THRESHOLD QWEN_ASR_BATCH_SIZE QWEN_ASR_MAX_NEW_TOKENS QWEN_ASR_DTYPE)
+  QWEN_ASR_VAD_THRESHOLD QWEN_ASR_BATCH_SIZE QWEN_ASR_MAX_NEW_TOKENS QWEN_ASR_DTYPE QWEN_ASR_BACKEND QWEN_ASR_LLAMA_URL QWEN_ASR_LLAMA_TIMEOUT)
+LLAMA_ENV=(QWEN_ASR_LLAMA_BIN QWEN_ASR_LLAMA_MODEL QWEN_ASR_LLAMA_PORT QWEN_ASR_LLAMA_ARGS)
 
 serve() {
   if systemctl is-active --quiet ollama 2>/dev/null; then
@@ -43,6 +50,18 @@ serve_asr() {
   fi
   cd "${QWEN_ASR_DIR}" || return 1
   PYTHONIOENCODING=utf-8 HF_HUB_DISABLE_SYMLINKS_WARNING=1 "${QWEN_ASR_VENV}/bin/python" tools/qwen_asr_server.py
+}
+
+serve_llama() {
+  if ! command -v "${QWEN_ASR_LLAMA_BIN}" >/dev/null 2>&1; then
+    echo "${QWEN_ASR_LLAMA_BIN} not found. build llama.cpp with ROCm HIP (b9173 or newer, gfx1101 = RX 7800 XT):"
+    echo "  git clone https://github.com/ggml-org/llama.cpp \"\$HOME/llama.cpp\" && cd \"\$HOME/llama.cpp\" && HIPCXX=\"\$(hipconfig -l)/clang\" HIP_PATH=\"\$(hipconfig -R)\" cmake -S . -B build -DGGML_HIP=ON -DGPU_TARGETS=gfx1101 -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release -- -j 16"
+    echo "then add to ~/.config/ai-server.env: export QWEN_ASR_LLAMA_BIN=\$HOME/llama.cpp/build/bin/llama-server"
+    return 1
+  fi
+  local model_args=(-hf "${QWEN_ASR_LLAMA_MODEL}")
+  [ -f "${QWEN_ASR_LLAMA_MODEL}" ] && model_args=(-m "${QWEN_ASR_LLAMA_MODEL}")
+  "${QWEN_ASR_LLAMA_BIN}" "${model_args[@]}" --host 127.0.0.1 --port "${QWEN_ASR_LLAMA_PORT}" ${QWEN_ASR_LLAMA_ARGS}
 }
 
 left_pane_command() {
@@ -85,6 +104,12 @@ start_session() {
     env_args "${QWEN_ENV[@]}"
     tmux split-window -d -v -t "=${SESSION}:.1" -c "${HOME}" "${ENV_ARGS[@]}" "bash '${SCRIPT}' serve-asr"
   fi
+  if [ "${QWEN_ASR_LLAMA_ENABLED}" != "0" ]; then
+    local above=".1"
+    [ "${QWEN_ASR_ENABLED}" != "0" ] && above=".2"
+    env_args "${LLAMA_ENV[@]}"
+    tmux split-window -d -v -t "=${SESSION}:${above}" -c "${HOME}" "${ENV_ARGS[@]}" "bash '${SCRIPT}' serve-llama"
+  fi
   echo "${SESSION} started."
 }
 
@@ -106,6 +131,7 @@ port_of() {
 
 PORTS=("$(port_of "${OLLAMA_HOST}" 11434)")
 [ "${QWEN_ASR_ENABLED}" != "0" ] && PORTS+=("$(port_of "${QWEN_ASR_PORT}" 8178)")
+[ "${QWEN_ASR_LLAMA_ENABLED}" != "0" ] && PORTS+=("$(port_of "${QWEN_ASR_LLAMA_PORT}" 8081)")
 
 ports_free() {
   local port
@@ -120,7 +146,7 @@ wait_for_exit() {
     ports_free && return 0
     sleep 1
   done
-  echo "ports ${PORTS[*]} are still in use after 30s. check: ss -lntp | grep -E ':(${PORTS[0]}|${PORTS[1]:-x})'"
+  echo "ports ${PORTS[*]} are still in use after 30s. check: ss -lntp | grep -E ':($(IFS='|'; echo "${PORTS[*]}"))'"
   return 1
 }
 
@@ -163,6 +189,11 @@ case "${1:-start}" in
   serve-asr)
     serve_asr
     echo "qwen asr exited. press enter to close this pane."
+    read -r
+    ;;
+  serve-llama)
+    serve_llama
+    echo "llama-server exited. press enter to close this pane."
     read -r
     ;;
   *)

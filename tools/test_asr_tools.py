@@ -1,6 +1,10 @@
+import base64
+import io
 import os
+import struct
 import sys
 import unittest
+import wave
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -257,6 +261,94 @@ class ServerHelperTest(unittest.TestCase):
         self.assertAlmostEqual(parsed[0]["start"], 0.1)
         self.assertAlmostEqual(parsed[1]["end"], 0.9)
         self.assertEqual(qwen_asr_server.alignment_items(None, 1.0), [])
+
+
+class LlamaBackendTest(unittest.TestCase):
+    def test_settings_llamacpp(self):
+        old = dict(os.environ)
+        os.environ.update({"QWEN_ASR_BACKEND": "llamacpp", "QWEN_ASR_LLAMA_URL": "http://gpu-pc-2:8081/"})
+        try:
+            settings = qwen_asr_server.load_settings([])
+        finally:
+            os.environ.clear()
+            os.environ.update(old)
+        self.assertEqual(settings.backend, "llamacpp")
+        self.assertEqual(settings.llama_url, "http://gpu-pc-2:8081")
+        self.assertEqual(settings.llama_timeout, 300.0)
+
+    def test_wav_bytes_is_16k_mono_pcm16(self):
+        data = qwen_asr_server.wav_bytes([0.0, 0.5, -1.5, 1.0])
+        with wave.open(io.BytesIO(data), "rb") as handle:
+            self.assertEqual((handle.getnchannels(), handle.getsampwidth(), handle.getframerate(), handle.getnframes()), (1, 2, 16000, 4))
+            frames = handle.readframes(4)
+        self.assertEqual(struct.unpack("<4h", frames), (0, 16383, -32767, 32767))
+
+    def test_request_with_language_and_prompt(self):
+        body = qwen_asr_server.llama_request(b"RIFF", "Korean", "아이유 - 밤편지", 512)
+        self.assertEqual([m["role"] for m in body["messages"]], ["system", "user", "assistant"])
+        self.assertEqual(body["messages"][0]["content"], "아이유 - 밤편지")
+        part = body["messages"][1]["content"][0]
+        self.assertEqual(part["type"], "input_audio")
+        self.assertEqual(base64.b64decode(part["input_audio"]["data"]), b"RIFF")
+        self.assertEqual(body["messages"][2]["content"], "language Korean<asr_text>")
+        self.assertEqual(body["temperature"], 0)
+        self.assertEqual(body["max_tokens"], 512)
+        self.assertFalse(body["stream"])
+
+    def test_request_without_language(self):
+        body = qwen_asr_server.llama_request(b"RIFF", None, None, 64)
+        self.assertEqual([m["role"] for m in body["messages"]], ["system", "user"])
+        self.assertEqual(body["messages"][0]["content"], "")
+
+    def test_parse_output(self):
+        self.assertEqual(qwen_asr_server.parse_asr_output("language Korean<asr_text>사랑해요"), ("Korean", "사랑해요"))
+        self.assertEqual(qwen_asr_server.parse_asr_output("language japanese\n<asr_text>君の名前"), ("Japanese", "君の名前"))
+        self.assertEqual(qwen_asr_server.parse_asr_output("language None<asr_text>"), ("", ""))
+        self.assertEqual(qwen_asr_server.parse_asr_output("plain text"), ("", "plain text"))
+        self.assertEqual(qwen_asr_server.parse_asr_output(None), ("", ""))
+        self.assertEqual(qwen_asr_server.parse_asr_output(" hello ", "English"), ("English", "hello"))
+        self.assertEqual(qwen_asr_server.parse_asr_output("language English<asr_text>hello", "English"), ("English", "hello"))
+
+    def test_completion_text(self):
+        payload = {"choices": [{"message": {"role": "assistant", "content": "language English<asr_text>hi"}}]}
+        self.assertEqual(qwen_asr_server.completion_text(payload), "language English<asr_text>hi")
+        with self.assertRaises(qwen_asr_server.BackendError):
+            qwen_asr_server.completion_text({"error": {"message": "no"}})
+
+    def test_backend_pipeline_with_fake_server_and_aligner(self):
+        class Item:
+            def __init__(self, text, start, end):
+                self.text, self.start_time, self.end_time = text, start, end
+
+        class Aligner:
+            def __init__(self):
+                self.calls = []
+
+            def align(self, audio, text, language):
+                self.calls.append((len(audio), text, language))
+                return [[Item(t, 0.1, 0.5) for t in one.split()] for one in text]
+
+        sent = []
+
+        def fake_http(url, body, timeout):
+            sent.append((url, body))
+            text = "hello world" if len(sent) == 1 else "language Korean<asr_text>사랑해요"
+            return {"choices": [{"message": {"content": text}}]}
+
+        settings = qwen_asr_server.load_settings(["--backend", "llamacpp", "--batch-size", "8"])
+        backend = qwen_asr_server.LlamaBackend(settings, Aligner())
+        old = qwen_asr_server.http_json
+        qwen_asr_server.http_json = fake_http
+        try:
+            results = backend.transcribe([([0.0] * 160, 16000), ([0.1] * 160, 16000)], "ctx", None, True)
+        finally:
+            qwen_asr_server.http_json = old
+        self.assertEqual(sent[0][0], "http://127.0.0.1:8081/v1/chat/completions")
+        self.assertEqual(sent[0][1]["messages"][0]["content"], "ctx")
+        self.assertEqual([r.text for r in results], ["hello world", "사랑해요"])
+        self.assertEqual([r.language for r in results], ["", "Korean"])
+        self.assertEqual(backend.aligner.calls, [(2, ["hello world", "사랑해요"], ["English", "Korean"])])
+        self.assertEqual([i["word"] for i in qwen_asr_server.alignment_items(results[0].time_stamps, 1.0)], ["hello", "world"])
 
 
 class MultipartTest(unittest.TestCase):
