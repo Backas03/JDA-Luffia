@@ -129,6 +129,45 @@ PARAMETER num_ctx 8192
 ### Whisper
 ``whisper.endpoints`` 에 서버(``url``, ``label``)를 적으면 가사 싱크 자동 보정과 AI 가사 변환(타임스탬프 없는 가사에 시각 붙이기)이 켜집니다. 서버는 OpenAI 호환 ``/v1/audio/transcriptions`` 로 단어별 타임스탬프(``words``)를 돌려줘야 합니다. whisper.cpp 서버는 ``url`` 에 ``/inference`` 까지 적습니다 (예: ``http://gpu-pc-2:8178/inference``).
 
+### Qwen3-ASR 서버
+``tools/qwen_asr_server.py`` 는 Qwen3-ASR + Qwen3-ForcedAligner 로 같은 ``/v1/audio/transcriptions`` 응답을 만드는 서버라 ``whisper.endpoints`` 에 그대로 적으면 됩니다.
+```
+pip install torch --index-url https://download.pytorch.org/whl/cu128
+pip install -r tools/qwen_asr_requirements.txt
+QWEN_ASR_PORT=8001 python tools/qwen_asr_server.py
+```
+보컬 분리를 쓰려면 ``pip install "audio-separator[gpu]" audioread`` 를 추가로 설치하고, 이때 torch 가 CPU 빌드로 바뀌므로 첫 줄의 torch 설치를 다시 실행합니다 (torchvision 이 딸려 오면 ``pip uninstall torchvision``).
+| 변수 | 기본값 | 설명 |
+|---|---|---|
+| ``QWEN_ASR_MODEL`` | ``Qwen/Qwen3-ASR-1.7B`` | ASR 모델 |
+| ``QWEN_ASR_ALIGNER`` | ``Qwen/Qwen3-ForcedAligner-0.6B`` | 단어 타임스탬프용 정렬 모델 |
+| ``QWEN_ASR_ALIGN`` | ``1`` | ``0`` 이면 정렬을 끄고 세그먼트 텍스트만 돌려줌 (평가용) |
+| ``QWEN_ASR_BACKEND`` | ``transformers`` | ``vllm`` 은 Linux 에서만 |
+| ``QWEN_ASR_DEVICE`` / ``QWEN_ASR_ATTN`` | ``cuda`` / ``sdpa`` | Windows 에는 flash-attn 이 없으므로 ``sdpa`` 유지 |
+| ``QWEN_ASR_SEPARATE`` | ``off`` | ``off``: 원음 그대로. ``input``: 보컬만 분리해 인식. ``vad``: 보컬 에너지로 노래 구간만 찾아 원음을 그 구간만 인식 (환각 억제) |
+| ``QWEN_ASR_SEPARATOR_MODEL`` | ``htdemucs.yaml`` | 분리 모델. ``model_bs_roformer_ep_317_sdr_12.9755.ckpt`` 가 조금 더 정확하지만 2배 느림 |
+| ``QWEN_ASR_SEPARATOR_OVERLAP`` / ``QWEN_ASR_SEPARATOR_BATCH`` | ``2`` / ``4`` | BS-RoFormer 겹침 횟수와 배치. 라이브러리 기본값 8/1 은 곡당 100초가 넘게 걸림 |
+| ``QWEN_ASR_CHUNK_SECONDS`` | ``30`` | 조용한 지점에서 자르는 길이. ``0`` 이면 자르지 않음 |
+| ``QWEN_ASR_VAD_THRESHOLD`` | ``0.1`` | ``vad`` 모드에서 노래로 볼 에너지 비율 |
+| ``QWEN_ASR_HOST`` / ``QWEN_ASR_PORT`` | ``0.0.0.0`` / ``8000`` | 바인드 주소 |
+
+``prompt`` 폼 필드를 보내면 인식 문맥으로 전달합니다. ``language`` 가 없으면 청크별 감지 결과의 다수 언어로 고정해 어긋난 청크를 다시 인식하지만, 힌트를 주는 쪽이 훨씬 정확합니다. 정렬 모델은 한국어·일본어·영어·중국어 등 11개 언어만 지원하므로 그 밖의 언어는 ``QWEN_ASR_ALIGN=0`` 으로 씁니다.
+
+``tools/asr_eval.py`` 는 폴더의 곡(``.mp3`` 등)과 같은 이름의 ``.txt``/``.lrc`` 가사를 비교해 엔드포인트별 CER/WER 를 냅니다 (ffmpeg 필요, WER 은 일본어에 의미 없음). 곡 이름과 같은 ``.lang`` 파일에 ``ko`` 처럼 적으면 언어 힌트로 보냅니다.
+```
+python tools/asr_eval.py --dir songs --endpoint whisper=http://gpu-pc-1:8000 --endpoint qwen=http://gpu-pc-1:8001 --out results.json
+```
+RTX 5080, 언어 힌트 포함, 영어·한국어·일본어 1곡씩 잰 CER 과 곡당 소요 시간입니다 (표본이 작으니 참고만).
+
+| 설정 | 영어 | 한국어 | 일본어 | 곡당 |
+|---|---|---|---|---|
+| ``SEPARATE=off`` | 3.4% | 12.5% | 8.7% | 3~6초 |
+| ``SEPARATE=vad`` + htdemucs | 1.7% | 11.7% | 9.4% | 17~20초 |
+| ``SEPARATE=vad`` + BS-RoFormer | 1.3% | 12.1% | 7.5% | 약 40초 |
+| ``SEPARATE=input`` + htdemucs | 2.7% | 13.3% | 12.0% | 14~16초 |
+
+힌트 없이 일본어 곡을 넣으면 ``off`` 기준 12.4% 로 떨어지므로 Java 가 보내는 언어 힌트가 중요합니다.
+
 ### 로그
 ``logs/luffia.log`` (매일·크기별 분할, 14일 보관) 와 ``logs/luffia-error.log`` (WARN 이상) 에 기록합니다. ``config.yaml`` 의 ``logging.dir``, ``logging.level``, ``logging.console`` 로 위치·레벨·콘솔 출력을 바꿉니다.
 
