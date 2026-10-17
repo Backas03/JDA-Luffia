@@ -6,7 +6,8 @@ export OLLAMA_KEEP_ALIVE="${OLLAMA_KEEP_ALIVE:--1}"
 export OLLAMA_NUM_PARALLEL="${OLLAMA_NUM_PARALLEL:-4}"
 export OLLAMA_MAX_LOADED_MODELS="${OLLAMA_MAX_LOADED_MODELS:-1}"
 export QWEN_ASR_ENABLED="${QWEN_ASR_ENABLED:-1}"
-export QWEN_ASR_DIR="${QWEN_ASR_DIR:-${HOME}/kimnore}"
+export QWEN_ASR_DIR="${QWEN_ASR_DIR:-${HOME}/qwen-asr}"
+export QWEN_ASR_REPO="${QWEN_ASR_REPO:-https://github.com/Backas03/JDA-Luffia.git}"
 export QWEN_ASR_VENV="${QWEN_ASR_VENV:-${QWEN_ASR_DIR}/.venv-qwen}"
 export QWEN_ASR_HOST="${QWEN_ASR_HOST:-0.0.0.0}"
 export QWEN_ASR_PORT="${QWEN_ASR_PORT:-8178}"
@@ -14,7 +15,7 @@ export QWEN_ASR_SEPARATE="${QWEN_ASR_SEPARATE:-off}"
 SESSION="${OLLAMA_TMUX_SESSION:-ollama}"
 SCRIPT="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 OLLAMA_ENV=(OLLAMA_HOST OLLAMA_CONTEXT_LENGTH OLLAMA_KEEP_ALIVE OLLAMA_NUM_PARALLEL OLLAMA_MAX_LOADED_MODELS)
-QWEN_ENV=(QWEN_ASR_DIR QWEN_ASR_VENV QWEN_ASR_HOST QWEN_ASR_PORT QWEN_ASR_SEPARATE QWEN_ASR_MODEL QWEN_ASR_ALIGNER QWEN_ASR_ALIGN
+QWEN_ENV=(QWEN_ASR_DIR QWEN_ASR_REPO QWEN_ASR_VENV QWEN_ASR_HOST QWEN_ASR_PORT QWEN_ASR_SEPARATE QWEN_ASR_MODEL QWEN_ASR_ALIGNER QWEN_ASR_ALIGN
   QWEN_ASR_ATTN QWEN_ASR_DEVICE QWEN_ASR_SEPARATOR_MODEL QWEN_ASR_CHUNK_SECONDS QWEN_ASR_VAD_THRESHOLD)
 
 serve() {
@@ -28,7 +29,9 @@ serve() {
 serve_asr() {
   local server="${QWEN_ASR_DIR}/tools/qwen_asr_server.py"
   if [ ! -f "${server}" ]; then
-    echo "${server} not found. set QWEN_ASR_DIR to the JDA-Luffia checkout."
+    echo "${server} not found. fetch only tools/ from the repository:"
+    echo "  git clone --depth 1 --filter=blob:none --sparse '${QWEN_ASR_REPO}' '${QWEN_ASR_DIR}' && git -C '${QWEN_ASR_DIR}' sparse-checkout set tools"
+    echo "later updates: git -C '${QWEN_ASR_DIR}' pull"
     return 1
   fi
   if [ ! -x "${QWEN_ASR_VENV}/bin/python" ]; then
