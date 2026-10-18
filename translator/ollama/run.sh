@@ -125,6 +125,7 @@ stop_session() {
 kill_leftovers() {
   local port
   pkill -f 'ollama runner' 2>/dev/null
+  pkill -f '/lib/ollama/llama-server' 2>/dev/null
   for port in "${PORTS[@]}"; do
     fuser -k -TERM "${port}/tcp" >/dev/null 2>&1
   done
