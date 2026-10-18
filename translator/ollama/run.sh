@@ -6,26 +6,18 @@ export OLLAMA_CONTEXT_LENGTH="${OLLAMA_CONTEXT_LENGTH:-8192}"
 export OLLAMA_KEEP_ALIVE="${OLLAMA_KEEP_ALIVE:--1}"
 export OLLAMA_NUM_PARALLEL="${OLLAMA_NUM_PARALLEL:-1}"
 export OLLAMA_MAX_LOADED_MODELS="${OLLAMA_MAX_LOADED_MODELS:-1}"
-export QWEN_ASR_ENABLED="${QWEN_ASR_ENABLED:-1}"
-export QWEN_ASR_DIR="${QWEN_ASR_DIR:-${HOME}/qwen-asr}"
-export QWEN_ASR_REPO="${QWEN_ASR_REPO:-https://github.com/Backas03/JDA-Luffia.git}"
-export QWEN_ASR_VENV="${QWEN_ASR_VENV:-${QWEN_ASR_DIR}/.venv-qwen}"
-export QWEN_ASR_HOST="${QWEN_ASR_HOST:-0.0.0.0}"
-export QWEN_ASR_PORT="${QWEN_ASR_PORT:-8178}"
-export QWEN_ASR_SEPARATE="${QWEN_ASR_SEPARATE:-off}"
-export QWEN_ASR_LLAMA_ENABLED="${QWEN_ASR_LLAMA_ENABLED:-0}"
-export QWEN_ASR_LLAMA_BIN="${QWEN_ASR_LLAMA_BIN:-llama-server}"
-export QWEN_ASR_LLAMA_MODEL="${QWEN_ASR_LLAMA_MODEL:-ggml-org/Qwen3-ASR-1.7B-GGUF:Q8_0}"
-export QWEN_ASR_LLAMA_PORT="${QWEN_ASR_LLAMA_PORT:-8081}"
-export QWEN_ASR_LLAMA_URL="${QWEN_ASR_LLAMA_URL:-http://127.0.0.1:${QWEN_ASR_LLAMA_PORT}}"
-[ "${QWEN_ASR_LLAMA_ENABLED}" != "0" ] && export QWEN_ASR_BACKEND="${QWEN_ASR_BACKEND:-llamacpp}"
+export WHISPER_ENABLED="${WHISPER_ENABLED:-1}"
+export WHISPER_CPP_DIR="${WHISPER_CPP_DIR:-${HOME}/whisper.cpp}"
+export WHISPER_BIN="${WHISPER_BIN:-${WHISPER_CPP_DIR}/build/bin/whisper-server}"
+export WHISPER_MODEL="${WHISPER_MODEL:-${WHISPER_CPP_DIR}/models/ggml-large-v3-turbo-q8_0.bin}"
+export WHISPER_HOST="${WHISPER_HOST:-0.0.0.0}"
+export WHISPER_PORT="${WHISPER_PORT:-8178}"
+export WHISPER_INFERENCE_PATH="${WHISPER_INFERENCE_PATH:-/v1/audio/transcriptions}"
+export WHISPER_ARGS="${WHISPER_ARGS--fa}"
 SESSION="${AI_SERVER_TMUX_SESSION:-ai-server}"
 SCRIPT="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 OLLAMA_ENV=(OLLAMA_HOST OLLAMA_CONTEXT_LENGTH OLLAMA_KEEP_ALIVE OLLAMA_NUM_PARALLEL OLLAMA_MAX_LOADED_MODELS)
-QWEN_ENV=(QWEN_ASR_DIR QWEN_ASR_REPO QWEN_ASR_VENV QWEN_ASR_HOST QWEN_ASR_PORT QWEN_ASR_SEPARATE QWEN_ASR_MODEL QWEN_ASR_ALIGNER QWEN_ASR_ALIGN
-  QWEN_ASR_ATTN QWEN_ASR_DEVICE QWEN_ASR_SEPARATOR_MODEL QWEN_ASR_SEPARATOR_OVERLAP QWEN_ASR_SEPARATOR_BATCH QWEN_ASR_CHUNK_SECONDS
-  QWEN_ASR_VAD_THRESHOLD QWEN_ASR_BATCH_SIZE QWEN_ASR_MAX_NEW_TOKENS QWEN_ASR_DTYPE QWEN_ASR_BACKEND QWEN_ASR_LLAMA_URL QWEN_ASR_LLAMA_TIMEOUT)
-LLAMA_ENV=(QWEN_ASR_LLAMA_BIN QWEN_ASR_LLAMA_MODEL QWEN_ASR_LLAMA_PORT QWEN_ASR_LLAMA_ARGS)
+WHISPER_ENV=(WHISPER_CPP_DIR WHISPER_BIN WHISPER_MODEL WHISPER_HOST WHISPER_PORT WHISPER_INFERENCE_PATH WHISPER_ARGS)
 
 serve() {
   if systemctl is-active --quiet ollama 2>/dev/null; then
@@ -35,33 +27,19 @@ serve() {
   ollama serve
 }
 
-serve_asr() {
-  local server="${QWEN_ASR_DIR}/tools/qwen_asr_server.py"
-  if [ ! -f "${server}" ]; then
-    echo "${server} not found. fetch only tools/ from the repository:"
-    echo "  git clone --depth 1 --filter=blob:none --sparse '${QWEN_ASR_REPO}' '${QWEN_ASR_DIR}' && git -C '${QWEN_ASR_DIR}' sparse-checkout set tools"
-    echo "later updates: git -C '${QWEN_ASR_DIR}' pull"
+serve_whisper() {
+  if ! command -v "${WHISPER_BIN}" >/dev/null 2>&1; then
+    echo "${WHISPER_BIN} not found. build whisper.cpp with Vulkan (needs libvulkan-dev and glslc):"
+    echo "  git clone https://github.com/ggml-org/whisper.cpp '${WHISPER_CPP_DIR}' && cd '${WHISPER_CPP_DIR}' && cmake -B build -DGGML_VULKAN=1 -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release -j 16"
     return 1
   fi
-  if [ ! -x "${QWEN_ASR_VENV}/bin/python" ]; then
-    echo "${QWEN_ASR_VENV} not found. create it:"
-    echo "  curl -LsSf https://astral.sh/uv/install.sh | sh && export PATH=\"\$HOME/.local/bin:\$PATH\" && uv venv --python 3.12 '${QWEN_ASR_VENV}' && uv pip install --python '${QWEN_ASR_VENV}/bin/python' torch --index-url https://download.pytorch.org/whl/rocm6.4 && uv pip install --python '${QWEN_ASR_VENV}/bin/python' -r '${QWEN_ASR_DIR}/tools/qwen_asr_requirements.txt'"
+  if [ ! -f "${WHISPER_MODEL}" ]; then
+    echo "${WHISPER_MODEL} not found. download it:"
+    echo "  sh '${WHISPER_CPP_DIR}/models/download-ggml-model.sh' large-v3-turbo-q8_0"
     return 1
   fi
-  cd "${QWEN_ASR_DIR}" || return 1
-  PYTHONIOENCODING=utf-8 HF_HUB_DISABLE_SYMLINKS_WARNING=1 "${QWEN_ASR_VENV}/bin/python" tools/qwen_asr_server.py
-}
-
-serve_llama() {
-  if ! command -v "${QWEN_ASR_LLAMA_BIN}" >/dev/null 2>&1; then
-    echo "${QWEN_ASR_LLAMA_BIN} not found. build llama.cpp with ROCm HIP (b9173 or newer, gfx1101 = RX 7800 XT):"
-    echo "  git clone https://github.com/ggml-org/llama.cpp \"\$HOME/llama.cpp\" && cd \"\$HOME/llama.cpp\" && HIPCXX=\"\$(hipconfig -l)/clang\" HIP_PATH=\"\$(hipconfig -R)\" cmake -S . -B build -DGGML_HIP=ON -DGPU_TARGETS=gfx1101 -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release -- -j 16"
-    echo "then add to ~/.config/ai-server.env: export QWEN_ASR_LLAMA_BIN=\$HOME/llama.cpp/build/bin/llama-server"
-    return 1
-  fi
-  local model_args=(-hf "${QWEN_ASR_LLAMA_MODEL}")
-  [ -f "${QWEN_ASR_LLAMA_MODEL}" ] && model_args=(-m "${QWEN_ASR_LLAMA_MODEL}")
-  "${QWEN_ASR_LLAMA_BIN}" "${model_args[@]}" --host 127.0.0.1 --port "${QWEN_ASR_LLAMA_PORT}" ${QWEN_ASR_LLAMA_ARGS}
+  "${WHISPER_BIN}" -m "${WHISPER_MODEL}" --host "${WHISPER_HOST}" --port "${WHISPER_PORT}" \
+    --inference-path "${WHISPER_INFERENCE_PATH}" ${WHISPER_ARGS}
 }
 
 left_pane_command() {
@@ -100,15 +78,9 @@ start_session() {
   tmux new-session -d -s "${SESSION}" -c "${HOME}" "$(left_pane_command)"
   env_args "${OLLAMA_ENV[@]}"
   tmux split-window -d -h -t "=${SESSION}:" -c "${HOME}" "${ENV_ARGS[@]}" "bash '${SCRIPT}' serve"
-  if [ "${QWEN_ASR_ENABLED}" != "0" ]; then
-    env_args "${QWEN_ENV[@]}"
-    tmux split-window -d -v -t "=${SESSION}:.1" -c "${HOME}" "${ENV_ARGS[@]}" "bash '${SCRIPT}' serve-asr"
-  fi
-  if [ "${QWEN_ASR_LLAMA_ENABLED}" != "0" ]; then
-    local above=".1"
-    [ "${QWEN_ASR_ENABLED}" != "0" ] && above=".2"
-    env_args "${LLAMA_ENV[@]}"
-    tmux split-window -d -v -t "=${SESSION}:${above}" -c "${HOME}" "${ENV_ARGS[@]}" "bash '${SCRIPT}' serve-llama"
+  if [ "${WHISPER_ENABLED}" != "0" ]; then
+    env_args "${WHISPER_ENV[@]}"
+    tmux split-window -d -v -t "=${SESSION}:.1" -c "${HOME}" "${ENV_ARGS[@]}" "bash '${SCRIPT}' serve-whisper"
   fi
   echo "${SESSION} started."
 }
@@ -139,8 +111,7 @@ port_of() {
 }
 
 PORTS=("$(port_of "${OLLAMA_HOST}" 11434)")
-[ "${QWEN_ASR_ENABLED}" != "0" ] && PORTS+=("$(port_of "${QWEN_ASR_PORT}" 8178)")
-[ "${QWEN_ASR_LLAMA_ENABLED}" != "0" ] && PORTS+=("$(port_of "${QWEN_ASR_LLAMA_PORT}" 8081)")
+[ "${WHISPER_ENABLED}" != "0" ] && PORTS+=("$(port_of "${WHISPER_PORT}" 8178)")
 
 ports_free() {
   local port
@@ -195,14 +166,9 @@ case "${1:-start}" in
     echo "ollama exited. press enter to close this pane."
     read -r
     ;;
-  serve-asr)
-    serve_asr
-    echo "qwen asr exited. press enter to close this pane."
-    read -r
-    ;;
-  serve-llama)
-    serve_llama
-    echo "llama-server exited. press enter to close this pane."
+  serve-whisper)
+    serve_whisper
+    echo "whisper.cpp exited. press enter to close this pane."
     read -r
     ;;
   *)
