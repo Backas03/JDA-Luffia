@@ -97,7 +97,7 @@ asr:
 | Ollama (GPU, 가장 빠름) | ``ollama pull gemma4:12b`` | ``http://127.0.0.1:11434`` |
 
 - llama.cpp 는 RAM 약 6GB 를 씁니다. 포트는 ``TRANSLATOR_PORT``, 스레드는 ``LLM_THREADS`` 로 바꿉니다. Windows GPU PC 는 llama.cpp CUDA 릴리스를 ``translator/llm/bin`` 에 풀고 ``run-gpu.bat`` 로 실행합니다.
-- Ollama 는 ``OLLAMA_CONTEXT_LENGTH=8192``, ``OLLAMA_KEEP_ALIVE=-1`` 을 권장합니다. 다른 PC 에서 접속하면 ``OLLAMA_HOST=0.0.0.0`` 도 설정합니다. Linux 에서는 ``translator/ollama/run.sh`` 를 ``~/ai-server.sh`` 로 복사해 ``~/ai-server.sh start`` 로 tmux 세션 ``ai-server`` 에 띄웁니다 (``start|stop|restart|view``). 같은 세션에 Qwen3-ASR 서버도 함께 올립니다. ``QWEN_ASR_DIR`` (기본 ``~/qwen-asr``) 에 저장소의 ``tools/`` 만 sparse clone 해 두고 그 안의 ``.venv-qwen`` 을 쓰며, 없으면 해당 pane 에 받는 명령을 찍어 줍니다. ``QWEN_ASR_ENABLED=0`` 으로 끕니다. 서버별 값은 ``~/.config/ai-server.env`` 에 ``export QWEN_ASR_MODEL=Qwen/Qwen3-ASR-0.6B`` 처럼 적어 두면 런처가 읽습니다.
+- Ollama 는 ``OLLAMA_CONTEXT_LENGTH=8192``, ``OLLAMA_KEEP_ALIVE=-1`` 을 권장합니다. 다른 PC 에서 접속하면 ``OLLAMA_HOST=0.0.0.0`` 도 설정합니다. Linux 에서는 ``translator/ollama/run.sh`` 를 ``~/ai-server.sh`` 로 복사해 ``~/ai-server.sh start`` 로 tmux 세션 ``ai-server`` 에 띄웁니다 (``start|stop|restart|view``). 같은 세션에 whisper.cpp 서버도 ``8178`` 포트로 함께 올립니다. ``WHISPER_CPP_DIR`` (기본 ``~/whisper.cpp``) 의 ``build/bin/whisper-server`` 와 ``models/ggml-large-v3-turbo-q8_0.bin`` 을 쓰며, 없으면 해당 pane 에 Vulkan 빌드·모델 받는 명령을 찍어 줍니다. ``WHISPER_ENABLED=0`` 으로 끕니다. 서버별 값은 ``~/.config/ai-server.env`` 에 ``export WHISPER_MODEL=$HOME/whisper.cpp/models/ggml-large-v3-turbo.bin`` 처럼 적어 두면 런처가 읽습니다 (추가 인자는 ``WHISPER_ARGS``, 기본 ``-fa``).
 - 모델은 ``llm.model-override`` 로 고정합니다 (서버별 ``model`` 이 우선).
 
 ### 여러 GPU 서버
@@ -127,7 +127,7 @@ PARAMETER num_ctx 8192
 ```
 
 ### ASR 서버
-``asr.endpoints`` 에 서버(``url``, ``label``)를 적으면 가사 싱크 자동 보정, AI 가사 변환(타임스탬프 없는 가사에 시각 붙이기), 가사가 없을 때의 AI 전사가 켜집니다. 예전 키 ``whisper`` 와 ``LUFFIA_WHISPER_*`` 도 당분간 읽습니다. 서버는 OpenAI 호환 ``/v1/audio/transcriptions`` 로 단어별 타임스탬프(``words``)를 돌려줘야 합니다. whisper.cpp 서버는 ``url`` 에 ``/inference`` 까지 적습니다 (예: ``http://gpu-pc-2:8178/inference``).
+``asr.endpoints`` 에 서버(``url``, ``label``)를 적으면 가사 싱크 자동 보정, AI 가사 변환(타임스탬프 없는 가사에 시각 붙이기), 가사가 없을 때의 AI 전사가 켜집니다. 예전 키 ``whisper`` 와 ``LUFFIA_WHISPER_*`` 도 당분간 읽습니다. 서버는 OpenAI 호환 ``/v1/audio/transcriptions`` 로 단어별 타임스탬프(``words``)를 돌려줘야 합니다. whisper.cpp 서버는 ``url`` 에 ``/inference`` 까지 적습니다 (예: ``http://gpu-pc-2:8178/inference``). 런처로 띄운 whisper.cpp 는 ``--inference-path /v1/audio/transcriptions`` 로 뜨므로 주소만 적습니다 (예: ``http://gpu-pc-2:8178``).
 
 ### Qwen3-ASR 서버
 ``tools/qwen_asr_server.py`` 는 Qwen3-ASR + Qwen3-ForcedAligner 로 같은 ``/v1/audio/transcriptions`` 응답을 만드는 서버라 ``asr.endpoints`` 에 그대로 적으면 됩니다.
@@ -151,8 +151,6 @@ QWEN_ASR_PORT=8001 python tools/qwen_asr_server.py
 | ``QWEN_ASR_CHUNK_SECONDS`` | ``30`` | 조용한 지점에서 자르는 길이. ``0`` 이면 자르지 않음 |
 | ``QWEN_ASR_VAD_THRESHOLD`` | ``0.1`` | ``vad`` 모드에서 노래로 볼 에너지 비율 |
 | ``QWEN_ASR_HOST`` / ``QWEN_ASR_PORT`` | ``0.0.0.0`` / ``8000`` | 바인드 주소 |
-
-런처에서 ``QWEN_ASR_LLAMA_ENABLED=1`` 로 두면 네 번째 pane 에 ``QWEN_ASR_LLAMA_BIN``(기본 ``llama-server``, ROCm HIP 빌드)으로 ``QWEN_ASR_LLAMA_MODEL``(기본 ``ggml-org/Qwen3-ASR-1.7B-GGUF:Q8_0``)을 띄우고 백엔드를 ``llamacpp`` 로 맞춥니다.
 
 ``prompt`` 폼 필드를 보내면 인식 문맥으로 전달합니다. ``language`` 가 없으면 청크별 감지 결과의 다수 언어로 고정해 어긋난 청크를 다시 인식하지만, 힌트를 주는 쪽이 훨씬 정확합니다. 정렬 모델은 한국어·일본어·영어·중국어 등 11개 언어만 지원하므로 그 밖의 언어는 ``QWEN_ASR_ALIGN=0`` 으로 씁니다.
 
