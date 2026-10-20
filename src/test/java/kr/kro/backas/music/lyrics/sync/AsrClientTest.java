@@ -7,6 +7,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AsrClientTest {
@@ -54,6 +55,52 @@ class AsrClientTest {
     }
 
     @Test
+    void asksTheServerToDetectTheLanguageWhenThereIsNoHint() throws Exception {
+        for (String language : new String[]{null, "", "  "}) {
+            String text = new String(AsrClient.multipart("xyz", new byte[]{1}, language, null), StandardCharsets.UTF_8);
+            assertTrue(text.contains("name=\"language\"\r\n\r\nauto\r\n"));
+        }
+        String hinted = new String(AsrClient.multipart("xyz", new byte[]{1}, " ko ", null), StandardCharsets.UTF_8);
+        assertTrue(hinted.contains("name=\"language\"\r\n\r\nko\r\n"));
+    }
+
+    @Test
+    void restoresKoreanSyllablesThatWhisperCppSplitAcrossTokens() throws Exception {
+        String json = "{\"segments\":[{\"start\":0.0,\"end\":12.0,\"text\":\" 별을 쫓아 달려왔죠\",\"words\":["
+                + "{\"word\":\" 별\",\"start\":0.5,\"end\":1.5},{\"word\":\"을\",\"start\":1.5,\"end\":2.99},"
+                + "{\"word\":\" �\",\"start\":2.99,\"end\":3.99},{\"word\":\"�\",\"start\":3.99,\"end\":4.48},"
+                + "{\"word\":\"아\",\"start\":4.48,\"end\":5.96},{\"word\":\" 달�\",\"start\":5.97,\"end\":7.97},"
+                + "{\"word\":\"��\",\"start\":7.97,\"end\":8.96},{\"word\":\"왔\",\"start\":8.96,\"end\":10.45},"
+                + "{\"word\":\"죠\",\"start\":10.45,\"end\":12.0}]}]}";
+        List<AsrClient.Word> words = AsrClient.parseWords(json);
+        assertEquals(List.of(
+                new AsrClient.Word("별", 500, 1_500),
+                new AsrClient.Word("을", 1_500, 2_990),
+                new AsrClient.Word("쫓", 2_990, 4_480),
+                new AsrClient.Word("아", 4_480, 5_960),
+                new AsrClient.Word("달려", 5_970, 8_960),
+                new AsrClient.Word("왔", 8_960, 10_450),
+                new AsrClient.Word("죠", 10_450, 12_000)), words);
+    }
+
+    @Test
+    void restoresACharacterSplitAtTheEndOfASegment() {
+        List<AsrClient.Word> tokens = List.of(new AsrClient.Word(" 끝", 0, 100), new AsrClient.Word("�", 100, 200),
+                new AsrClient.Word("�", 200, 300));
+        assertEquals(List.of(new AsrClient.Word(" 끝", 0, 100), new AsrClient.Word("까", 100, 300)),
+                AsrClient.repairSplitCharacters(" 끝까", tokens));
+    }
+
+    @Test
+    void keepsTheOldBehaviourWhenTheSegmentTextCannotBeTrusted() {
+        List<AsrClient.Word> tokens = List.of(new AsrClient.Word(" 별", 0, 100), new AsrClient.Word("�", 100, 200));
+        assertNull(AsrClient.repairSplitCharacters(" 별�", tokens));
+        assertNull(AsrClient.repairSplitCharacters(" 달", tokens));
+        assertNull(AsrClient.repairSplitCharacters(" 별 a", tokens));
+        assertNull(AsrClient.repairSplitCharacters(" 별을", List.of(new AsrClient.Word(" 별을", 0, 100))));
+    }
+
+    @Test
     void readsSegmentTextAndTimesForTranscription() throws Exception {
         String json = "{\"segments\":[{\"start\":1.5,\"end\":3.25,\"text\":\" 君の声 \"},"
                 + "{\"start\":4,\"end\":5,\"text\":\"�\"},{\"start\":6,\"end\":5.5,\"text\":\"夜\"}]}";
@@ -86,7 +133,7 @@ class AsrClientTest {
         byte[] body = AsrClient.multipart("xyz", new byte[]{1}, null, " YOASOBI - 夜に駆ける ");
         String text = new String(body, StandardCharsets.UTF_8);
         assertTrue(text.contains("--xyz\r\nContent-Disposition: form-data; name=\"prompt\"\r\n\r\nYOASOBI - 夜に駆ける\r\n"));
-        assertFalse(text.contains("name=\"language\""));
+        assertTrue(text.contains("name=\"language\"\r\n\r\nauto\r\n"));
         String blank = new String(AsrClient.multipart("xyz", new byte[]{1}, null, "   "), StandardCharsets.UTF_8);
         assertFalse(blank.contains("name=\"prompt\""));
     }
