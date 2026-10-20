@@ -40,6 +40,8 @@ public final class AsrClient {
     static final long RETRY_FAILED_MS = Config.get().asr().retryFailedSeconds() * 1000L;
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(3);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(90);
+    static final String AUTO_LANGUAGE = "auto";
+    private static final char BROKEN = '�';
 
     private final List<Endpoint> endpoints;
     private final Map<String, Long> failedAt = new ConcurrentHashMap<>();
@@ -141,10 +143,9 @@ public final class AsrClient {
                 + "Content-Type: audio/wav\r\n\r\n").getBytes(StandardCharsets.UTF_8));
         out.write(wav);
         out.write("\r\n".getBytes(StandardCharsets.UTF_8));
-        if (language != null && !language.isBlank()) {
-            out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"language\"\r\n\r\n" + language + "\r\n")
-                    .getBytes(StandardCharsets.UTF_8));
-        }
+        String sentLanguage = language == null || language.isBlank() ? AUTO_LANGUAGE : language.strip();
+        out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"language\"\r\n\r\n" + sentLanguage + "\r\n")
+                .getBytes(StandardCharsets.UTF_8));
         if (prompt != null && !prompt.isBlank()) {
             out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"prompt\"\r\n\r\n" + prompt.strip() + "\r\n")
                     .getBytes(StandardCharsets.UTF_8));
@@ -162,9 +163,78 @@ public final class AsrClient {
         List<Word> words = new ArrayList<>();
         addWords(root.path("words"), words);
         if (words.isEmpty()) {
-            for (JsonNode segment : root.path("segments")) addWords(segment.path("words"), words);
+            for (JsonNode segment : root.path("segments")) addSegmentWords(segment, words);
         }
         return words;
+    }
+
+    private static void addSegmentWords(JsonNode segment, List<Word> words) {
+        List<Word> tokens = new ArrayList<>();
+        for (JsonNode node : segment.path("words")) {
+            long start = Math.round(node.path("start").asDouble(0) * 1000);
+            long end = Math.round(node.path("end").asDouble(0) * 1000);
+            tokens.add(new Word(node.path("word").asText(""), start, Math.max(start, end)));
+        }
+        List<Word> repaired = repairSplitCharacters(segment.path("text").asText(""), tokens);
+        for (Word token : repaired == null ? tokens : repaired) {
+            String text = token.text().replace(String.valueOf(BROKEN), "");
+            if (text.isBlank()) continue;
+            words.add(new Word(text.trim(), token.startMs(), token.endMs()));
+        }
+    }
+
+    @Nullable
+    static List<Word> repairSplitCharacters(String text, List<Word> tokens) {
+        if (text.indexOf(BROKEN) >= 0) return null;
+        boolean broken = false;
+        for (Word token : tokens) broken |= token.text().indexOf(BROKEN) >= 0;
+        if (!broken) return null;
+        List<StringBuilder> rebuilt = new ArrayList<>(tokens.size());
+        int cursor = 0;
+        int owner = -1;
+        for (int i = 0; i < tokens.size(); i++) {
+            StringBuilder current = new StringBuilder();
+            rebuilt.add(current);
+            String token = tokens.get(i).text();
+            for (int k = 0; k < token.length(); k++) {
+                char c = token.charAt(k);
+                if (c == BROKEN) {
+                    if (owner < 0) owner = i;
+                    continue;
+                }
+                int at = owner < 0 ? cursor : text.indexOf(c, cursor + 1);
+                if (at < 0 || at >= text.length() || text.charAt(at) != c) return null;
+                if (owner >= 0) {
+                    if (!restoreInto(rebuilt.get(owner), text, cursor, at)) return null;
+                    owner = -1;
+                }
+                current.append(c);
+                cursor = at + 1;
+            }
+        }
+        if (owner >= 0 && !restoreInto(rebuilt.get(owner), text, cursor, text.length())) return null;
+        if (owner < 0 && !text.substring(cursor).isBlank()) return null;
+        List<Word> words = new ArrayList<>(tokens.size());
+        for (int i = 0; i < tokens.size(); i++) {
+            Word token = tokens.get(i);
+            String restored = rebuilt.get(i).toString();
+            if (restored.isEmpty() && !words.isEmpty()) {
+                Word last = words.removeLast();
+                words.add(new Word(last.text(), last.startMs(), Math.max(last.endMs(), token.endMs())));
+                continue;
+            }
+            words.add(new Word(restored, token.startMs(), token.endMs()));
+        }
+        return words;
+    }
+
+    private static boolean restoreInto(StringBuilder owner, String text, int from, int to) {
+        if (to <= from) return false;
+        for (int k = from; k < to; k++) {
+            if (text.charAt(k) < 0x80) return false;
+        }
+        owner.append(text, from, to);
+        return true;
     }
 
     static List<Segment> parseSegments(String json) throws IOException {

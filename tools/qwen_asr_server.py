@@ -210,6 +210,16 @@ def wav_bytes(samples, rate=SAMPLE_RATE):
     return buffer.getvalue()
 
 
+def requested_language(language):
+    code = (language or "").strip()
+    if not code or code.lower() == "auto":
+        return None
+    name = language_name(code)
+    if name is None:
+        raise AudioError("unsupported language: " + code)
+    return name
+
+
 def language_prefill(name):
     return LANGUAGE_PREFIX + name + ASR_TEXT_TAG
 
@@ -403,11 +413,7 @@ class Engine:
             LOGGER.info("separator %s ready (mode=%s)", settings.separator_model, settings.separate)
 
     def transcribe(self, data, filename, language, prompt):
-        name = None
-        if language and language.strip():
-            name = language_name(language)
-            if name is None:
-                raise AudioError("unsupported language: " + language)
+        name = requested_language(language)
         mix = decode_audio(data)
         duration = len(mix) / SAMPLE_RATE
         with self.lock:

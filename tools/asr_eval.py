@@ -91,8 +91,7 @@ def multipart(boundary, wav, language):
         wav,
         b"\r\n",
     ]
-    if language:
-        parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"language\"\r\n\r\n{language}\r\n".encode())
+    parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"language\"\r\n\r\n{language or 'auto'}\r\n".encode())
     parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\nverbose_json\r\n".encode())
     parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"max_context\"\r\n\r\n0\r\n".encode())
     parts.append(f"--{boundary}--\r\n".encode())
