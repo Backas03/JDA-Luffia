@@ -29,7 +29,7 @@ def transcribe(file: UploadFile = File(...), language: str | None = Form(None), 
     data = file.file.read()
     segments, info = model.transcribe(
         io.BytesIO(data),
-        language=language or None,
+        language=None if (language or "").strip().lower() in ("", "auto") else language.strip(),
         initial_prompt=prompt or None,
         word_timestamps=True,
         beam_size=5,

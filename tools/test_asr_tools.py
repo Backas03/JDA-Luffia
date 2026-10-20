@@ -300,6 +300,15 @@ class LlamaBackendTest(unittest.TestCase):
         self.assertEqual([m["role"] for m in body["messages"]], ["system", "user"])
         self.assertEqual(body["messages"][0]["content"], "")
 
+    def test_requested_language_treats_auto_as_no_hint(self):
+        self.assertIsNone(qwen_asr_server.requested_language(None))
+        self.assertIsNone(qwen_asr_server.requested_language(" "))
+        self.assertIsNone(qwen_asr_server.requested_language("auto"))
+        self.assertIsNone(qwen_asr_server.requested_language("AUTO"))
+        self.assertEqual(qwen_asr_server.requested_language(" ko "), "Korean")
+        with self.assertRaises(qwen_asr_server.AudioError):
+            qwen_asr_server.requested_language("xx")
+
     def test_parse_output(self):
         self.assertEqual(qwen_asr_server.parse_asr_output("language Korean<asr_text>사랑해요"), ("Korean", "사랑해요"))
         self.assertEqual(qwen_asr_server.parse_asr_output("language japanese\n<asr_text>君の名前"), ("Japanese", "君の名前"))
@@ -359,7 +368,7 @@ class MultipartTest(unittest.TestCase):
         self.assertIn(b'name="response_format"\r\n\r\nverbose_json\r\n', body)
         self.assertIn(b'name="max_context"\r\n\r\n0\r\n', body)
         self.assertTrue(body.endswith(b"--b--\r\n"))
-        self.assertNotIn(b'name="language"', asr_eval.multipart("b", b"RIFF", None))
+        self.assertIn(b'name="language"\r\n\r\nauto\r\n', asr_eval.multipart("b", b"RIFF", None))
 
 
 if __name__ == "__main__":
