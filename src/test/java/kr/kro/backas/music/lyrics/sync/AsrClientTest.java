@@ -1,9 +1,12 @@
 package kr.kro.backas.music.lyrics.sync;
 
+import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -98,6 +101,31 @@ class AsrClientTest {
         assertNull(AsrClient.repairSplitCharacters(" 달", tokens));
         assertNull(AsrClient.repairSplitCharacters(" 별 a", tokens));
         assertNull(AsrClient.repairSplitCharacters(" 별을", List.of(new AsrClient.Word(" 별을", 0, 100))));
+    }
+
+    @Test
+    void sendsAudioWithoutTheQuietIntroAndShiftsTimesBack() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        AtomicInteger received = new AtomicInteger();
+        server.createContext("/v1/audio/transcriptions", exchange -> {
+            received.set(exchange.getRequestBody().readAllBytes().length);
+            byte[] body = ("{\"segments\":[{\"start\":1.0,\"end\":2.0,\"text\":\"夜\","
+                    + "\"words\":[{\"word\":\"夜\",\"start\":1.0,\"end\":1.5}]}]}").getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+        try {
+            byte[] wav = LeadingQuietTest.wav(7.6, 0.02, 25, 0.3);
+            AsrClient client = new AsrClient("http://127.0.0.1:" + server.getAddress().getPort());
+            AsrClient.Transcript transcript = client.transcribeDetailed(wav, "ja", null);
+            assertTrue(received.get() < wav.length - 6_600 * 32 + 1_000);
+            assertEquals(new AsrClient.Word("夜", 7_600, 8_100), transcript.words().get(0));
+            assertEquals(new AsrClient.Segment(7_600, 8_600, "夜"), transcript.segments().get(0));
+        } finally {
+            server.stop(0);
+        }
     }
 
     @Test

@@ -33,6 +33,14 @@ public final class AsrClient {
     }
 
     public record Transcript(List<Word> words, List<Segment> segments) {
+        Transcript shifted(long ms) {
+            if (ms == 0) return this;
+            List<Word> movedWords = new ArrayList<>(words.size());
+            for (Word word : words) movedWords.add(new Word(word.text(), word.startMs() + ms, word.endMs() + ms));
+            List<Segment> movedSegments = new ArrayList<>(segments.size());
+            for (Segment segment : segments) movedSegments.add(new Segment(segment.startMs() + ms, segment.endMs() + ms, segment.text()));
+            return new Transcript(movedWords, movedSegments);
+        }
     }
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AsrClient.class);
@@ -99,11 +107,14 @@ public final class AsrClient {
     }
 
     public Transcript transcribeDetailed(byte[] wav, @Nullable String language, @Nullable String prompt) throws IOException {
+        long skipMs = LeadingQuiet.skipMs(wav);
+        byte[] sent = skipMs > 0 ? LeadingQuiet.drop(wav, skipMs) : wav;
+        if (skipMs > 0) LOGGER.debug("skipping {}ms of quiet lead-in before asr", skipMs);
         IOException last = null;
         for (Endpoint endpoint : endpoints) {
             if (isDown(endpoint)) continue;
             try {
-                Transcript transcript = request(endpoint, wav, language, prompt);
+                Transcript transcript = request(endpoint, sent, language, prompt).shifted(skipMs);
                 failedAt.remove(endpoint.baseUrl());
                 return transcript;
             } catch (IOException e) {
