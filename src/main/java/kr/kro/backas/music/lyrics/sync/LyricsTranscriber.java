@@ -37,7 +37,7 @@ public final class LyricsTranscriber {
     private record Sung(long onsetMs, long endMs) {
     }
 
-    static final int VERSION = 4;
+    static final int VERSION = 5;
     static final long REST_GAP_MS = 3_000;
     static final long REST_DELAY_MS = 500;
     static final long SNAP_MS = 30;
