@@ -29,6 +29,7 @@ class ConfigTest {
         LuffiaConfig config = Config.load(null);
         assertEquals("", config.discord().token());
         assertEquals(10, config.musicPlayer().defaultVolume());
+        assertEquals(192, config.musicPlayer().opusBitrateKbps());
         assertEquals(1200, config.lyrics().display().minEditIntervalMs());
         assertEquals(450, config.lyrics().lead().renderMarginMs());
         assertEquals("KR", config.sources().spotify().country());

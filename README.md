@@ -63,6 +63,7 @@ asr:
 | ``discord.service-guilds`` | 명령어를 받을 서버 id. 비우면 모든 서버 |
 | ``riot.api-key`` | 롤 전적 검색 |
 | ``sources.spotify.*`` | 스포티파이 지원. 비우면 스포티파이만 꺼짐 (앱 소유자 Premium 필요) |
+| ``music-player.opus-bitrate-kbps`` | 볼륨·이퀄라이저 때문에 다시 인코딩할 때의 Opus 비트레이트 (기본 192). ``0`` 이면 lavaplayer 기본값(약 99kbps) |
 | ``llm.*`` | 가사 번역·AI 서버. 아래 "가사 번역" |
 | ``asr.endpoints`` | 가사 싱크 보정·AI 가사 변환·AI 가사 전사. 아래 "ASR 서버" |
 
