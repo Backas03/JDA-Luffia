@@ -127,6 +127,18 @@ public class MusicPlayerController extends ListenerAdapter {
         this.ownedBots = new CopyOnWriteArrayList<>();
         this.clients = new ConcurrentHashMap<>();
         this.searchData = new ConcurrentHashMap<>();
+        sourceRegistry.getSourceQualities().onRecorded(this::onSourceQualityRecorded);
+    }
+
+    // 원본 음질은 재생이 시작된 뒤 재생 스레드에서 알게 되므로, 그 곡을 틀고 있는 카드만 다시 그린다.
+    private void onSourceQualityRecorded(String videoId) {
+        scheduler.execute(() -> {
+            for (MusicPlayerClient client : clients.values()) {
+                if (videoId.equals(sourceRegistry.getSourceQualities().videoIdOf(client.getAudioPlayer().getPlayingTrack()))) {
+                    client.refreshTrackCard();
+                }
+            }
+        });
     }
 
     public void register(String botToken) throws InterruptedException {

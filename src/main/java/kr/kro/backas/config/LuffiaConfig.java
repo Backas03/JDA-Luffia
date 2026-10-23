@@ -46,7 +46,7 @@ public record LuffiaConfig(Bot bot,
                           String tokenEndpoint) {
     }
 
-    public record MusicPlayer(int defaultVolume, int connectGraceSeconds, Karaoke karaoke) {
+    public record MusicPlayer(int defaultVolume, int connectGraceSeconds, int opusBitrateKbps, Karaoke karaoke) {
     }
 
     public record Karaoke(double echoSeconds, double echoDecay, double centerGain) {

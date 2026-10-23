@@ -15,6 +15,7 @@ import com.sedmelluq.discord.lavaplayer.track.playback.AudioFrameBuffer;
 import com.sedmelluq.discord.lavaplayer.track.playback.LocalAudioTrackExecutor;
 import kr.kro.backas.music.ai.AiAutoplay;
 import kr.kro.backas.music.filter.ConfiguredEqualizer;
+import kr.kro.backas.music.filter.HeadroomLimiter;
 import kr.kro.backas.music.filter.KaraokeMode;
 import kr.kro.backas.music.filter.VocalEchoFilter;
 import kr.kro.backas.music.lyrics.LyricsPresenter;
@@ -182,7 +183,9 @@ public class MusicPlayerClient {
         }
         this.audioPlayer.setFilterFactory((track, format, output) -> {
             List<AudioFilter> chain = new ArrayList<>();
-            FloatPcmAudioFilter downstream = output;
+            HeadroomLimiter limiter = new HeadroomLimiter(output, format.channelCount, format.sampleRate);
+            chain.add(limiter);
+            FloatPcmAudioFilter downstream = limiter;
             if (speedActive) {
                 TimescalePcmAudioFilter speedFilter = new TimescalePcmAudioFilter(downstream, format.channelCount, format.sampleRate)
                         .setSpeed(speed);
@@ -205,7 +208,9 @@ public class MusicPlayerClient {
                 Equalizer equalizer = new Equalizer(format.channelCount, downstream);
                 equalizerPreset.applyTo(equalizer);
                 chain.add(0, equalizer);
+                downstream = equalizer;
             }
+            chain.add(0, new HeadroomLimiter.Attenuator(downstream));
             return chain;
         });
     }
