@@ -7,6 +7,7 @@ import kr.kro.backas.Main;
 import kr.kro.backas.music.ai.AiAutoplay;
 import kr.kro.backas.music.lyrics.EditRateLimiter;
 import kr.kro.backas.music.lyrics.TranslationJobs;
+import kr.kro.backas.music.source.SourceQuality;
 import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.DurationUtil;
 import net.dv8tion.jda.api.components.container.Container;
@@ -291,17 +292,30 @@ public final class TrackCard {
     }
 
     private static TextDisplay headerText(MusicPlayerClient client, AudioTrack track, boolean playing, @Nullable String lyricsSource) {
-        return TextDisplay.of(headerText(track.getInfo(), MusicEmbeds.sourceLabel(track), playing ? settingsLine(client, lyricsSource) : null));
+        return TextDisplay.of(headerText(track.getInfo(), MusicEmbeds.sourceLabel(track),
+                playing ? settingsLine(client, lyricsSource) : null, playing ? qualityLine(track) : null));
     }
 
     static String headerText(AudioTrackInfo info, String source, @Nullable String settings) {
+        return headerText(info, source, settings, null);
+    }
+
+    static String headerText(AudioTrackInfo info, String source, @Nullable String settings, @Nullable String quality) {
         StringBuilder text = new StringBuilder("### ").append(MusicEmbeds.titleLink(info)).append('\n');
         if (info.author != null && !info.author.isBlank()) {
             text.append("-# ").append(DiscordSafe.escaped(info.author, MAX_AUTHOR_LENGTH)).append('\n');
         }
         text.append("-# ").append(info.isStream ? "라이브" : DurationUtil.formatClock(info.length / 1000)).append(" · ").append(source);
         if (settings != null) text.append("\n-# ").append(settings);
+        if (quality != null) text.append("\n-# ").append(quality);
         return text.toString();
+    }
+
+    /** 재생 중인 원본 스트림의 음질. 재생 직후 포맷을 고르기 전에는 null 이라 줄이 빠진다. */
+    @Nullable
+    static String qualityLine(AudioTrack track) {
+        SourceQuality quality = Main.getLuffia().getMusicPlayerController().getSourceRegistry().getSourceQualities().of(track);
+        return quality == null ? null : quality.label();
     }
 
     static String footerText(String botName, long finishedAt) {

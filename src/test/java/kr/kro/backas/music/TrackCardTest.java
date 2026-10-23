@@ -19,6 +19,12 @@ class TrackCardTest {
     }
 
     @Test
+    void sourceQualityGoesUnderTheSettings() {
+        assertEquals("### [Song](https://youtu.be/id)\n-# Artist\n-# 3:40 · YouTube\n-# 볼륨 10% · 반복 없음\n-# Opus 129kbps · 48kHz",
+                TrackCard.headerText(info("Song", "Artist", 220_000, false), "YouTube", "볼륨 10% · 반복 없음", "Opus 129kbps · 48kHz"));
+    }
+
+    @Test
     void lyricsSourceReadsAsASetting() {
         assertEquals("Spotify (가사)", TrackCard.lyricsSetting("Spotify"));
     }
