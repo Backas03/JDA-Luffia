@@ -3,7 +3,6 @@ package kr.kro.backas.music.source;
 import kr.kro.backas.config.Config;
 import com.github.topi314.lavasrc.mirror.DefaultMirroringAudioTrackResolver;
 import com.github.topi314.lavasrc.spotify.SpotifySourceManager;
-import com.sedmelluq.discord.lavaplayer.format.StandardAudioDataFormats;
 import com.sedmelluq.discord.lavaplayer.player.AudioConfiguration;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager;
@@ -15,6 +14,7 @@ import dev.lavalink.youtube.clients.MusicWithThumbnail;
 import dev.lavalink.youtube.clients.TvHtml5Simply;
 import dev.lavalink.youtube.clients.WebEmbeddedWithThumbnail;
 import dev.lavalink.youtube.clients.WebWithThumbnail;
+import kr.kro.backas.music.audio.MusicOpusFormat;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,7 +45,7 @@ public final class MusicSourceRegistry {
         AudioConfiguration configuration = manager.getConfiguration();
         configuration.setOpusEncodingQuality(AudioConfiguration.OPUS_QUALITY_MAX);
         configuration.setResamplingQuality(AudioConfiguration.ResamplingQuality.HIGH);
-        configuration.setOutputFormat(StandardAudioDataFormats.DISCORD_OPUS);
+        configuration.setOutputFormat(MusicOpusFormat.discord(Config.get().musicPlayer().opusBitrateKbps()));
         configuration.setFilterHotSwapEnabled(true);
 
         YoutubeAudioSourceManager youtube = new YoutubeAudioSourceManager(

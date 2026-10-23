@@ -22,6 +22,7 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     implementation("net.dv8tion:JDA:6.6.0")
     implementation("club.minnced:jdave-api:0.1.8")
+    compileOnly("net.java.dev.jna:jna:4.4.0")
     runtimeOnly("club.minnced:jdave-native-win-x86-64:0.1.8")
     runtimeOnly("club.minnced:jdave-native-linux-x86-64:0.1.8")
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.15.2")
