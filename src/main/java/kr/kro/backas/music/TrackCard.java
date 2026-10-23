@@ -316,7 +316,7 @@ public final class TrackCard {
     static String sourceWithLyrics(String source, @Nullable String lyricsSource) {
         if (lyricsSource == null) return source;
         if (lyricsSource.equals(source)) return source + " (가사 포함)";
-        return source + " · " + lyricsSource + " (가사)";
+        return source + " · " + lyricsSource;
     }
 
     /** 재생 중인 원본 스트림의 음질. 재생 직후 포맷을 고르기 전에는 null 이라 줄이 빠진다. */

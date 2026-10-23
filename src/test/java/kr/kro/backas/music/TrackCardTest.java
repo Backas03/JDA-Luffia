@@ -20,14 +20,14 @@ class TrackCardTest {
 
     @Test
     void lyricsSourceFollowsTheTrackSourceAndQualityGoesAboveTheSettings() {
-        assertEquals("### [Song](https://youtu.be/id)\n-# Artist\n-# 3:49 · YouTube · LRCLIB (가사)\n-# AAC 129kbps · 44.1kHz\n-# 볼륨 10% · 반복 없음",
-                TrackCard.headerText(info("Song", "Artist", 229_000, false), "YouTube", "LRCLIB", "AAC 129kbps · 44.1kHz", "볼륨 10% · 반복 없음"));
+        assertEquals("### [Song](https://youtu.be/id)\n-# Artist\n-# 3:37 · Spotify · LRCLIB\n-# AAC 130kbps · 44.1kHz\n-# 볼륨 10% · 반복 없음",
+                TrackCard.headerText(info("Song", "Artist", 217_000, false), "Spotify", "LRCLIB", "AAC 130kbps · 44.1kHz", "볼륨 10% · 반복 없음"));
     }
 
     @Test
     void lyricsFromTheSameSourceAreFoldedIn() {
         assertEquals("Spotify (가사 포함)", TrackCard.sourceWithLyrics("Spotify", "Spotify"));
-        assertEquals("YouTube · AI (가사)", TrackCard.sourceWithLyrics("YouTube", "AI"));
+        assertEquals("YouTube · AI", TrackCard.sourceWithLyrics("YouTube", "AI"));
         assertEquals("YouTube", TrackCard.sourceWithLyrics("YouTube", null));
     }
 
