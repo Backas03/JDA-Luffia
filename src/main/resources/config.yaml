@@ -33,6 +33,7 @@ sources:
 music-player:
   default-volume: 10
   connect-grace-seconds: 10
+  opus-bitrate-kbps: 192
   karaoke:
     echo-seconds: 0.30
     echo-decay: 0.15

@@ -3,18 +3,11 @@ package kr.kro.backas.music.source;
 import kr.kro.backas.config.Config;
 import com.github.topi314.lavasrc.mirror.DefaultMirroringAudioTrackResolver;
 import com.github.topi314.lavasrc.spotify.SpotifySourceManager;
-import com.sedmelluq.discord.lavaplayer.format.StandardAudioDataFormats;
 import com.sedmelluq.discord.lavaplayer.player.AudioConfiguration;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager;
 import dev.lavalink.youtube.YoutubeAudioSourceManager;
-import dev.lavalink.youtube.clients.AndroidVrWithThumbnail;
-import dev.lavalink.youtube.clients.Ios;
-import dev.lavalink.youtube.clients.MWebWithThumbnail;
-import dev.lavalink.youtube.clients.MusicWithThumbnail;
-import dev.lavalink.youtube.clients.TvHtml5Simply;
-import dev.lavalink.youtube.clients.WebEmbeddedWithThumbnail;
-import dev.lavalink.youtube.clients.WebWithThumbnail;
+import kr.kro.backas.music.audio.MusicOpusFormat;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +25,7 @@ public final class MusicSourceRegistry {
     public static final int YOUTUBE_PLAYLIST_PAGE_COUNT = Config.get().sources().youtube().playlistPageCount();
 
     private final AudioPlayerManager audioPlayerManager;
+    private final SourceQualities sourceQualities = new SourceQualities();
     private final boolean spotifyEnabled;
     @Nullable
     private final SpotifySourceManager spotify;
@@ -45,29 +39,21 @@ public final class MusicSourceRegistry {
         AudioConfiguration configuration = manager.getConfiguration();
         configuration.setOpusEncodingQuality(AudioConfiguration.OPUS_QUALITY_MAX);
         configuration.setResamplingQuality(AudioConfiguration.ResamplingQuality.HIGH);
-        configuration.setOutputFormat(StandardAudioDataFormats.DISCORD_OPUS);
+        configuration.setOutputFormat(MusicOpusFormat.discord(Config.get().musicPlayer().opusBitrateKbps()));
         configuration.setFilterHotSwapEnabled(true);
 
-        YoutubeAudioSourceManager youtube = new YoutubeAudioSourceManager(
-                true,
-                new MusicWithThumbnail(),
-                new TvHtml5Simply(),
-                new AndroidVrWithThumbnail(),
-                new WebWithThumbnail(),
-                new MWebWithThumbnail(),
-                new WebEmbeddedWithThumbnail(),
-                new Ios()
-        );
+        YoutubeAudioSourceManager youtube = new YoutubeAudioSourceManager(true, QualityRecordingClients.create(sourceQualities));
         youtube.setPlaylistPageCount(YOUTUBE_PLAYLIST_PAGE_COUNT);
         manager.registerSourceManager(youtube);
 
-        this.spotify = registerSpotify(manager, spotifyClientId, spotifyClientSecret, spotifyRefreshToken, spotifySpDc, spotifyTokenEndpoint);
+        this.spotify = registerSpotify(manager, sourceQualities, spotifyClientId, spotifyClientSecret, spotifyRefreshToken, spotifySpDc, spotifyTokenEndpoint);
         this.spotifyEnabled = this.spotify != null;
         this.audioPlayerManager = manager;
     }
 
     @Nullable
     private static SpotifySourceManager registerSpotify(AudioPlayerManager manager,
+                                                        SourceQualities sourceQualities,
                                                         @Nullable String clientId,
                                                         @Nullable String clientSecret,
                                                         @Nullable String refreshToken,
@@ -86,7 +72,7 @@ public final class MusicSourceRegistry {
                     clientSecret,
                     SPOTIFY_COUNTRY_CODE,
                     unused -> manager,
-                    new DefaultMirroringAudioTrackResolver(SPOTIFY_MIRROR_PROVIDERS),
+                    sourceQualities.recordingMirrors(new DefaultMirroringAudioTrackResolver(SPOTIFY_MIRROR_PROVIDERS)),
                     userToken,
                     isBlank(spDc) ? null : spDc.trim(),
                     isBlank(tokenEndpoint) ? null : tokenEndpoint.trim()
@@ -110,6 +96,10 @@ public final class MusicSourceRegistry {
     @Nullable
     public SpotifySourceManager getSpotify() {
         return spotify;
+    }
+
+    public SourceQualities getSourceQualities() {
+        return sourceQualities;
     }
 
     public AudioPlayerManager getAudioPlayerManager() {
