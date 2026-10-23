@@ -5,6 +5,7 @@ import com.sedmelluq.discord.lavaplayer.track.AudioReference;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import com.sedmelluq.discord.lavaplayer.track.BaseAudioTrack;
+import com.sedmelluq.discord.lavaplayer.track.BasicAudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.track.playback.LocalAudioTrackExecutor;
 import dev.lavalink.youtube.track.format.StreamFormat;
 import dev.lavalink.youtube.track.format.TrackFormats;
@@ -94,6 +95,26 @@ class SourceQualitiesTest {
 
         assertSame(youtube, qualities.recordingMirrors(track -> youtube).apply(spotifyTrack()));
         assertEquals("Opus 151kbps · 48kHz", qualities.of(new FakeTrack("spotify-id")).label());
+    }
+
+    @Test
+    void spotifyTracksFollowTheFirstSearchResultLavasrcPlays() throws Throwable {
+        SourceQualities qualities = new SourceQualities();
+        qualities.capture("yt-first", () -> extract(List.of(opus251()),
+                List.of(json("{\"averageBitrate\":128620,\"audioSampleRate\":\"48000\"}")), false));
+        BasicAudioPlaylist search = new BasicAudioPlaylist("Search results for: q",
+                List.of(new FakeTrack("yt-first"), new FakeTrack("yt-second")), null, true);
+
+        assertSame(search, qualities.recordingMirrors(track -> search).apply(spotifyTrack()));
+        assertEquals("yt-first", qualities.videoIdOf(new FakeTrack("spotify-id")));
+        assertEquals("Opus 129kbps · 48kHz", qualities.of(new FakeTrack("spotify-id")).label());
+    }
+
+    @Test
+    void emptySearchResultLeavesNothing() {
+        SourceQualities qualities = new SourceQualities();
+        qualities.recordingMirrors(track -> new BasicAudioPlaylist("empty", List.of(), null, true)).apply(spotifyTrack());
+        assertEquals("spotify-id", qualities.videoIdOf(new FakeTrack("spotify-id")));
     }
 
     @Test

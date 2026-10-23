@@ -3,6 +3,7 @@ package kr.kro.backas.music.source;
 import com.github.topi314.lavasrc.mirror.MirroringAudioTrackResolver;
 import com.sedmelluq.discord.lavaplayer.tools.JsonBrowser;
 import com.sedmelluq.discord.lavaplayer.track.AudioItem;
+import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import dev.lavalink.youtube.CannotBeLoaded;
 import dev.lavalink.youtube.track.format.StreamFormat;
@@ -65,9 +66,17 @@ public final class SourceQualities {
     public MirroringAudioTrackResolver recordingMirrors(MirroringAudioTrackResolver resolver) {
         return track -> {
             AudioItem item = resolver.apply(track);
-            if (item instanceof AudioTrack resolved) mirrors.put(track.getIdentifier(), resolved.getIdentifier());
+            AudioTrack resolved = playedTrack(item);
+            if (resolved != null) mirrors.put(track.getIdentifier(), resolved.getIdentifier());
             return item;
         };
+    }
+
+    @Nullable
+    private static AudioTrack playedTrack(@Nullable AudioItem item) {
+        if (item instanceof AudioTrack track) return track;
+        if (item instanceof AudioPlaylist playlist && !playlist.getTracks().isEmpty()) return playlist.getTracks().get(0);
+        return null;
     }
 
     @FunctionalInterface

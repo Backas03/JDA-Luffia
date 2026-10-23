@@ -293,22 +293,30 @@ public final class TrackCard {
 
     private static TextDisplay headerText(MusicPlayerClient client, AudioTrack track, boolean playing, @Nullable String lyricsSource) {
         return TextDisplay.of(headerText(track.getInfo(), MusicEmbeds.sourceLabel(track),
-                playing ? settingsLine(client, lyricsSource) : null, playing ? qualityLine(track) : null));
+                playing ? lyricsSource : null, playing ? qualityLine(track) : null, playing ? settingsLine(client) : null));
     }
 
     static String headerText(AudioTrackInfo info, String source, @Nullable String settings) {
-        return headerText(info, source, settings, null);
+        return headerText(info, source, null, null, settings);
     }
 
-    static String headerText(AudioTrackInfo info, String source, @Nullable String settings, @Nullable String quality) {
+    static String headerText(AudioTrackInfo info, String source, @Nullable String lyricsSource,
+                             @Nullable String quality, @Nullable String settings) {
         StringBuilder text = new StringBuilder("### ").append(MusicEmbeds.titleLink(info)).append('\n');
         if (info.author != null && !info.author.isBlank()) {
             text.append("-# ").append(DiscordSafe.escaped(info.author, MAX_AUTHOR_LENGTH)).append('\n');
         }
-        text.append("-# ").append(info.isStream ? "라이브" : DurationUtil.formatClock(info.length / 1000)).append(" · ").append(source);
-        if (settings != null) text.append("\n-# ").append(settings);
+        text.append("-# ").append(info.isStream ? "라이브" : DurationUtil.formatClock(info.length / 1000))
+                .append(" · ").append(sourceWithLyrics(source, lyricsSource));
         if (quality != null) text.append("\n-# ").append(quality);
+        if (settings != null) text.append("\n-# ").append(settings);
         return text.toString();
+    }
+
+    static String sourceWithLyrics(String source, @Nullable String lyricsSource) {
+        if (lyricsSource == null) return source;
+        if (lyricsSource.equals(source)) return source + " (가사 포함)";
+        return source + " · " + lyricsSource + " (가사)";
     }
 
     /** 재생 중인 원본 스트림의 음질. 재생 직후 포맷을 고르기 전에는 null 이라 줄이 빠진다. */
@@ -324,10 +332,6 @@ public final class TrackCard {
     }
 
     public static String settingsLine(MusicPlayerClient client) {
-        return settingsLine(client, null);
-    }
-
-    static String settingsLine(MusicPlayerClient client, @Nullable String lyricsSource) {
         List<String> settings = new ArrayList<>();
         settings.add("볼륨 " + client.getVolume() + "%");
         settings.add(client.getRepeatModeName());
@@ -335,12 +339,7 @@ public final class TrackCard {
         if (client.getKaraokeMode().isActive()) settings.add("노래방 " + client.getKaraokeMode().getName());
         if (!client.getCurrentEqualizer().isFlat()) settings.add("이퀄라이저 " + client.getCurrentEqualizer().getName());
         settings.add("AI 추천 " + autoplayStatus(client));
-        if (lyricsSource != null) settings.add(lyricsSetting(lyricsSource));
         return String.join(" · ", settings);
-    }
-
-    static String lyricsSetting(String source) {
-        return source + " (가사)";
     }
 
     public static String autoplayStatus(MusicPlayerClient client) {
