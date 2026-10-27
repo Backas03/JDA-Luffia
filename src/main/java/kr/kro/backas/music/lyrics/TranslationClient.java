@@ -74,11 +74,12 @@ public class TranslationClient {
                     + " when the same phrase is said in several languages, write the Korean once for each of them"
                     + " (Merci 고마워 Thank you -> 고마워 고마워 고마워, Ciao こんにちは -> 안녕 안녕).",
             "- Keep Japanese interjections and onomatopoeia as natural Korean ones (ああ -> 아아).",
+            "- Sound words and scat syllables in any other non-Latin script (Hindi, Punjabi, Arabic, Thai...) are written in Hangul as they sound.",
             "- English interjections and sound words (oh, yeah, woo, la la, mwah) stay in English letters, never spelled in Hangul"
                     + " (Oh, I miss you -> Oh, 보고 싶어).",
             "- Keep proper nouns and names. Keep tone: casual speech stays casual, no polite -습니다 unless the source is polite.",
             "- If a line is already Korean, empty, or has no words, copy it unchanged.",
-            "- Never leave Japanese kana, kanji, or Chinese characters in the output; translate them.",
+            "- Never leave Japanese kana, kanji, Chinese characters, or any other non-Latin script (Cyrillic, Devanagari, Arabic, Thai...) in the output; translate them.",
             "- Never add explanations, notes, or romanization.",
             "Output JSON only: {\"t\": [{\"n\": 1, \"s\": \"夜明け\", \"k\": \"translation of line 1\"}, {\"n\": 2, \"s\": \"君の声\", \"k\": \"translation of line 2\"}, ...]}",
             "with exactly one object per input line, n = the input line number, s = the first three characters of that input line copied exactly, k = the Korean translation of that line only.",
@@ -1073,7 +1074,8 @@ public class TranslationClient {
         if (text == null) return false;
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
-            if ((c >= 0x3040 && c <= 0x30FF) || (c >= 0x4E00 && c <= 0x9FFF) || (c >= 0x0400 && c <= 0x04FF)) return true;
+            if ((c >= 0x3040 && c <= 0x30FF) || (c >= 0x4E00 && c <= 0x9FFF) || (c >= 0x0400 && c <= 0x04FF)
+                    || LyricsLanguage.isOtherScriptLetter(c)) return true;
         }
         return false;
     }

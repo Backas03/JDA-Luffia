@@ -2,8 +2,11 @@ package kr.kro.backas.music.lyrics;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TranslationAcceptanceTest {
@@ -77,5 +80,29 @@ class TranslationAcceptanceTest {
         assertEquals("Russian and Latin letters", LyricsLanguage.describe("Я love"));
         assertEquals("Latin letters and Korean", LyricsLanguage.describe("Oh 사랑해"));
         assertEquals("no words", LyricsLanguage.describe("♪ ..."));
+        assertEquals("Devanagari script and Latin letters", LyricsLanguage.describe("Oh मैं तुम्हें"));
+    }
+
+    @Test
+    void treatsOtherScriptsAsNeedingTranslation() {
+        assertTrue(LyricsLanguage.needsTranslation("मैं तुम्हें प्यार करता हूँ"));
+        assertTrue(LyricsLanguage.needsTranslation("ฉันรักเธอ"));
+        assertTrue(LyricsLanguage.needsTranslation("أحبك"));
+        assertFalse(LyricsLanguage.needsTranslation("사랑해 ♪ 123"));
+        assertFalse(LyricsLanguage.isLatinOnly("Oh मैं तुम्हें"));
+    }
+
+    @Test
+    void rejectsLeftoverDevanagari() {
+        String source = "मैं तुम्हें प्यार करता हूँ";
+        assertFalse(TranslationClient.isAcceptable(source, source));
+        assertFalse(TranslationClient.isAcceptable(source, "मैं 너를 사랑해"));
+        assertTrue(TranslationClient.isAcceptable(source, "난 널 사랑해"));
+    }
+
+    @Test
+    void doesNotMistakeOtherScriptSongsForKorean() {
+        List<LyricLine> lines = List.of(new LyricLine(0, "मैं तुम्हें प्यार करता हूँ"), new LyricLine(0, "사랑해"));
+        assertNotEquals(LyricsLanguage.KOREAN, LyricsLanguage.detect(lines));
     }
 }
