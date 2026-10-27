@@ -250,4 +250,13 @@ class LrcLibClientTest {
         assertEquals(10_250, delayed.get(0).timeMs());
         assertEquals(0, LrcLibClient.lrcOffsetMs("[00:10.00]둘째 줄"));
     }
+
+    @Test
+    void leavesOutDurationsLrcLibRejects() {
+        assertEquals("&duration=245", LrcLibClient.durationQuery(245));
+        assertEquals("&duration=3600", LrcLibClient.durationQuery(3600));
+        assertEquals("", LrcLibClient.durationQuery(0));
+        assertEquals("", LrcLibClient.durationQuery(3601));
+        assertEquals("", LrcLibClient.durationQuery(Long.MAX_VALUE / 1000));
+    }
 }
