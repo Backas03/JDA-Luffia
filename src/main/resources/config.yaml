@@ -24,6 +24,11 @@ sources:
     remote-cipher:
       url: ""
       password: ""
+    oauth:
+      enabled: false
+      refresh-token: ""
+    po-token:
+      url: ""
   spotify:
     client-id: ""
     client-secret: ""

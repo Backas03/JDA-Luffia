@@ -44,9 +44,12 @@ public final class MusicSourceRegistry {
         configuration.setOutputFormat(MusicOpusFormat.discord(Config.get().musicPlayer().opusBitrateKbps()));
         configuration.setFilterHotSwapEnabled(true);
 
-        YoutubeAudioSourceManager youtube = new YoutubeAudioSourceManager(youtubeOptions(Config.get().sources().youtube()),
-                QualityRecordingClients.create(sourceQualities));
+        LuffiaConfig.Youtube youtubeConfig = Config.get().sources().youtube();
+        boolean oauth = oauthEnabled(youtubeConfig);
+        YoutubeAudioSourceManager youtube = new YoutubeAudioSourceManager(youtubeOptions(youtubeConfig),
+                QualityRecordingClients.create(sourceQualities, oauth, poTokenEnabled(youtubeConfig)));
         youtube.setPlaylistPageCount(YOUTUBE_PLAYLIST_PAGE_COUNT);
+        if (oauth) useOauth(youtube, youtubeConfig);
         manager.registerSourceManager(youtube);
 
         this.spotify = registerSpotify(manager, sourceQualities, spotifyClientId, spotifyClientSecret, spotifyRefreshToken, spotifySpDc, spotifyTokenEndpoint);
@@ -60,13 +63,48 @@ public final class MusicSourceRegistry {
                 .setAllowDirectVideoIds(true)
                 .setAllowDirectPlaylistIds(true);
         LuffiaConfig.RemoteCipher cipher = config.remoteCipher();
-        if (cipher == null || isBlank(cipher.url())) {
+        boolean remoteCipher = cipher != null && !isBlank(cipher.url());
+        if (remoteCipher) {
+            options.setRemoteCipher(cipher.url().trim(), isBlank(cipher.password()) ? null : cipher.password().trim(), "JDA-Luffia");
+            LOGGER.info("유튜브 서명을 원격 cipher 서버 {} 로 풉니다.", cipher.url().trim());
+        } else {
             LOGGER.info("sources.youtube.remote-cipher.url 이 비어 있어 유튜브 서명을 직접 풉니다. 풀지 못하면 AAC 만 주는 IOS 클라이언트로 재생됩니다.");
-            return options;
         }
-        options.setRemoteCipher(cipher.url().trim(), isBlank(cipher.password()) ? null : cipher.password().trim(), "JDA-Luffia");
-        LOGGER.info("유튜브 서명을 원격 cipher 서버 {} 로 풉니다.", cipher.url().trim());
+        if (poTokenEnabled(config)) {
+            String url = config.poToken().url().trim();
+            options.setRemotePoToken(bgutilEndpoint(url), null);
+            if (remoteCipher) {
+                LOGGER.info("PO 토큰을 bgutil 서버 {} 에서 받아 WEB 클라이언트로 Opus 를 재생합니다. 토큰을 못 받으면 IOS(AAC) 로 넘어갑니다.", url);
+            } else {
+                LOGGER.warn("PO 토큰 서버는 설정됐지만 sources.youtube.remote-cipher.url 이 비어 있어 WEB 클라이언트가 서명을 풀지 못할 수 있습니다.");
+            }
+        }
         return options;
+    }
+
+    static boolean poTokenEnabled(LuffiaConfig.Youtube config) {
+        return config.poToken() != null && !isBlank(config.poToken().url());
+    }
+
+    static String bgutilEndpoint(String url) {
+        return url.trim().replaceAll("/+$", "") + "/get_pot?path=";
+    }
+
+    static boolean oauthEnabled(LuffiaConfig.Youtube config) {
+        return config.oauth() != null && config.oauth().enabled();
+    }
+
+    private static void useOauth(YoutubeAudioSourceManager youtube, LuffiaConfig.Youtube config) {
+        String token = isBlank(config.oauth().refreshToken()) ? null : config.oauth().refreshToken().trim();
+        if (config.remoteCipher() == null || isBlank(config.remoteCipher().url())) {
+            LOGGER.warn("유튜브 OAuth 를 켰지만 sources.youtube.remote-cipher.url 이 비어 있어 Tv 클라이언트도 서명을 풀지 못할 수 있습니다.");
+        }
+        if (token == null) {
+            LOGGER.info("유튜브 OAuth refresh token 이 없어 계정 연결을 시작합니다. 아래 주소에서 부계정으로 코드를 입력한 뒤, 로그에 찍히는 refresh token 을 sources.youtube.oauth.refresh-token 에 넣으세요.");
+        } else {
+            LOGGER.info("유튜브 OAuth 를 저장된 refresh token 으로 켭니다.");
+        }
+        youtube.useOauth2(token, token != null);
     }
 
     @Nullable
