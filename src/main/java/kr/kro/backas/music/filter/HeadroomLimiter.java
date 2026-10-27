@@ -26,6 +26,7 @@ public final class HeadroomLimiter implements FloatPcmAudioFilter {
     private final float[] holds;
     private double holdSum;
     private int delayCursor;
+    private int buffered;
     private int windowCursor;
     private float envelope;
     private float[][] out;
@@ -57,6 +58,7 @@ public final class HeadroomLimiter implements FloatPcmAudioFilter {
         Arrays.fill(holds, 1f);
         holdSum = holds.length;
         delayCursor = 0;
+        buffered = 0;
         windowCursor = 0;
         envelope = 1f;
     }
@@ -64,21 +66,28 @@ public final class HeadroomLimiter implements FloatPcmAudioFilter {
     @Override
     public void process(float[][] input, int offset, int length) throws InterruptedException {
         if (out[0].length < length) out = new float[channels][length];
+        int produced = 0;
         for (int i = 0; i < length; i++) {
+            boolean primed = buffered == lookahead;
             float peak = 0f;
             for (int c = 0; c < channels; c++) {
                 float sample = input[c][offset + i] * makeup;
-                out[c][i] = delay[c][delayCursor];
+                if (primed) out[c][produced] = delay[c][delayCursor];
                 delay[c][delayCursor] = sample;
                 peak = Math.max(peak, Math.abs(sample));
             }
             float gain = nextGain(peak);
-            for (int c = 0; c < channels; c++) {
-                out[c][i] = clamp(out[c][i] * gain);
+            if (primed) {
+                for (int c = 0; c < channels; c++) {
+                    out[c][produced] = clamp(out[c][produced] * gain);
+                }
+                produced++;
+            } else {
+                buffered++;
             }
             if (++delayCursor == lookahead) delayCursor = 0;
         }
-        downstream.process(out, 0, length);
+        if (produced > 0) downstream.process(out, 0, produced);
     }
 
     // 지연된 출력 샘플(lookahead 전)이 창 안의 모든 요구 이득보다 작거나 같은 이득을 받도록

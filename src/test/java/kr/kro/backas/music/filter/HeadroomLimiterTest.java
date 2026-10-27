@@ -69,7 +69,7 @@ class HeadroomLimiterTest {
     }
 
     @Test
-    void quietAudioComesBackAtTheSameLevelOnlyDelayed() throws InterruptedException {
+    void quietAudioComesBackUnchangedWithoutLeadingSilence() throws InterruptedException {
         Collector sink = new Collector();
         HeadroomLimiter limiter = new HeadroomLimiter(sink, 2, RATE);
         FloatPcmAudioFilter head = new HeadroomLimiter.Attenuator(limiter);
@@ -79,11 +79,57 @@ class HeadroomLimiterTest {
         limiter.flush();
 
         float[] out = sink.channel(sink.left);
-        int delay = limiter.latencySamples();
-        assertEquals(4800 + delay, out.length);
+        assertEquals(4800, out.length);
         for (int i = 0; i < 4800; i++) {
-            assertEquals(original[0][i], out[i + delay], 1e-6f, "sample " + i);
+            assertEquals(original[0][i], out[i], 1e-6f, "sample " + i);
         }
+    }
+
+    @Test
+    void swappingTheChainMidSongLeavesNoGap() throws InterruptedException {
+        Collector sink = new Collector();
+        int chunks = 10;
+        float[][] original = sine(440, 0.5, 960 * chunks * 2, 0);
+        HeadroomLimiter first = new HeadroomLimiter(sink, 2, RATE);
+        FloatPcmAudioFilter firstHead = new HeadroomLimiter.Attenuator(first);
+        for (int chunk = 0; chunk < chunks; chunk++) {
+            firstHead.process(slice(original, chunk * 960, 960), 0, 960);
+        }
+        first.flush();
+        HeadroomLimiter second = new HeadroomLimiter(sink, 2, RATE);
+        FloatPcmAudioFilter secondHead = new HeadroomLimiter.Attenuator(second);
+        for (int chunk = chunks; chunk < chunks * 2; chunk++) {
+            secondHead.process(slice(original, chunk * 960, 960), 0, 960);
+        }
+        second.flush();
+
+        float[] out = sink.channel(sink.left);
+        assertEquals(original[0].length, out.length);
+        for (int i = 0; i < out.length; i++) {
+            assertEquals(original[0][i], out[i], 1e-6f, "sample " + i);
+        }
+    }
+
+    @Test
+    void flushBeforeTheDelayFillsReturnsOnlyRealSamples() throws InterruptedException {
+        Collector sink = new Collector();
+        HeadroomLimiter limiter = new HeadroomLimiter(sink, 2, RATE);
+        float[][] original = sine(440, 0.2, 10, 0);
+        limiter.process(slice(original, 0, 10), 0, 10);
+        assertEquals(0, sink.channel(sink.left).length);
+        limiter.flush();
+
+        float[] out = sink.channel(sink.left);
+        assertEquals(10, out.length);
+        for (int i = 0; i < 10; i++) {
+            assertEquals(original[0][i] * 4, out[i], 1e-6f, "sample " + i);
+        }
+    }
+
+    private static float[][] slice(float[][] pcm, int from, int length) {
+        float[][] part = new float[pcm.length][length];
+        for (int c = 0; c < pcm.length; c++) System.arraycopy(pcm[c], from, part[c], 0, length);
+        return part;
     }
 
     @Test
@@ -121,12 +167,11 @@ class HeadroomLimiterTest {
         feed(head, 100, 1.6, 2);
 
         float[] out = sink.channel(sink.left);
-        int delay = limiter.latencySamples();
         double error = 0;
         double energy = 0;
-        for (int i = RATE; i < RATE * 2 - delay; i++) {
+        for (int i = RATE; i < out.length; i++) {
             double expected = HeadroomLimiter.CEILING * Math.sin(2 * Math.PI * 100 * i / RATE);
-            error += Math.pow(out[i + delay] - expected, 2);
+            error += Math.pow(out[i] - expected, 2);
             energy += expected * expected;
         }
         assertTrue(error / energy < 1e-3, "steady overload should settle into clean gain reduction, relative error " + error / energy);
@@ -141,6 +186,7 @@ class HeadroomLimiterTest {
         limiter.process(new float[2][960], 0, 960);
 
         float[] out = sink.channel(sink.left);
-        for (int i = 960; i < out.length; i++) assertEquals(0f, out[i]);
+        assertEquals(960 * 2 - limiter.latencySamples() * 2, out.length);
+        for (int i = 960 - limiter.latencySamples(); i < out.length; i++) assertEquals(0f, out[i]);
     }
 }
