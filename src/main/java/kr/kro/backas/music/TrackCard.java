@@ -55,7 +55,7 @@ public final class TrackCard {
     private final long channelId;
     private final MessageChannel recordChannel;
     private final AtomicBoolean closed = new AtomicBoolean();
-    private volatile CompletableFuture<Message> message = new CompletableFuture<>();
+    private volatile AgingMessage message = new AgingMessage(new CompletableFuture<>());
     private volatile boolean bannerAttached;
     private volatile List<? extends ContainerChildComponent> lastBody = List.of();
     private volatile boolean lyricsExpanded;
@@ -101,7 +101,7 @@ public final class TrackCard {
                     if (attach) action = action.addFiles(bannerFile(banner));
                     return action.submit();
                 });
-        card.message = sent;
+        card.message = new AgingMessage(sent, card::repostFiles);
         sent.whenComplete((message, error) -> {
             if (error != null) {
                 LOGGER.warn("failed to send track card for {}", track.getInfo().title, error);
@@ -171,11 +171,16 @@ public final class TrackCard {
     }
 
     private CompletableFuture<?> submitEdit(Container view, long deadlineAt) {
-        return message.thenCompose(current -> current.editMessageComponents(view).useComponentsV2(true)
-                        .deadline(Math.max(deadlineAt, System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS)).submit())
+        return message.edit(view, Math.max(deadlineAt, System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS))
                 .whenComplete((result, error) -> {
                     if (error != null && isGone(error)) onGone();
                 });
+    }
+
+    private List<FileUpload> repostFiles() {
+        if (!bannerAttached) return List.of();
+        ArtworkColors.Banner banner = ArtworkColors.bannerFor(MusicEmbeds.bannerOf(track));
+        return banner != null && banner.isFile() ? List.of(bannerFile(banner)) : List.of();
     }
 
     private void onGone() {
@@ -222,7 +227,7 @@ public final class TrackCard {
     }
 
     private void remove() {
-        message.thenAccept(current -> current.delete().queue(null,
+        message.current().thenAccept(current -> current.delete().queue(null,
                 error -> LOGGER.debug("failed to delete track card for {}", track.getInfo().title, error)));
     }
 

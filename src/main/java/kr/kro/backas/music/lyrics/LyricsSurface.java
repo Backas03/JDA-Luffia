@@ -1,6 +1,7 @@
 package kr.kro.backas.music.lyrics;
 
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
+import kr.kro.backas.music.AgingMessage;
 import kr.kro.backas.music.TrackCard;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.container.Container;
@@ -41,17 +42,19 @@ interface LyricsSurface {
     }
 
     final class MessageSurface implements LyricsSurface {
-        private final Message message;
+        private final AgingMessage message;
+        private final long channelId;
         private final AudioTrack track;
 
         private MessageSurface(Message message, AudioTrack track) {
-            this.message = message;
+            this.message = new AgingMessage(CompletableFuture.completedFuture(message));
+            this.channelId = message.getChannel().getIdLong();
             this.track = track;
         }
 
         @Override
         public long channelId() {
-            return message.getChannel().getIdLong();
+            return channelId;
         }
 
         @Override
@@ -66,12 +69,12 @@ interface LyricsSurface {
 
         @Override
         public CompletableFuture<?> edit(Container view, long deadlineAt) {
-            return message.editMessageComponents(view).useComponentsV2(true).deadline(deadlineAt).submit();
+            return message.edit(view, deadlineAt);
         }
 
         @Override
         public void dismiss() {
-            LyricsSession.deleteMessage(message);
+            message.current().thenAccept(LyricsSession::deleteMessage);
         }
     }
 

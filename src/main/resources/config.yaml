@@ -21,6 +21,9 @@ riot:
 sources:
   youtube:
     playlist-page-count: 10
+    remote-cipher:
+      url: ""
+      password: ""
   spotify:
     client-id: ""
     client-secret: ""

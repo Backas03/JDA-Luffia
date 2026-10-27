@@ -63,6 +63,8 @@ public class LrcLibClient {
     private static final int MAX_PARALLEL_SEARCH = 3;
     private static final int TIMEOUT_RETRIES = 1;
     private static final int MAX_FAILED_REQUESTS = 2;
+    static final long MIN_QUERY_DURATION_SEC = 1;
+    static final long MAX_QUERY_DURATION_SEC = 3600;
     static final long LOOKUP_BUDGET_MS = 20_000;
     private static final long MIN_RESOLVER_WAIT_MS = 3_000;
     private static final Pattern LRC_LINE = Pattern.compile("\\[(\\d{1,2}):(\\d{2})(?:[.:](\\d{1,3}))?](.*)");
@@ -166,7 +168,7 @@ public class LrcLibClient {
         List<String> exactPaths = new ArrayList<>();
         for (String[] candidate : candidates) {
             if (exactPaths.size() >= MAX_PARALLEL_EXACT) break;
-            exactPaths.add("get?track_name=" + encode(candidate[1]) + "&artist_name=" + encode(candidate[0]) + "&duration=" + durationSec);
+            exactPaths.add("get?track_name=" + encode(candidate[1]) + "&artist_name=" + encode(candidate[0]) + durationQuery(durationSec));
         }
         AtomicReference<JsonNode> rejected = new AtomicReference<>();
         JsonNode node = firstSuccess(failures, exactPaths, resolved, found -> {
@@ -324,7 +326,7 @@ public class LrcLibClient {
             long durationSec = info.length / 1000;
             Failures failures = new Failures();
             JsonNode exact = song.artist().isBlank() ? null
-                    : tryGet(failures, "get?track_name=" + encode(song.title()) + "&artist_name=" + encode(song.artist()) + "&duration=" + durationSec);
+                    : tryGet(failures, "get?track_name=" + encode(song.title()) + "&artist_name=" + encode(song.artist()) + durationQuery(durationSec));
             JsonNode node = exact == null || unreliableSync(exact, durationSec) || translated(exact, info.title) ? null : exact;
             boolean lengthDiffers = false;
             if (node == null) {
@@ -568,6 +570,11 @@ public class LrcLibClient {
             if (Character.isLetterOrDigit(c)) key.append(c);
         }
         return key.toString();
+    }
+
+    static String durationQuery(long durationSec) {
+        if (durationSec < MIN_QUERY_DURATION_SEC || durationSec > MAX_QUERY_DURATION_SEC) return "";
+        return "&duration=" + durationSec;
     }
 
     private static final class Failures {

@@ -39,7 +39,10 @@ public record LuffiaConfig(Bot bot,
     public record Sources(Youtube youtube, Spotify spotify) {
     }
 
-    public record Youtube(int playlistPageCount) {
+    public record Youtube(int playlistPageCount, RemoteCipher remoteCipher) {
+    }
+
+    public record RemoteCipher(String url, String password) {
     }
 
     public record Spotify(String clientId, String clientSecret, String refreshToken, String country, int pageLimit, String spDc,
