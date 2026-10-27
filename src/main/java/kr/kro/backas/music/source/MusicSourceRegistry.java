@@ -7,6 +7,8 @@ import com.sedmelluq.discord.lavaplayer.player.AudioConfiguration;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager;
 import dev.lavalink.youtube.YoutubeAudioSourceManager;
+import dev.lavalink.youtube.YoutubeSourceOptions;
+import kr.kro.backas.config.LuffiaConfig;
 import kr.kro.backas.music.audio.MusicOpusFormat;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -42,13 +44,29 @@ public final class MusicSourceRegistry {
         configuration.setOutputFormat(MusicOpusFormat.discord(Config.get().musicPlayer().opusBitrateKbps()));
         configuration.setFilterHotSwapEnabled(true);
 
-        YoutubeAudioSourceManager youtube = new YoutubeAudioSourceManager(true, QualityRecordingClients.create(sourceQualities));
+        YoutubeAudioSourceManager youtube = new YoutubeAudioSourceManager(youtubeOptions(Config.get().sources().youtube()),
+                QualityRecordingClients.create(sourceQualities));
         youtube.setPlaylistPageCount(YOUTUBE_PLAYLIST_PAGE_COUNT);
         manager.registerSourceManager(youtube);
 
         this.spotify = registerSpotify(manager, sourceQualities, spotifyClientId, spotifyClientSecret, spotifyRefreshToken, spotifySpDc, spotifyTokenEndpoint);
         this.spotifyEnabled = this.spotify != null;
         this.audioPlayerManager = manager;
+    }
+
+    static YoutubeSourceOptions youtubeOptions(LuffiaConfig.Youtube config) {
+        YoutubeSourceOptions options = new YoutubeSourceOptions()
+                .setAllowSearch(true)
+                .setAllowDirectVideoIds(true)
+                .setAllowDirectPlaylistIds(true);
+        LuffiaConfig.RemoteCipher cipher = config.remoteCipher();
+        if (cipher == null || isBlank(cipher.url())) {
+            LOGGER.info("sources.youtube.remote-cipher.url 이 비어 있어 유튜브 서명을 직접 풉니다. 풀지 못하면 AAC 만 주는 IOS 클라이언트로 재생됩니다.");
+            return options;
+        }
+        options.setRemoteCipher(cipher.url().trim(), isBlank(cipher.password()) ? null : cipher.password().trim(), "JDA-Luffia");
+        LOGGER.info("유튜브 서명을 원격 cipher 서버 {} 로 풉니다.", cipher.url().trim());
+        return options;
     }
 
     @Nullable
