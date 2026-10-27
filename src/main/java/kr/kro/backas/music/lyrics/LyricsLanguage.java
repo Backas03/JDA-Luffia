@@ -1,7 +1,10 @@
 package kr.kro.backas.music.lyrics;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 public final class LyricsLanguage {
 
@@ -20,6 +23,7 @@ public final class LyricsLanguage {
         int han = 0;
         int latin = 0;
         int cyrillic = 0;
+        int other = 0;
         for (LyricLine line : lines) {
             String text = line.text();
             if (text == null) continue;
@@ -30,13 +34,14 @@ public final class LyricsLanguage {
                 else if (c >= 0x4E00 && c <= 0x9FFF) han++;
                 else if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) latin++;
                 else if (c >= 0x0400 && c <= 0x04FF) cyrillic++;
+                else if (isOtherScriptLetter(c)) other++;
             }
         }
         if (kana > 0 && kana * 4 >= han) {
             kana += han;
             han = 0;
         }
-        int best = Math.max(Math.max(hangul, kana), Math.max(Math.max(han, latin), cyrillic));
+        int best = Math.max(Math.max(Math.max(hangul, kana), Math.max(han, latin)), Math.max(cyrillic, other));
         if (best == 0) return ENGLISH;
         if (best == hangul) return KOREAN;
         if (best == kana) return JAPANESE;
@@ -51,6 +56,7 @@ public final class LyricsLanguage {
         boolean han = false;
         boolean latin = false;
         boolean cyrillic = false;
+        Set<String> others = new LinkedHashSet<>();
         if (text != null) {
             for (int i = 0; i < text.length(); i++) {
                 char c = text.charAt(i);
@@ -59,12 +65,14 @@ public final class LyricsLanguage {
                 else if (c >= 0x4E00 && c <= 0x9FFF) han = true;
                 else if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) latin = true;
                 else if (c >= 0x0400 && c <= 0x04FF) cyrillic = true;
+                else if (isOtherScriptLetter(c)) others.add(scriptName(c));
             }
         }
         List<String> names = new ArrayList<>();
         if (kana) names.add("Japanese");
         else if (han) names.add("Chinese characters");
         if (cyrillic) names.add("Russian");
+        names.addAll(others);
         if (latin) names.add("Latin letters");
         if (hangul) names.add("Korean");
         return names.isEmpty() ? "no words" : String.join(" and ", names);
@@ -77,7 +85,8 @@ public final class LyricsLanguage {
             char c = text.charAt(i);
             if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) latin = true;
             else if ((c >= 0x3040 && c <= 0x30FF) || (c >= 0x4E00 && c <= 0x9FFF) || (c >= 0x0400 && c <= 0x04FF)
-                    || (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0x1100 && c <= 0x11FF) || (c >= 0x3130 && c <= 0x318F)) return false;
+                    || (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0x1100 && c <= 0x11FF) || (c >= 0x3130 && c <= 0x318F)
+                    || isOtherScriptLetter(c)) return false;
         }
         return latin;
     }
@@ -87,10 +96,23 @@ public final class LyricsLanguage {
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
             if ((c >= 0x3040 && c <= 0x30FF) || (c >= 0x4E00 && c <= 0x9FFF)
-                    || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= 0x0400 && c <= 0x04FF)) {
+                    || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= 0x0400 && c <= 0x04FF)
+                    || isOtherScriptLetter(c)) {
                 return true;
             }
         }
         return false;
+    }
+
+    static boolean isOtherScriptLetter(char c) {
+        if (c < 0x80 || !Character.isLetter(c)) return false;
+        Character.UnicodeScript script = Character.UnicodeScript.of(c);
+        return script != Character.UnicodeScript.LATIN && script != Character.UnicodeScript.HANGUL
+                && script != Character.UnicodeScript.COMMON;
+    }
+
+    private static String scriptName(char c) {
+        String name = Character.UnicodeScript.of(c).name().replace('_', ' ').toLowerCase(Locale.ROOT);
+        return Character.toUpperCase(name.charAt(0)) + name.substring(1) + " script";
     }
 }
