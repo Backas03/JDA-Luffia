@@ -105,4 +105,13 @@ class SpotifyLyricsTest {
         assertEquals(Lyrics.Source.SPOTIFY, LyricsSources.tagged(found, Lyrics.Source.SPOTIFY).source());
         assertNull(LyricsSources.tagged(null, Lyrics.Source.LRCLIB));
     }
+
+    @Test
+    void skipsSpotifyForAWhileAfterAFailure() {
+        SpotifyLyricsClient client = new SpotifyLyricsClient(null, null);
+        assertFalse(client.paused(1_000));
+        client.pause(new java.io.IOException("Read timed out"), 1_000);
+        assertTrue(client.paused(1_000 + SpotifyLyricsClient.FAILURE_PAUSE_MS - 1));
+        assertFalse(client.paused(1_000 + SpotifyLyricsClient.FAILURE_PAUSE_MS));
+    }
 }

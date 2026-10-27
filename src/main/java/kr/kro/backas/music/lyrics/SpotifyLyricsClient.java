@@ -22,6 +22,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -37,12 +38,14 @@ public final class SpotifyLyricsClient {
     static final int SAME_ARTIST_RANKS = 3;
     private static final long WAIT_MS = 10_000;
     private static final long MISS_RETRY_MS = 24L * 60 * 60 * 1000;
+    static final long FAILURE_PAUSE_MS = 5 * 60 * 1000;
     private static final Pattern TRACK_URL = Pattern.compile("open\\.spotify\\.com/(?:intl-[a-z]+/)?track/([A-Za-z0-9]+)");
     private static final Pattern DECORATION = Pattern.compile("\\s*[\\[(（].*?[\\])）]|\\s+-\\s+.*$");
     private static final Logger LOGGER = LoggerFactory.getLogger(SpotifyLyricsClient.class);
 
     private final SpotifySourceManager source;
     private final DiskCache cache;
+    private final AtomicLong pausedUntil = new AtomicLong();
 
     public SpotifyLyricsClient(SpotifySourceManager source) {
         this(source, DiskCache.defaultCache());
@@ -61,11 +64,16 @@ public final class SpotifyLyricsClient {
                 && (stored.lyrics() != null || System.currentTimeMillis() - stored.at() < MISS_RETRY_MS)) {
             return stored.lyrics();
         }
+        if (paused(System.currentTimeMillis())) return null;
         CompletableFuture<Optional<Lyrics>> job = CompletableFuture.supplyAsync(() -> {
             try {
                 return Optional.ofNullable(fetch(track));
             } catch (IOException e) {
+                pause(e, System.currentTimeMillis());
                 throw new UncheckedIOException(e);
+            } catch (RuntimeException e) {
+                pause(e, System.currentTimeMillis());
+                throw e;
             }
         }, TranslationJobs.EXECUTOR);
         job.thenAccept(found -> cache.write(path, new Stored(found.orElse(null), System.currentTimeMillis(), VERSION)));
@@ -80,6 +88,17 @@ public final class SpotifyLyricsClient {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return null;
+        }
+    }
+
+    boolean paused(long now) {
+        return now < pausedUntil.get();
+    }
+
+    void pause(Throwable error, long now) {
+        long previous = pausedUntil.getAndSet(now + FAILURE_PAUSE_MS);
+        if (previous <= now) {
+            LOGGER.warn("spotify lyrics failed ({}), skipping spotify lyrics for {}s", error.toString(), FAILURE_PAUSE_MS / 1000);
         }
     }
 
