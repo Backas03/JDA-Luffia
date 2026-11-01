@@ -1,6 +1,7 @@
 package kr.kro.backas.music.source;
 
 import com.github.topi314.lavasrc.ExtendedAudioPlaylist;
+import com.github.topi314.lavasrc.mirror.MirroringAudioSourceManager;
 import com.github.topi314.lavasrc.mirror.MirroringAudioTrackResolver;
 import com.github.topi314.lavasrc.spotify.SpotifyAudioTrack;
 import com.github.topi314.lavasrc.spotify.SpotifyPartnerApiClient;
@@ -8,11 +9,13 @@ import com.github.topi314.lavasrc.spotify.SpotifySourceManager;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.tools.JsonBrowser;
+import com.sedmelluq.discord.lavaplayer.tools.io.HttpInterfaceManager;
 import com.sedmelluq.discord.lavaplayer.track.AudioItem;
 import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.track.AudioReference;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
+import org.apache.http.client.config.RequestConfig;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -90,6 +93,25 @@ public class PatchedSpotifySourceManager extends SpotifySourceManager {
         }
         return new ExtendedAudioPlaylist(albumName, tracks, ExtendedAudioPlaylist.Type.ALBUM,
                 albumUrl, artwork, albumArtists, totalTracks);
+    }
+
+    @Override
+    public void configureRequests(Function<RequestConfig, RequestConfig> configurator) {
+        super.configureRequests(configurator);
+        HttpInterfaceManager tokenRequests = tokenRequestManager();
+        if (tokenRequests != null) tokenRequests.configureRequests(configurator);
+    }
+
+    @Nullable
+    private HttpInterfaceManager tokenRequestManager() {
+        try {
+            Field field = MirroringAudioSourceManager.class.getDeclaredField("httpInterfaceManager");
+            field.setAccessible(true);
+            return (HttpInterfaceManager) field.get(this);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            LOGGER.warn("스포티파이 토큰 요청의 HTTP 설정을 바꾸지 못해 기본 타임아웃(3초)을 그대로 씁니다", e);
+            return null;
+        }
     }
 
     @Nullable
