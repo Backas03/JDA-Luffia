@@ -14,6 +14,7 @@ import kr.kro.backas.music.ai.AiTrackTagger;
 import kr.kro.backas.music.lyrics.LrcLibClient;
 import kr.kro.backas.music.lyrics.LyricsConversions;
 import kr.kro.backas.music.lyrics.LyricsExpansions;
+import kr.kro.backas.music.lyrics.LyricsFeedback;
 import kr.kro.backas.music.lyrics.LyricsSources;
 import kr.kro.backas.music.lyrics.SpotifyLyricsClient;
 import kr.kro.backas.music.lyrics.TranslationClient;
@@ -80,6 +81,7 @@ public class MusicPlayerController extends ListenerAdapter {
     private final AiRemovalConfirmations aiRemovalConfirmations = new AiRemovalConfirmations();
     private final LyricsExpansions lyricsExpansions = new LyricsExpansions();
     private final LyricsConversions lyricsConversions = new LyricsConversions();
+    private final LyricsFeedback lyricsFeedback = new LyricsFeedback();
     private final ScheduledExecutorService lyricsScheduler;
     private final java.util.concurrent.atomic.AtomicReference<Thread> schedulerThread = new java.util.concurrent.atomic.AtomicReference<>();
     private volatile long schedulerHeartbeat = System.currentTimeMillis();
@@ -157,6 +159,8 @@ public class MusicPlayerController extends ListenerAdapter {
     public void register(JDA discordAPI) {
         bots.add(discordAPI);
         discordAPI.addEventListener(new PresenceListener());
+        discordAPI.addEventListener(new TrackCardControls());
+        discordAPI.addEventListener(lyricsFeedback);
         LOGGER.info("music bot registered: {} ({} guilds)", discordAPI.getSelfUser().getName(), discordAPI.getGuilds().size());
     }
 
@@ -243,6 +247,10 @@ public class MusicPlayerController extends ListenerAdapter {
 
     public LyricsExpansions getLyricsExpansions() {
         return lyricsExpansions;
+    }
+
+    public LyricsFeedback getLyricsFeedback() {
+        return lyricsFeedback;
     }
 
     public void search(Identifier id, String query, Member member, SlashCommandInteractionEvent slashEvent) {
@@ -340,6 +348,10 @@ public class MusicPlayerController extends ListenerAdapter {
 
     public void expireSearchData(Member member) {
         this.expireSearchData(member.getIdLong());
+    }
+
+    public @Nullable MusicPlayerClient findClient(String botId, String guildId) {
+        return clients.get(botId + ":" + guildId);
     }
 
     public @Nullable MusicPlayerClient findFromVoiceChannel(VoiceChannel channel) {

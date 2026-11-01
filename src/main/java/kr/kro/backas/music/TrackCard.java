@@ -6,6 +6,7 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import kr.kro.backas.Main;
 import kr.kro.backas.music.ai.AiAutoplay;
 import kr.kro.backas.music.lyrics.EditRateLimiter;
+import kr.kro.backas.music.lyrics.LyricsFeedback;
 import kr.kro.backas.music.lyrics.TranslationJobs;
 import kr.kro.backas.music.source.SourceQuality;
 import kr.kro.backas.util.DiscordSafe;
@@ -234,11 +235,12 @@ public final class TrackCard {
     public boolean close() {
         if (!closed.compareAndSet(false, true)) return false;
         finishedAt = System.currentTimeMillis();
+        if (LyricsFeedback.asksAbout(lyricsSource)) openFeedback();
         if (recordChannel != null) {
             remove();
             ArtworkColors.Banner banner = ArtworkColors.bannerFor(MusicEmbeds.bannerOf(track));
             boolean attach = banner != null && banner.isFile();
-            MessageCreateAction record = recordChannel.sendMessageComponents(frame(client, track, List.of(), finishedAt, attach, null))
+            MessageCreateAction record = recordChannel.sendMessageComponents(frame(client, track, List.of(), finishedAt, attach, lyricsSource))
                     .useComponentsV2(true);
             if (attach) record = record.addFiles(bannerFile(banner));
             record.queue(null, error -> LOGGER.debug("failed to leave a play record for {}", track.getInfo().title, error));
@@ -247,6 +249,19 @@ public final class TrackCard {
         collapse();
         scheduler().schedule(this::collapse, RECOLLAPSE_SECONDS, TimeUnit.SECONDS);
         return true;
+    }
+
+    private void openFeedback() {
+        long at = finishedAt;
+        TranslationJobs.EXECUTOR.execute(() -> {
+            try {
+                MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
+                controller.getLyricsFeedback().open(track, client.getGuild().getId(),
+                        controller.getTranslationClient().getModelName(), at);
+            } catch (RuntimeException e) {
+                LOGGER.warn("failed to open lyrics feedback for {}", track.getInfo().title, e);
+            }
+        });
     }
 
     private void collapse() {
@@ -287,6 +302,12 @@ public final class TrackCard {
         }
         children.add(Separator.createDivider(Separator.Spacing.SMALL));
         children.add(TextDisplay.of(footerText(MusicEmbeds.botName(client.getGuild()), playing ? 0 : finishedAt)));
+        if (playing) {
+            children.add(TrackCardControls.row(client));
+        } else if (finishedAt > 0 && LyricsFeedback.asksAbout(lyricsSource)) {
+            children.add(TextDisplay.of("**" + LyricsFeedback.QUESTION + "**"));
+            children.add(LyricsFeedback.buttons(track));
+        }
         return Container.of(children).withAccentColor(ArtworkColors.of(MusicEmbeds.thumbnailOf(track)));
     }
 
@@ -343,6 +364,7 @@ public final class TrackCard {
         if (Math.abs(client.getCurrentPlaySpeed() - 1.0) > 0.001) settings.add(client.getCurrentPlaySpeed() + "배속");
         if (client.getKaraokeMode().isActive()) settings.add("노래방 " + client.getKaraokeMode().getName());
         if (!client.getCurrentEqualizer().isFlat()) settings.add("이퀄라이저 " + client.getCurrentEqualizer().getName());
+        if (client.isShowingPronunciation()) settings.add("가사 발음");
         settings.add("AI 추천 " + autoplayStatus(client));
         return String.join(" · ", settings);
     }

@@ -67,6 +67,7 @@ public class MusicPlayerClient {
     private volatile LyricsSession lyricsSession;
     private volatile MessageChannel lyricsChannel;
     private volatile long lyricsOffsetMs = LyricsSession.DEFAULT_OFFSET_MS;
+    private volatile boolean showingPronunciation;
     private volatile long connectRequestedAt;
     private volatile TrackCard trackCard;
     private volatile MessageChannel sessionHomeChannel;
@@ -258,6 +259,16 @@ public class MusicPlayerClient {
     private void resetLyricsPreferences() {
         lyricsChannel = null;
         lyricsOffsetMs = LyricsSession.DEFAULT_OFFSET_MS;
+        showingPronunciation = false;
+    }
+
+    public boolean isShowingPronunciation() {
+        return showingPronunciation;
+    }
+
+    public void setShowingPronunciation(boolean showing) {
+        this.showingPronunciation = showing;
+        redrawTrackCard();
     }
 
     public long getLyricsOffsetMs() {
@@ -328,6 +339,11 @@ public class MusicPlayerClient {
         LyricsSession session = lyricsSession;
         if (session != null && session.isForTrack(card.track())) return;
         card.refresh();
+    }
+
+    private void redrawTrackCard() {
+        TrackCard card = trackCard;
+        if (card != null && !card.isClosed() && isCurrentTrack(card.track())) card.refresh();
     }
 
     @Nullable
@@ -519,13 +535,23 @@ public class MusicPlayerClient {
     public boolean pause() {
         boolean b = !audioPlayer.isPaused();
         audioPlayer.setPaused(true);
+        if (b) redrawTrackCard();
         return b;
     }
 
     public boolean resume() {
         boolean b = audioPlayer.isPaused();
         audioPlayer.setPaused(false);
+        if (b) redrawTrackCard();
         return b;
+    }
+
+    public boolean hasPreviousTrack() {
+        return musicTrack.hasPrevious();
+    }
+
+    public boolean playPrevious() {
+        return musicTrack.playPrevious();
     }
 
     public void skipNowPlaying() {

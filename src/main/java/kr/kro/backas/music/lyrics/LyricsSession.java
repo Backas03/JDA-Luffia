@@ -46,6 +46,8 @@ public class LyricsSession {
     public static final long DEFAULT_OFFSET_MS = 0;
     public static final String AUTO_PENDING_NOTE = "AI 보정 중";
     public static final String TRANSLATING_NOTE = "번역 중...";
+    public static final String PRONOUNCING_NOTE = "해석 중";
+    public static final String NO_PRONUNCIATION = "-";
     private static final String BLANK = "​";
     private static final String WIDTH_FILLER = "⠀".repeat(120);
     private static final String CLOCK_SEPARATOR = " — ";
@@ -66,6 +68,7 @@ public class LyricsSession {
     private final boolean pronounceable;
     private final Map<Integer, String> pronunciations = new ConcurrentHashMap<>();
     private final AtomicBoolean pronouncing = new AtomicBoolean(false);
+    private volatile boolean pronounced;
     private final long leadMs;
     private volatile long offsetMs;
     private volatile long autoOffsetMs;
@@ -277,9 +280,13 @@ public class LyricsSession {
 
     @Nullable
     private String pronunciationFor(int index) {
-        if (!pronounceable || !client.getKaraokeMode().isActive() || index < 0 || index >= sources.size()) return null;
+        if (!pronounceable || !client.isShowingPronunciation()) return null;
         if (pronouncing.compareAndSet(false, true)) TranslationJobs.EXECUTOR.execute(this::pronounceAll);
-        return pronunciations.get(index);
+        String source = index < 0 || index >= sources.size() || sources.get(index) == null ? "" : sources.get(index);
+        if (source.isBlank()) return NO_PRONUNCIATION;
+        String pronunciation = pronunciations.get(index);
+        if (pronunciation != null) return pronunciation;
+        return pronounced ? NO_PRONUNCIATION : PRONOUNCING_NOTE;
     }
 
     private void pronounceAll() {
@@ -290,6 +297,8 @@ public class LyricsSession {
             }
         } catch (RuntimeException e) {
             LOGGER.warn("failed to build the korean pronunciation for {}", track.getInfo().title, e);
+        } finally {
+            pronounced = true;
         }
     }
 
@@ -432,8 +441,11 @@ public class LyricsSession {
         StringBuilder text = new StringBuilder();
         text.append(previous.isBlank() ? BLANK : "*" + previous + "*").append('\n');
         text.append("## ").append(current.isBlank() ? REST : current).append('\n');
-        String reading = current.isBlank() ? "" : DiscordSafe.escaped(pronunciation, MAX_LINE_LENGTH);
-        if (!reading.isBlank()) text.append("-# *").append(reading).append("*\n");
+        if (NO_PRONUNCIATION.equals(pronunciation) || PRONOUNCING_NOTE.equals(pronunciation)) {
+            text.append("-# ").append(pronunciation).append('\n');
+        } else if (pronunciation != null && !pronunciation.isBlank()) {
+            text.append("-# *").append(DiscordSafe.escaped(pronunciation, MAX_LINE_LENGTH)).append("*\n");
+        }
         if (translation != null && !translation.isBlank()) {
             text.append("-# ").append(translation).append('\n').append(BLANK).append('\n');
         } else if (pendingTranslation) {

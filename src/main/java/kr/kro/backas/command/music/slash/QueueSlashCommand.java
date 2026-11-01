@@ -28,6 +28,7 @@ import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import net.dv8tion.jda.api.requests.restaction.WebhookMessageEditAction;
@@ -84,22 +85,26 @@ public class QueueSlashCommand implements SlashCommandSource {
         }
         if (USE_COMPONENTS_V2) {
             event.deferReply().queue();
-            CompletableFuture
-                    .supplyAsync(() -> TrackCard.awaitBanner(currentPlaying), TranslationJobs.EXECUTOR)
-                    .thenCompose(banner -> {
-                        boolean attach = banner != null && banner.isFile();
-                        WebhookMessageEditAction<Message> action = event.getHook()
-                                .editOriginalComponents(buildView(client, currentPlaying, attach))
-                                .useComponentsV2(true);
-                        if (attach) action = action.setFiles(TrackCard.bannerFile(banner));
-                        return action.submit();
-                    })
-                    .whenComplete((message, error) -> {
-                        if (error != null) LOGGER.warn("failed to send queue view", error);
-                    });
+            sendView(event.getHook(), client, currentPlaying);
         } else {
             event.replyEmbeds(buildEmbed(client, currentPlaying).build()).queue();
         }
+    }
+
+    public static void sendView(InteractionHook hook, MusicPlayerClient client, AudioTrack currentPlaying) {
+        CompletableFuture
+                .supplyAsync(() -> TrackCard.awaitBanner(currentPlaying), TranslationJobs.EXECUTOR)
+                .thenCompose(banner -> {
+                    boolean attach = banner != null && banner.isFile();
+                    WebhookMessageEditAction<Message> action = hook
+                            .editOriginalComponents(buildView(client, currentPlaying, attach))
+                            .useComponentsV2(true);
+                    if (attach) action = action.setFiles(TrackCard.bannerFile(banner));
+                    return action.submit();
+                })
+                .whenComplete((message, error) -> {
+                    if (error != null) LOGGER.warn("failed to send queue view", error);
+                });
     }
 
     private static Container buildView(MusicPlayerClient client, AudioTrack current, boolean bannerAttached) {
