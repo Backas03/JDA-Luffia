@@ -8,7 +8,6 @@ import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerClient;
 import kr.kro.backas.Main;
 import kr.kro.backas.music.lyrics.sync.LyricsAutoSync;
-import kr.kro.backas.music.lyrics.sync.LyricsTranscriber;
 import kr.kro.backas.music.TrackCard;
 import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.DurationUtil;
@@ -48,6 +47,7 @@ public class LyricsSession {
     private static final long POST_EDIT_GAP_MS = Config.get().lyrics().display().postEditGapMs();
     public static final long DEFAULT_OFFSET_MS = 0;
     public static final String AUTO_PENDING_NOTE = "AI 보정 중";
+    public static final String AI_GENERATED_NOTE = "AI 생성 가사 · 정확하지 않을 수 있어요";
     public static final String TRANSLATING_NOTE = "번역 중...";
     public static final String PRONOUNCING_NOTE = "해석 중";
     public static final String NO_PRONUNCIATION = "-";
@@ -86,6 +86,7 @@ public class LyricsSession {
     private String shownTranslation;
     private String shownPronunciation;
     private GapButton shownGap;
+    private String shownNote;
     private boolean shownPending;
     private String shownClock = "";
     private long lastEditAt;
@@ -183,8 +184,12 @@ public class LyricsSession {
     private String autoNote() {
         if (autoPending) return AUTO_PENDING_NOTE;
         if (convertingPartial) return LyricsConversions.LABEL_RUNNING;
-        if (lyrics.aiGenerated()) return LyricsTranscriber.NOTE;
+        if (lyrics.aiGenerated()) return AI_GENERATED_NOTE;
         return lyrics.aiTimed() ? LyricsConversions.LABEL_DONE : null;
+    }
+
+    static String clockLine(String clock, @Nullable String note) {
+        return note == null || note.isBlank() ? clock : clock + " · " + note;
     }
 
     public void setOffsetMs(long offsetMs) {
@@ -354,7 +359,7 @@ public class LyricsSession {
     private GapButton gapButton() {
         if (surface.card() == null || !lyrics.hasSynced()) return null;
         double speed = Math.max(0.1, client.getCurrentPlaySpeed());
-        long trackNow = (long) (client.getRealPositionMs() + leadMs * speed);
+        long trackNow = (long) (client.getRealPositionMs() + (leadMs + TICK_MS) * speed);
         long shift = lyricsShift();
         long lyricNow = trackNow + shift;
         Long quiet = LyricsJumps.quietSince(lyrics.synced(), lyricNow);
@@ -394,15 +399,20 @@ public class LyricsSession {
             String pronunciation = pronunciationFor(index);
             boolean pending = isPendingTranslation(index, translation);
             GapButton gap = gapButton();
+            String note = autoNote();
             boolean sameLine = index == shownIndex;
             boolean sameTranslation = translation == null ? shownTranslation == null : translation.equals(shownTranslation);
             boolean samePronunciation = Objects.equals(pronunciation, shownPronunciation);
-            boolean clockOnly = sameLine && sameTranslation && samePronunciation && pending == shownPending;
-            boolean sameGap = Objects.equals(gap, shownGap);
+            boolean clockOnly = sameLine && sameTranslation && samePronunciation && pending == shownPending
+                    && Objects.equals(note, shownNote);
+            boolean quick = clockOnly && !Objects.equals(gap, shownGap);
             String clock = playbackClock(client, track);
-            if (clockOnly && ((clock.equals(shownClock) && sameGap) || !hasRoomBeforeNextLine(index, position))) return;
+            if (quick && !hasRoomForQuickEdit(index, position)) return;
+            if (clockOnly && !quick && (clock.equals(shownClock) || !hasRoomBeforeNextLine(index, position))) return;
             long now = System.currentTimeMillis();
-            if (clockOnly) {
+            if (quick) {
+                if (now - lastEditAt < POST_EDIT_GAP_MS) return;
+            } else if (clockOnly) {
                 if (now - lastEditAt < CLOCK_EDIT_INTERVAL_MS || !EditRateLimiter.extrasAllowed(channelId)) return;
             } else if (now - lastContentEditAt < MIN_EDIT_INTERVAL_MS || now - lastEditAt < POST_EDIT_GAP_MS) {
                 return;
@@ -422,6 +432,7 @@ public class LyricsSession {
             shownPronunciation = pronunciation;
             shownPending = pending;
             shownGap = gap;
+            shownNote = note;
             shownClock = clock;
             lastEditAt = now;
             if (!clockOnly) lastContentEditAt = now;
@@ -449,6 +460,13 @@ public class LyricsSession {
             LOGGER.warn("lyrics tick failed", e);
             stop("가사 표시 중 오류가 발생했습니다");
         }
+    }
+
+    private boolean hasRoomForQuickEdit(int index, long positionMs) {
+        List<LyricLine> lines = lyrics.synced();
+        if (index + 1 >= lines.size()) return true;
+        double speed = Math.max(0.1, client.getCurrentPlaySpeed());
+        return (lines.get(index + 1).timeMs() - positionMs) / speed >= POST_EDIT_GAP_MS;
     }
 
     private boolean hasRoomBeforeNextLine(int index, long positionMs) {
@@ -549,8 +567,7 @@ public class LyricsSession {
         StringBuilder tail = new StringBuilder();
         if (footer != null) tail.append("\n-# ").append(footer);
         else if (client != null) {
-            tail.append("\n-# ").append(playbackClock(client, track));
-            if (autoNote != null) tail.append("\n-# ").append(autoNote);
+            tail.append("\n-# ").append(clockLine(playbackClock(client, track), autoNote));
         }
         if ((translation != null && !translation.isBlank()) || pendingTranslation) {
             String note = LyricsPresenter.translationStatus(client, translator);
