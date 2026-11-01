@@ -7,6 +7,9 @@ import kr.kro.backas.music.MusicEmbeds;
 import kr.kro.backas.music.MusicPlayerController;
 import kr.kro.backas.music.MusicQueryParser;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
+import net.dv8tion.jda.api.entities.Member;
+import org.jetbrains.annotations.Nullable;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
@@ -54,16 +57,20 @@ public class PlaySlashCommand implements SlashCommandSource {
                 LOGGER.debug("unknown search source {}, using default", sourceOption.getAsString());
             }
         }
-        MusicQueryParser.ParsedQuery parsed = MusicQueryParser.parse(option.getAsString(), preferred);
+        play(event, event.getMember(), option.getAsString(), preferred);
+    }
+
+    public static void play(IReplyCallback event, Member member, String query, @Nullable Identifier preferred) {
+        MusicQueryParser.ParsedQuery parsed = MusicQueryParser.parse(query, preferred);
 
         MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
         if (parsed.requiresSpotify() && !controller.getSourceRegistry().isSpotifyEnabled()) {
-            event.replyEmbeds(MusicEmbeds.error(event.getMember(),
+            event.replyEmbeds(MusicEmbeds.error(member,
                     "스포티파이를 사용할 수 없습니다",
                     "봇에 스포티파이 API 키가 설정되어 있지 않습니다. 유튜브 링크 또는 검색어를 이용해주세요.").build()).queue();
             return;
         }
-        controller.search(parsed.identifier(), parsed.query(), event.getMember(), event);
+        controller.search(parsed.identifier(), parsed.query(), member, event);
     }
 
     @Override

@@ -86,7 +86,7 @@ public class MusicTrackHandler extends AudioEventAdapter {
         MusicSelection selection = track.getUserData(MusicSelection.class);
         if (selection == null) return;
         try {
-            selection.getSlashCommandInteractionEvent()
+            selection.getInteraction()
                     .getMessageChannel()
                     .sendMessageEmbeds(embed)
                     .queue(null, e -> LOGGER.debug("failed to notify track error", e));

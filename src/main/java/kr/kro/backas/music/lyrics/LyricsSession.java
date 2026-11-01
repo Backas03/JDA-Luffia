@@ -189,6 +189,15 @@ public class LyricsSession {
         return offsetMs;
     }
 
+    @Nullable
+    public Long seekTarget(LyricsJumps.Jump jump) {
+        if (!lyrics.hasSynced()) return null;
+        double speed = Math.max(0.1, client.getCurrentPlaySpeed());
+        long shift = (long) ((offsetMs + autoOffsetMs) * speed);
+        Long target = LyricsJumps.target(lyrics.synced(), (long) client.getRealPositionMs() + shift, jump);
+        return target == null ? null : Math.max(0, target - shift);
+    }
+
     public AudioTrack getTrack() {
         return track;
     }

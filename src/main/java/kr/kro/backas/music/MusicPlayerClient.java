@@ -48,6 +48,7 @@ public class MusicPlayerClient {
     public static final float KARAOKE_ECHO_DECAY = (float) Config.get().musicPlayer().karaoke().echoDecay();
     public static final float KARAOKE_CENTER_GAIN = (float) Config.get().musicPlayer().karaoke().centerGain();
     private static final long CONNECT_GRACE_MS = Config.get().musicPlayer().connectGraceSeconds() * 1000L;
+    static final long SEEK_END_MARGIN_MS = 1_000;
 
     private final AudioPlayerManager audioPlayerManager;
     private final JDA musicBot;
@@ -287,15 +288,15 @@ public class MusicPlayerClient {
     @Nullable
     private MessageChannel homeChannelFor(AudioTrack track) {
         MusicSelection selection = track.getUserData(MusicSelection.class);
-        if (selection == null || selection.getSlashCommandInteractionEvent() == null) return null;
+        if (selection == null || selection.getInteraction() == null) return null;
         MessageChannel session = sessionHomeChannel;
         if (selection.isAiRecommended() && session != null) return session;
-        return selection.getSlashCommandInteractionEvent().getMessageChannel();
+        return selection.getInteraction().getMessageChannel();
     }
 
     private void rememberSessionHome(MusicSelection selection) {
-        if (sessionHomeChannel != null || selection.getSlashCommandInteractionEvent() == null) return;
-        sessionHomeChannel = selection.getSlashCommandInteractionEvent().getMessageChannel();
+        if (sessionHomeChannel != null || selection.getInteraction() == null) return;
+        sessionHomeChannel = selection.getInteraction().getMessageChannel();
     }
 
     private void onTrackStarted(AudioTrack track) {
@@ -552,6 +553,30 @@ public class MusicPlayerClient {
 
     public boolean playPrevious() {
         return musicTrack.playPrevious();
+    }
+
+    public boolean canSeek() {
+        AudioTrack track = audioPlayer.getPlayingTrack();
+        return track != null && track.isSeekable() && !track.getInfo().isStream;
+    }
+
+    public boolean seekTo(long positionMs) {
+        AudioTrack track = audioPlayer.getPlayingTrack();
+        if (track == null || !track.isSeekable() || track.getInfo().isStream) return false;
+        long target = clampSeek(positionMs, track.getDuration());
+        track.setPosition(target);
+        realPositionMs = target;
+        markSyncBase(target, target);
+        return true;
+    }
+
+    public boolean seekBy(long deltaMs) {
+        return seekTo((long) realPositionMs + deltaMs);
+    }
+
+    static long clampSeek(long positionMs, long lengthMs) {
+        long upper = lengthMs > 0 ? Math.max(0, lengthMs - SEEK_END_MARGIN_MS) : Long.MAX_VALUE;
+        return Math.max(0, Math.min(positionMs, upper));
     }
 
     public void skipNowPlaying() {
