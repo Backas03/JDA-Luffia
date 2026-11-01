@@ -50,4 +50,19 @@ class LogSetupTest {
         assertTrue(errors.contains("warned"), errors);
         assertFalse(errors.contains("without context"), errors);
     }
+
+    @Test
+    void dropsTheYoutubeUserDataTokenNoiseButKeepsClientFailures() throws IOException {
+        LogSetup.apply(new LuffiaConfig.Logging(dir.toString(), "info", false));
+        var youtube = LoggerFactory.getLogger("dev.lavalink.youtube.track.YoutubeAudioTrack");
+        youtube.debug("Failed to parse token from userData", new IllegalArgumentException("Unrecognized token 'kr'"));
+        youtube.debug("Client \"{}\" failed during playback storing and proceeding", "WEB");
+        LoggerFactory.getLogger("kr.kro.backas.test").info("Failed to parse token from userData");
+        LogSetup.shutdown();
+
+        String all = Files.readString(dir.resolve("luffia.log"));
+        assertFalse(all.contains("Unrecognized token"), all);
+        assertTrue(all.contains("Client \"WEB\" failed during playback"), all);
+        assertTrue(all.contains("kr.kro.backas.test -- Failed to parse token from userData"), all);
+    }
 }
