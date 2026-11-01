@@ -1,7 +1,7 @@
 package kr.kro.backas.music.lyrics.sync;
 
 import com.atilika.kuromoji.ipadic.Token;
-import com.atilika.kuromoji.ipadic.Tokenizer;
+import kr.kro.backas.music.lyrics.JapaneseTokenizer;
 
 import java.text.Normalizer;
 import java.util.ArrayList;
@@ -23,7 +23,6 @@ public final class Romaji {
                     + "|h(?=h)|b(?=b)|p(?=p)|c(?=c)|f(?=f)|j(?=j)|r(?=r))+");
     private static final String SMALL = "ぁぃぅぇぉゃゅょゎ";
     private static final Map<Character, String> KANA = kanaTable();
-    private static volatile Tokenizer tokenizer;
 
     private Romaji() {
     }
@@ -69,7 +68,7 @@ public final class Romaji {
         StringBuilder[] readings = new StringBuilder[words.size()];
         for (int i = 0; i < readings.length; i++) readings[i] = new StringBuilder();
         if (!text.isEmpty()) {
-            for (Token token : tokenizer().tokenize(text.toString())) {
+            for (Token token : JapaneseTokenizer.get().tokenize(text.toString())) {
                 readings[owner(starts, token.getPosition())].append(read(token));
             }
         }
@@ -147,27 +146,18 @@ public final class Romaji {
 
     private static String read(Token token) {
         String pronunciation = token.getPronunciation();
-        boolean known = pronunciation != null && !pronunciation.isEmpty() && !pronunciation.equals("*");
-        return fromKana(known ? pronunciation : token.getSurface());
+        if (known(pronunciation)) return fromKana(pronunciation);
+        String reading = token.getReading();
+        return fromKana(known(reading) ? reading : token.getSurface());
+    }
+
+    private static boolean known(String value) {
+        return value != null && !value.isEmpty() && !value.equals("*");
     }
 
     private static int owner(int[] starts, int position) {
         int index = Arrays.binarySearch(starts, position);
         return index >= 0 ? index : Math.max(0, -index - 2);
-    }
-
-    private static Tokenizer tokenizer() {
-        Tokenizer current = tokenizer;
-        if (current == null) {
-            synchronized (Romaji.class) {
-                current = tokenizer;
-                if (current == null) {
-                    current = new Tokenizer();
-                    tokenizer = current;
-                }
-            }
-        }
-        return current;
     }
 
     private static String fold(String text) {
