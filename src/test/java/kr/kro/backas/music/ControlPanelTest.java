@@ -16,7 +16,8 @@ class ControlPanelTest {
 
     @Test
     void idsCarryTheActionBotAndGuildWithinDiscordLimits() {
-        for (String action : new String[] {ControlPanel.OPEN, ControlPanel.AI_SHUFFLE, ControlPanel.INTERLUDE, ControlPanel.LYRICS_EARLIER}) {
+        for (String action : new String[] {ControlPanel.OPEN, ControlPanel.AI_SHUFFLE, ControlPanel.INTERLUDE, ControlPanel.LYRICS_EARLIER,
+                ControlPanel.CARD_GAP, ControlPanel.CARD_OUTRO}) {
             String id = ControlPanel.id(action, KEY);
             assertTrue(id.length() <= 100, id);
             assertArrayEquals(new String[] {action, "123456789012345678", "987654321098765432"}, ControlPanel.parse(id, ControlPanel.PREFIX));
