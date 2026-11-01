@@ -7,10 +7,13 @@ import com.sedmelluq.discord.lavaplayer.container.MediaContainerDescriptor;
 import com.sedmelluq.discord.lavaplayer.container.mp3.Mp3ContainerProbe;
 import com.sedmelluq.discord.lavaplayer.source.http.HttpAudioTrack;
 import kr.kro.backas.music.cache.DiskCache;
+import net.dv8tion.jda.api.components.buttons.Button;
+import net.dv8tion.jda.api.components.buttons.ButtonStyle;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -76,5 +79,45 @@ class LyricsFeedbackTest {
     void buttonIdsFitDiscordLimits() {
         String id = LyricsFeedback.PREFIX + LyricsFeedback.GOOD + ":" + LyricsFeedback.keyOf(track("x".repeat(500)));
         assertTrue(id.length() <= 100, id);
+    }
+
+    @Test
+    void chosenButtonLocksWhileTheOtherStaysOpenToSwitch() {
+        LyricsFeedback feedback = new LyricsFeedback(new DiskCache(dir));
+        AudioTrack track = track("abc123");
+        feedback.open(track, "42", "qwen", 1_000);
+        String key = LyricsFeedback.keyOf(track);
+
+        List<Button> fresh = buttons(feedback, track);
+        assertFalse(fresh.get(0).isDisabled());
+        assertFalse(fresh.get(1).isDisabled());
+
+        feedback.record(key, "111", "alice", true, 2_000);
+        List<Button> liked = buttons(feedback, track);
+        assertTrue(liked.get(0).isDisabled());
+        assertEquals(ButtonStyle.SUCCESS, liked.get(0).getStyle());
+        assertFalse(liked.get(1).isDisabled());
+
+        feedback.record(key, "111", "alice", false, 3_000);
+        List<Button> disliked = buttons(feedback, track);
+        assertFalse(disliked.get(0).isDisabled());
+        assertTrue(disliked.get(1).isDisabled());
+        assertEquals(ButtonStyle.DANGER, disliked.get(1).getStyle());
+
+        feedback.forget(track);
+        assertFalse(buttons(feedback, track).get(1).isDisabled());
+    }
+
+    @Test
+    void readsTheVoteBackFromItsOwnButtonsOnly() {
+        assertEquals("good", LyricsFeedback.voteOf("lyrics-feedback:good:abc", "abc"));
+        assertEquals("bad", LyricsFeedback.voteOf("lyrics-feedback:bad:abc", "abc"));
+        assertNull(LyricsFeedback.voteOf("lyrics-feedback:good:other", "abc"));
+        assertNull(LyricsFeedback.voteOf("card:pause:abc", "abc"));
+        assertNull(LyricsFeedback.voteOf(null, "abc"));
+    }
+
+    private static List<Button> buttons(LyricsFeedback feedback, AudioTrack track) {
+        return feedback.buttons(track).getButtons();
     }
 }

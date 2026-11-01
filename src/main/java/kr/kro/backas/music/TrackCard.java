@@ -253,6 +253,7 @@ public final class TrackCard {
 
     private void openFeedback() {
         long at = finishedAt;
+        Main.getLuffia().getMusicPlayerController().getLyricsFeedback().forget(track);
         TranslationJobs.EXECUTOR.execute(() -> {
             try {
                 MusicPlayerController controller = Main.getLuffia().getMusicPlayerController();
@@ -303,7 +304,7 @@ public final class TrackCard {
         children.add(Separator.createDivider(Separator.Spacing.SMALL));
         if (!playing && finishedAt > 0 && LyricsFeedback.asksAbout(lyricsSource)) {
             children.add(TextDisplay.of("**" + LyricsFeedback.QUESTION + "**"));
-            children.add(LyricsFeedback.buttons(track));
+            children.add(Main.getLuffia().getMusicPlayerController().getLyricsFeedback().buttons(track));
         }
         TextDisplay footer = TextDisplay.of(footerText(MusicEmbeds.botName(client.getGuild()), playing ? 0 : finishedAt));
         children.add(playing ? Section.of(ControlPanel.openButton(client), footer) : footer);
