@@ -15,6 +15,7 @@ import kr.kro.backas.util.DurationUtil;
 import net.dv8tion.jda.api.components.container.Container;
 import net.dv8tion.jda.api.components.container.ContainerChildComponent;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.components.section.Section;
 import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.components.thumbnail.Thumbnail;
@@ -52,6 +53,8 @@ public class LyricsSession {
     public static final String NO_PRONUNCIATION = "-";
     private static final String BLANK = "​";
     private static final String WIDTH_FILLER = "⠀".repeat(120);
+    static final String CARD_FILLER = "⠀".repeat(60);
+    static final String SLOT_BLANK = "⠀";
     private static final String CLOCK_SEPARATOR = " — ";
     public static final String REST = "♪";
     private static final String FAILED_TRANSLATION = "-";
@@ -82,7 +85,7 @@ public class LyricsSession {
     private int shownIndex = -2;
     private String shownTranslation;
     private String shownPronunciation;
-    private Gap shownGap = Gap.NONE;
+    private GapButton shownGap;
     private boolean shownPending;
     private String shownClock = "";
     private long lastEditAt;
@@ -212,7 +215,7 @@ public class LyricsSession {
     public void stop(String reason) {
         if (!halt()) return;
         try {
-            surface.edit(view(shownIndex, translationFor(shownIndex), shownPronunciation, reason, false, Gap.NONE),
+            surface.edit(view(shownIndex, translationFor(shownIndex), shownPronunciation, reason, false, null),
                             System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS)
                     .whenComplete((result, error) -> {
                         if (error != null) LOGGER.debug("failed to finalize lyrics message", error);
@@ -320,42 +323,60 @@ public class LyricsSession {
         return LyricsLanguage.needsTranslation(text);
     }
 
-    enum Gap {
-        NONE,
-        INTERLUDE,
-        OUTRO
+    record GapButton(boolean outro, boolean enabled) {
     }
 
     private Container view(int index, @Nullable String translation, @Nullable String pronunciation, @Nullable String footer,
-                           boolean pending, Gap gap) {
+                           boolean pending, @Nullable GapButton gap) {
         String original = originalToken;
         ActionRow actions = original == null ? null : ActionRow.of(LyricsConversions.originalButton(original));
         Body parts = parts(client, track, lyrics, index, translation, pronunciation, footer, translator, pending,
                 surface.showsSong(), autoNote());
         TrackCard card = surface.card();
-        if (gap != Gap.NONE && card != null && !parts.tail().isEmpty()) {
-            List<ContainerChildComponent> children = new ArrayList<>();
-            children.add(TextDisplay.of(parts.main()));
-            children.add(Section.of(gap == Gap.OUTRO ? ControlPanel.outroButton(client) : ControlPanel.gapButton(client),
-                    TextDisplay.of(parts.tail().substring(1))));
+        if (card != null && !parts.filler().isEmpty()) {
+            Button jump = null;
+            if (gap != null) {
+                jump = gap.outro() ? ControlPanel.outroButton(client) : ControlPanel.gapButton(client);
+                if (!gap.enabled()) jump = jump.asDisabled();
+            }
+            List<ContainerChildComponent> children = cardComponents(parts, jump);
             if (actions != null) children.add(actions);
             return card.frame(children);
         }
         return surface.frame(TextDisplay.of(parts.whole()), actions);
     }
 
-    private Gap gap() {
-        if (surface.card() == null) return Gap.NONE;
-        if (seekTarget(LyricsJumps.Jump.INTERLUDE) != null) return Gap.INTERLUDE;
-        return inOutro() ? Gap.OUTRO : Gap.NONE;
+    private long lyricsShift() {
+        return (long) ((offsetMs + autoOffsetMs) * Math.max(0.1, client.getCurrentPlaySpeed()));
+    }
+
+    @Nullable
+    private GapButton gapButton() {
+        if (surface.card() == null || !lyrics.hasSynced()) return null;
+        double speed = Math.max(0.1, client.getCurrentPlaySpeed());
+        long trackNow = (long) (client.getRealPositionMs() + leadMs * speed);
+        long shift = lyricsShift();
+        long lyricNow = trackNow + shift;
+        Long quiet = LyricsJumps.quietSince(lyrics.synced(), lyricNow);
+        if (quiet == null) return null;
+        Long next = LyricsJumps.nextSung(lyrics.synced(), lyricNow);
+        LyricsJumps.ButtonState state;
+        if (next != null) {
+            state = LyricsJumps.buttonState(quiet, next, lyricNow);
+        } else {
+            long length = track.getInfo().length;
+            if (track.getInfo().isStream || length <= 0) return null;
+            state = LyricsJumps.buttonState(quiet - shift, length, trackNow);
+        }
+        if (state == LyricsJumps.ButtonState.HIDDEN) return null;
+        return new GapButton(next == null, state == LyricsJumps.ButtonState.ENABLED);
     }
 
     public boolean inOutro() {
         if (!lyrics.hasSynced() || track.getInfo().isStream || track.getInfo().length <= 0) return false;
         long now = (long) client.getRealPositionMs();
-        if (track.getInfo().length - now < LyricsJumps.MIN_SKIP_MS) return false;
-        long shift = (long) ((offsetMs + autoOffsetMs) * Math.max(0.1, client.getCurrentPlaySpeed()));
-        return LyricsJumps.inOutro(lyrics.synced(), now + shift);
+        if (track.getInfo().length - now <= LyricsJumps.HIDE_BEFORE_MS) return false;
+        return LyricsJumps.inOutro(lyrics.synced(), now + lyricsShift());
     }
 
     private void tick() {
@@ -372,13 +393,14 @@ public class LyricsSession {
             String translation = translationFor(index);
             String pronunciation = pronunciationFor(index);
             boolean pending = isPendingTranslation(index, translation);
-            Gap gap = gap();
+            GapButton gap = gapButton();
             boolean sameLine = index == shownIndex;
             boolean sameTranslation = translation == null ? shownTranslation == null : translation.equals(shownTranslation);
             boolean samePronunciation = Objects.equals(pronunciation, shownPronunciation);
-            boolean clockOnly = sameLine && sameTranslation && samePronunciation && pending == shownPending && gap == shownGap;
+            boolean clockOnly = sameLine && sameTranslation && samePronunciation && pending == shownPending;
+            boolean sameGap = Objects.equals(gap, shownGap);
             String clock = playbackClock(client, track);
-            if (clockOnly && (clock.equals(shownClock) || !hasRoomBeforeNextLine(index, position))) return;
+            if (clockOnly && ((clock.equals(shownClock) && sameGap) || !hasRoomBeforeNextLine(index, position))) return;
             long now = System.currentTimeMillis();
             if (clockOnly) {
                 if (now - lastEditAt < CLOCK_EDIT_INTERVAL_MS || !EditRateLimiter.extrasAllowed(channelId)) return;
@@ -420,10 +442,8 @@ public class LyricsSession {
                         } else {
                             LOGGER.debug("lyrics edit failed", error);
                         }
-                        if (!clockOnly) {
-                            shownIndex = -2;
-                            shownClock = "";
-                        }
+                        if (!clockOnly) shownIndex = -2;
+                        shownClock = "";
                     });
         } catch (RuntimeException e) {
             LOGGER.warn("lyrics tick failed", e);
@@ -473,10 +493,18 @@ public class LyricsSession {
         return container.withAccentColor(ArtworkColors.of(artwork));
     }
 
-    record Body(String main, String tail) {
+    record Body(String lyrics, String filler, String tail) {
         String whole() {
-            return main + tail;
+            return lyrics + (filler.isEmpty() ? "" : "\n" + filler) + tail;
         }
+    }
+
+    static List<ContainerChildComponent> cardComponents(Body parts, @Nullable Button jump) {
+        List<ContainerChildComponent> children = new ArrayList<>();
+        children.add(TextDisplay.of(parts.lyrics() + "\n-# " + CARD_FILLER));
+        TextDisplay clock = TextDisplay.of("-# " + SLOT_BLANK + parts.tail());
+        children.add(jump == null ? clock : Section.of(jump, clock));
+        return children;
     }
 
     static TextDisplay body(@Nullable MusicPlayerClient client, AudioTrack track, Lyrics lyrics, int index,
@@ -511,10 +539,12 @@ public class LyricsSession {
         } else {
             text.append(BLANK).append('\n');
         }
-        text.append(next.isBlank() ? BLANK : "*" + next + "*").append('\n');
-        text.append("-# ").append(WIDTH_FILLER);
+        text.append(next.isBlank() ? BLANK : "*" + next + "*");
+        String filler = "-# " + WIDTH_FILLER;
         if (withSong) {
+            text.append('\n').append(filler);
             text.append("\n-# ").append(DiscordSafe.text(track.getInfo().author + " - " + track.getInfo().title, MAX_SONG_LENGTH));
+            filler = "";
         }
         StringBuilder tail = new StringBuilder();
         if (footer != null) tail.append("\n-# ").append(footer);
@@ -531,7 +561,7 @@ public class LyricsSession {
                 }
             }
         }
-        return new Body(text.toString(), tail.toString());
+        return new Body(text.toString(), filler, tail.toString());
     }
 
     static String playbackClock(MusicPlayerClient client, AudioTrack track) {

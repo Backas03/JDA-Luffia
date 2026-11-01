@@ -51,13 +51,33 @@ class LyricsJumpsTest {
     }
 
     @Test
-    void gapJumpNeedsToSaveAtLeastThreeSeconds() {
-        assertEquals(50_000L, LyricsJumps.target(SONG, 46_000, INTERLUDE));
-        assertNull(LyricsJumps.target(SONG, 47_500, INTERLUDE));
-        assertEquals(13_000L, LyricsJumps.target(SONG, 9_000, INTERLUDE));
-        assertNull(LyricsJumps.target(SONG, 10_500, INTERLUDE));
+    void gapJumpWorksUntilTwoAndAHalfSecondsBeforeTheSinging() {
+        assertEquals(50_000L, LyricsJumps.target(SONG, 49_000, INTERLUDE));
+        assertNull(LyricsJumps.target(SONG, 49_600, INTERLUDE));
+        assertEquals(13_000L, LyricsJumps.target(SONG, 12_000, INTERLUDE));
+        assertNull(LyricsJumps.target(SONG, 12_600, INTERLUDE));
         List<LyricLine> restFirst = List.of(new LyricLine(0, ""), new LyricLine(20_000, "first"));
         assertEquals(18_000L, LyricsJumps.target(restFirst, 1_000, INTERLUDE));
+    }
+
+    @Test
+    void gapButtonTurnsGreyAtTwoAndAHalfSecondsAndLeavesAtHalfASecond() {
+        assertEquals(LyricsJumps.ButtonState.ENABLED, LyricsJumps.buttonState(27_000, 52_000, 40_000));
+        assertEquals(LyricsJumps.ButtonState.ENABLED, LyricsJumps.buttonState(27_000, 52_000, 49_400));
+        assertEquals(LyricsJumps.ButtonState.DISABLED, LyricsJumps.buttonState(27_000, 52_000, 49_500));
+        assertEquals(LyricsJumps.ButtonState.DISABLED, LyricsJumps.buttonState(27_000, 52_000, 51_400));
+        assertEquals(LyricsJumps.ButtonState.HIDDEN, LyricsJumps.buttonState(27_000, 52_000, 51_500));
+        assertEquals(LyricsJumps.ButtonState.HIDDEN, LyricsJumps.buttonState(27_000, 31_000, 27_500));
+    }
+
+    @Test
+    void quietStartsAtTheIntroARestLineOrSixSecondsIntoAHeldLine() {
+        assertEquals(0L, LyricsJumps.quietSince(SONG, 3_000));
+        assertEquals(27_000L, LyricsJumps.quietSince(SONG, 30_000));
+        assertNull(LyricsJumps.quietSince(SONG, 20_000));
+        assertEquals(62_000L, LyricsJumps.quietSince(SONG, 63_000));
+        assertEquals(52_000L, LyricsJumps.nextSung(SONG, 30_000));
+        assertNull(LyricsJumps.nextSung(SONG, 57_000));
     }
 
     @Test
