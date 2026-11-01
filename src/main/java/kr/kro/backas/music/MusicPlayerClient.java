@@ -341,7 +341,7 @@ public class MusicPlayerClient {
         card.refresh();
     }
 
-    private void redrawTrackCard() {
+    public void redrawTrackCard() {
         TrackCard card = trackCard;
         if (card != null && !card.isClosed() && isCurrentTrack(card.track())) card.refresh();
     }
