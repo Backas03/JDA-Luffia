@@ -359,7 +359,7 @@ public class LyricsSession {
     private GapButton gapButton() {
         if (surface.card() == null || !lyrics.hasSynced()) return null;
         double speed = Math.max(0.1, client.getCurrentPlaySpeed());
-        long trackNow = (long) (client.getRealPositionMs() + (leadMs + TICK_MS) * speed);
+        long trackNow = (long) (client.getRealPositionMs() + leadMs * speed);
         long shift = lyricsShift();
         long lyricNow = trackNow + shift;
         Long quiet = LyricsJumps.quietSince(lyrics.synced(), lyricNow);
@@ -380,7 +380,7 @@ public class LyricsSession {
     public boolean inOutro() {
         if (!lyrics.hasSynced() || track.getInfo().isStream || track.getInfo().length <= 0) return false;
         long now = (long) client.getRealPositionMs();
-        if (track.getInfo().length - now <= LyricsJumps.HIDE_BEFORE_MS) return false;
+        if (track.getInfo().length - now <= 0) return false;
         return LyricsJumps.inOutro(lyrics.synced(), now + lyricsShift());
     }
 

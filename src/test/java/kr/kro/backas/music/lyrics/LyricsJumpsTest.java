@@ -61,12 +61,12 @@ class LyricsJumpsTest {
     }
 
     @Test
-    void gapButtonTurnsGreyAtTwoAndAHalfSecondsAndLeavesAtHalfASecond() {
+    void gapButtonTurnsGreyAtTwoAndAHalfSecondsAndLeavesWhenTheSingingStarts() {
         assertEquals(LyricsJumps.ButtonState.ENABLED, LyricsJumps.buttonState(27_000, 52_000, 40_000));
         assertEquals(LyricsJumps.ButtonState.ENABLED, LyricsJumps.buttonState(27_000, 52_000, 49_400));
         assertEquals(LyricsJumps.ButtonState.DISABLED, LyricsJumps.buttonState(27_000, 52_000, 49_500));
-        assertEquals(LyricsJumps.ButtonState.DISABLED, LyricsJumps.buttonState(27_000, 52_000, 51_400));
-        assertEquals(LyricsJumps.ButtonState.HIDDEN, LyricsJumps.buttonState(27_000, 52_000, 51_500));
+        assertEquals(LyricsJumps.ButtonState.DISABLED, LyricsJumps.buttonState(27_000, 52_000, 51_900));
+        assertEquals(LyricsJumps.ButtonState.HIDDEN, LyricsJumps.buttonState(27_000, 52_000, 52_000));
         assertEquals(LyricsJumps.ButtonState.HIDDEN, LyricsJumps.buttonState(27_000, 31_000, 27_500));
     }
 

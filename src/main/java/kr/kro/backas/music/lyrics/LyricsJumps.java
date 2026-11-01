@@ -21,7 +21,6 @@ public final class LyricsJumps {
     public static final long INTERLUDE_LEAD_MS = 2_000;
     public static final long MIN_GAP_MS = 5_000;
     public static final long DISABLE_BEFORE_MS = 2_500;
-    public static final long HIDE_BEFORE_MS = 500;
     static final long INTERLUDE_MIN_MS = 6_000;
     static final long LINE_RESTART_MS = 1_500;
     static final long NEXT_LINE_GUARD_MS = 300;
@@ -72,7 +71,7 @@ public final class LyricsJumps {
     public static ButtonState buttonState(long quietSince, long end, long now) {
         if (end - quietSince < MIN_GAP_MS) return ButtonState.HIDDEN;
         long remaining = end - now;
-        if (remaining <= HIDE_BEFORE_MS) return ButtonState.HIDDEN;
+        if (remaining <= 0) return ButtonState.HIDDEN;
         return remaining > DISABLE_BEFORE_MS ? ButtonState.ENABLED : ButtonState.DISABLED;
     }
 
