@@ -181,7 +181,7 @@ public final class MusicEmbeds {
 
     static String footerText(String botName, @Nullable String requester) {
         String first = requester == null ? botName : botName + " · " + DiscordSafe.escaped(requester, MAX_LINK_TITLE);
-        return "-# " + first + "\n-# " + BuildInfo.VERSION;
+        return "-# " + first + "\n-# " + BuildInfo.versionLink();
     }
 
     private static TextDisplay footer(Guild guild, @Nullable String requester) {

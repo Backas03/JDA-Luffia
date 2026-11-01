@@ -354,7 +354,7 @@ public final class TrackCard {
 
     static String footerText(String botName, long finishedAt) {
         String first = finishedAt > 0 ? botName + " <t:" + finishedAt / 1000 + ":t> " + PLAYED_NOTE : botName;
-        return "-# " + first + "\n-# " + BuildInfo.VERSION;
+        return "-# " + first + "\n-# " + BuildInfo.versionLink();
     }
 
     public static String settingsLine(MusicPlayerClient client) {

@@ -197,3 +197,6 @@ https://github.com/user-attachments/assets/5cb94339-9e2c-490b-86a9-42d63d0af4d4
 - 명령어 끄기: ``Luffia.java`` 에서 해당 ``registerSlashCommand`` / ``registerCommand`` 줄을 주석 처리합니다.
 - prefix 변경: ``Luffia.java`` 의 ``new CommandManager("!", this)`` 에서 ``"!"`` 를 바꿉니다 (슬래시 명령어는 영향 없음).
 - PR 코드는 시작과 끝을 ``/* [닉네임] add ... start */``, ``/* [닉네임] add ... end */`` 로 표기합니다.
+
+## 라이선스
+Apache-2.0 + 추가 조건. 봇을 운영하면 도움말 같은 정보 화면에 ``Luffia by Backas03`` 과 ``https://github.com/Backas03/JDA-Luffia`` 를 표시해야 합니다. 자세한 내용은 ``LICENSE`` 를 보세요.
