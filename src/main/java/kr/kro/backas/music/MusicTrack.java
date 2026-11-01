@@ -6,17 +6,22 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class MusicTrack {
+    static final int MAX_HISTORY = 50;
+
     private final MusicPlayerClient client;
     private final AudioPlayer player;
     private final Queue<AudioTrack> trackQueue;
     private final Queue<AudioTrack> autoQueue;
+    private final Deque<AudioTrack> history = new ConcurrentLinkedDeque<>();
 
     private volatile RepeatMode repeatMode;
 
@@ -45,6 +50,7 @@ public class MusicTrack {
         this.player.stopTrack();
         this.trackQueue.clear();
         this.autoQueue.clear();
+        this.history.clear();
         this.repeatMode = RepeatMode.NO_REPEAT;
     }
 
@@ -78,6 +84,7 @@ public class MusicTrack {
                 player.playTrack(endedTrack);
                 return;
             }
+            remember(endedTrack);
             if (repeatMode == RepeatMode.REPEAT_ALL) {
                 trackQueue.add(endedTrack);
             }
@@ -95,6 +102,30 @@ public class MusicTrack {
         player.playTrack(track);
     }
 
+    public boolean hasPrevious() {
+        return !history.isEmpty();
+    }
+
+    public synchronized boolean playPrevious() {
+        AudioTrack previous = history.pollLast();
+        if (previous == null) return false;
+        AudioTrack current = player.getPlayingTrack();
+        if (current != null) {
+            List<AudioTrack> rest = new ArrayList<>(trackQueue);
+            trackQueue.clear();
+            trackQueue.add(current.makeClone());
+            trackQueue.addAll(rest);
+        }
+        client.dismissLyrics();
+        player.playTrack(previous);
+        return true;
+    }
+
+    private void remember(AudioTrack track) {
+        history.addLast(track.makeClone());
+        while (history.size() > MAX_HISTORY) history.pollFirst();
+    }
+
     @Nullable
     private AudioTrack pollNext() {
         AudioTrack next = trackQueue.poll();
@@ -109,6 +140,7 @@ public class MusicTrack {
             if (next == null) break;
             dropped.add(next);
         }
+        if (current != null) remember(current);
         if (repeatMode == RepeatMode.REPEAT_ALL) {
             if (current != null) trackQueue.add(current.makeClone());
             trackQueue.addAll(dropped);

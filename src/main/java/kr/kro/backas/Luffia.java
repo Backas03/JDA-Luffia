@@ -43,6 +43,7 @@ public class Luffia {
         this.commandManager.registerSlashCommand(new AiAdminSlashCommand());
         this.commandManager.registerSlashCommand(new EqualizerSlashCommand());
         this.commandManager.registerSlashCommand(new KaraokeModeSlashCommand());
+        this.commandManager.registerSlashCommand(new PronunciationSlashCommand());
         this.commandManager.registerSlashCommand(new LOLUserInfoSlashCommand());
         this.commandManager.registerSlashCommand(new HelpSlashCommand());
         this.commandManager.commitSlashCommands();
