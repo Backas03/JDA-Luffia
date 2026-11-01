@@ -7,7 +7,6 @@ import kr.kro.backas.util.MemberUtil;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
-import net.dv8tion.jda.api.entities.emoji.Emoji;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import org.jetbrains.annotations.NotNull;
@@ -28,12 +27,15 @@ public class TrackCardControls extends ListenerAdapter {
     public static ActionRow row(MusicPlayerClient client) {
         String key = client.getMusicBot().getSelfUser().getId() + ":" + client.getGuildId();
         String pronunciationId = id(PRONUNCIATION, key);
+        Button pronunciation = client.isShowingPronunciation()
+                ? Button.primary(pronunciationId, "가사발음")
+                : Button.secondary(pronunciationId, "가사발음");
         return ActionRow.of(
-                client.isShowingPronunciation() ? Button.success(pronunciationId, "가사발음") : Button.secondary(pronunciationId, "가사발음"),
-                Button.secondary(id(QUEUE, key), "대기열"),
-                Button.secondary(id(PREVIOUS, key), Emoji.fromUnicode("⏮️")).withDisabled(!client.hasPreviousTrack()),
-                Button.secondary(id(PAUSE, key), Emoji.fromUnicode(client.isPaused() ? "▶️" : "⏸️")),
-                Button.secondary(id(NEXT, key), Emoji.fromUnicode("⏭️")));
+                pronunciation.withEmoji(CardIcons.of(CardIcons.Glyph.LYRICS)),
+                Button.secondary(id(QUEUE, key), "대기열").withEmoji(CardIcons.of(CardIcons.Glyph.QUEUE)),
+                Button.secondary(id(PREVIOUS, key), CardIcons.of(CardIcons.Glyph.PREVIOUS)).withDisabled(!client.hasPreviousTrack()),
+                Button.secondary(id(PAUSE, key), CardIcons.of(client.isPaused() ? CardIcons.Glyph.PLAY : CardIcons.Glyph.PAUSE)),
+                Button.secondary(id(NEXT, key), CardIcons.of(CardIcons.Glyph.NEXT)));
     }
 
     static String id(String action, String key) {

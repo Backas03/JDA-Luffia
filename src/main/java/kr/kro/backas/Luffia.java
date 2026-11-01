@@ -8,6 +8,7 @@ import kr.kro.backas.command.lol.slash.LOLUserInfoSlashCommand;
 import kr.kro.backas.command.maplestory.MapleUserInfoCommand;
 import kr.kro.backas.command.music.HelpSlashCommand;
 import kr.kro.backas.command.music.slash.*;
+import kr.kro.backas.music.CardIcons;
 import kr.kro.backas.music.MusicListener;
 import kr.kro.backas.music.MusicPlayerController;
 import kr.kro.backas.music.source.MusicSourceRegistry;
@@ -69,6 +70,7 @@ public class Luffia {
                 translatorUrl,
                 config.asr().endpointSpec());
         this.musicPlayerController.register(discordAPI);
+        CardIcons.install(discordAPI);
         for (String token : config.discord().musicBotTokens()) {
             if (token == null || token.isBlank()) continue;
             try {
