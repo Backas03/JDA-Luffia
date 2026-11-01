@@ -35,7 +35,7 @@ import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.entities.channel.unions.AudioChannelUnion;
 import net.dv8tion.jda.api.events.guild.voice.GuildVoiceUpdateEvent;
-import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
 import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.requests.GatewayIntent;
@@ -160,6 +160,7 @@ public class MusicPlayerController extends ListenerAdapter {
         bots.add(discordAPI);
         discordAPI.addEventListener(new PresenceListener());
         discordAPI.addEventListener(new TrackCardControls());
+        discordAPI.addEventListener(new ControlPanel());
         discordAPI.addEventListener(lyricsFeedback);
         LOGGER.info("music bot registered: {} ({} guilds)", discordAPI.getSelfUser().getName(), discordAPI.getGuilds().size());
     }
@@ -253,7 +254,7 @@ public class MusicPlayerController extends ListenerAdapter {
         return lyricsFeedback;
     }
 
-    public void search(Identifier id, String query, Member member, SlashCommandInteractionEvent slashEvent) {
+    public void search(Identifier id, String query, Member member, IReplyCallback slashEvent) {
         VoiceChannel joinedVoiceChannel = MemberUtil.getJoinedVoiceChannel(member);
         if (joinedVoiceChannel == null) {
             slashEvent.replyEmbeds(MusicEmbeds.error(member,

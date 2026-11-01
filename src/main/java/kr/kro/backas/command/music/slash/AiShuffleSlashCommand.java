@@ -16,6 +16,7 @@ import net.dv8tion.jda.api.components.container.Container;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
@@ -43,7 +44,10 @@ public class AiShuffleSlashCommand implements SlashCommandSource {
 
     @Override
     public void onTriggered(SlashCommandInteractionEvent event) {
-        Member member = event.getMember();
+        shuffle(event, event.getMember());
+    }
+
+    public void shuffle(IReplyCallback event, Member member) {
         VoiceChannel voiceChannel = MemberUtil.getJoinedVoiceChannel(member);
         if (voiceChannel == null) {
             reject(event, member, "대기열을 섞으려면 음성채팅방에 먼저 참여해주세요.", false);
@@ -79,7 +83,7 @@ public class AiShuffleSlashCommand implements SlashCommandSource {
                 error -> AiSlashCommand.RUNNING.remove(client));
     }
 
-    private static void reject(SlashCommandInteractionEvent event, Member member, String reason, boolean ephemeral) {
+    private static void reject(IReplyCallback event, Member member, String reason, boolean ephemeral) {
         event.replyComponents(AiCards.error(member, REJECT_TITLE, reason)).useComponentsV2(true).setEphemeral(ephemeral).queue();
     }
 

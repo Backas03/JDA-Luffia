@@ -301,13 +301,12 @@ public final class TrackCard {
             children.addAll(body);
         }
         children.add(Separator.createDivider(Separator.Spacing.SMALL));
-        if (playing) {
-            children.add(TrackCardControls.row(client));
-        } else if (finishedAt > 0 && LyricsFeedback.asksAbout(lyricsSource)) {
+        if (!playing && finishedAt > 0 && LyricsFeedback.asksAbout(lyricsSource)) {
             children.add(TextDisplay.of("**" + LyricsFeedback.QUESTION + "**"));
             children.add(LyricsFeedback.buttons(track));
         }
-        children.add(TextDisplay.of(footerText(MusicEmbeds.botName(client.getGuild()), playing ? 0 : finishedAt)));
+        TextDisplay footer = TextDisplay.of(footerText(MusicEmbeds.botName(client.getGuild()), playing ? 0 : finishedAt));
+        children.add(playing ? Section.of(ControlPanel.openButton(client), footer) : footer);
         return Container.of(children).withAccentColor(ArtworkColors.of(MusicEmbeds.thumbnailOf(track)));
     }
 

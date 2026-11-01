@@ -14,6 +14,7 @@ import net.dv8tion.jda.api.components.container.Container;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
@@ -55,7 +56,11 @@ public class AiSlashCommand implements SlashCommandSource {
 
     @Override
     public void onTriggered(SlashCommandInteractionEvent event) {
-        Member member = event.getMember();
+        OptionMapping option = event.getOption(REQUEST_ARGUMENT);
+        request(event, event.getMember(), option == null ? "" : option.getAsString());
+    }
+
+    public void request(IReplyCallback event, Member member, String rawRequest) {
         VoiceChannel voiceChannel = MemberUtil.getJoinedVoiceChannel(member);
         if (voiceChannel == null) {
             reject(event, member, "AI 기능을 사용하려면 음성채팅방에 먼저 참여해주세요.", false);
@@ -71,8 +76,7 @@ public class AiSlashCommand implements SlashCommandSource {
             reject(event, member, "AI 서버가 설정되지 않았습니다. config.yaml 의 llm.endpoints 에 LLM 서버를 설정해주세요.", false);
             return;
         }
-        OptionMapping option = event.getOption(REQUEST_ARGUMENT);
-        String request = option == null ? "" : option.getAsString().strip();
+        String request = rawRequest == null ? "" : rawRequest.strip();
         if (request.isEmpty()) {
             event.replyComponents(AiCards.error(member, "요청을 입력해주세요.", EXAMPLES)).useComponentsV2(true).queue();
             return;
@@ -92,12 +96,12 @@ public class AiSlashCommand implements SlashCommandSource {
                 error -> RUNNING.remove(client));
     }
 
-    private static void reject(SlashCommandInteractionEvent event, Member member, String reason, boolean ephemeral) {
+    private static void reject(IReplyCallback event, Member member, String reason, boolean ephemeral) {
         event.replyComponents(AiCards.error(member, "AI 기능을 사용할 수 없습니다.", reason))
                 .useComponentsV2(true).setEphemeral(ephemeral).queue();
     }
 
-    private void handle(SlashCommandInteractionEvent event, InteractionHook hook, Member member, VoiceChannel voiceChannel,
+    private void handle(IReplyCallback event, InteractionHook hook, Member member, VoiceChannel voiceChannel,
                         String request, MusicPlayerClient client, MusicPlayerController controller) {
         long startedAt = System.currentTimeMillis();
         SequentialHookEditor editor = new SequentialHookEditor(hook);

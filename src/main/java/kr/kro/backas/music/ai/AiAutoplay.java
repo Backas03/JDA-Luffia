@@ -16,7 +16,7 @@ import kr.kro.backas.music.lyrics.TranslationClient;
 import kr.kro.backas.music.lyrics.TranslationJobs;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
-import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -84,13 +84,13 @@ public class AiAutoplay {
     private volatile String criteria = "";
     private volatile boolean diverse;
     private volatile Member member;
-    private volatile SlashCommandInteractionEvent event;
+    private volatile IReplyCallback event;
 
     public AiAutoplay(MusicPlayerClient client) {
         this.client = client;
     }
 
-    public void start(String criteria, boolean diverse, Member member, SlashCommandInteractionEvent event) {
+    public void start(String criteria, boolean diverse, Member member, IReplyCallback event) {
         this.criteria = criteria == null ? "" : criteria.strip();
         this.diverse = diverse;
         this.member = member;
@@ -136,7 +136,7 @@ public class AiAutoplay {
 
     public void onListenerTracksAdded(MusicSelection selection) {
         member = selection.getRequestedMember();
-        event = selection.getSlashCommandInteractionEvent();
+        event = selection.getInteraction();
         generation.incrementAndGet();
         boolean hadRequest = !criteria.isBlank() || diverse;
         criteria = "";
@@ -158,7 +158,7 @@ public class AiAutoplay {
         boolean auto = selection != null && selection.isAutoplay();
         if (selection != null && !auto) {
             member = selection.getRequestedMember();
-            event = selection.getSlashCommandInteractionEvent();
+            event = selection.getInteraction();
         }
         history.addLast(new PlayedTrack(track.getInfo(), YoutubeLookup.isYoutube(track), auto, generation.get()));
         while (history.size() > HISTORY_LIMIT) history.pollFirst();
@@ -218,7 +218,7 @@ public class AiAutoplay {
     private int refillOnce() {
         int startGeneration = generation.get();
         Member requester = member;
-        SlashCommandInteractionEvent requestEvent = event;
+        IReplyCallback requestEvent = event;
         VoiceChannel channel = client.getJoinedVoiceChannel();
         if (requester == null || requestEvent == null || channel == null) return 0;
         if (!client.getTrackQueue().isEmpty()) return 0;

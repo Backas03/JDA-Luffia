@@ -44,7 +44,7 @@ public class MusicLoader implements AudioLoadResultHandler {
         this.queryInfo = queryInfo;
         this.musicPlayerClient = musicPlayerClient;
         this.retryAttempt = 0;
-        this.hook = queryInfo.getSlashCommandInteractionEvent().deferReply().complete();
+        this.hook = queryInfo.getInteraction().deferReply().complete();
     }
 
     public void loadMusic() {

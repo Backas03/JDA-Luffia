@@ -18,7 +18,7 @@ import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.DurationUtil;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
-import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -122,7 +122,7 @@ public class AiAgent {
     private final MusicPlayerController controller;
     private final MusicPlayerClient client;
     private final Member member;
-    private final SlashCommandInteractionEvent event;
+    private final IReplyCallback event;
     private final VoiceChannel voiceChannel;
     private final StatusListener listener;
     private final List<String> actions = new ArrayList<>();
@@ -135,7 +135,7 @@ public class AiAgent {
     }
 
     public AiAgent(MusicPlayerController controller, MusicPlayerClient client, Member member,
-                   SlashCommandInteractionEvent event, VoiceChannel voiceChannel, StatusListener listener) {
+                   IReplyCallback event, VoiceChannel voiceChannel, StatusListener listener) {
         this.controller = controller;
         this.client = client;
         this.member = member;
