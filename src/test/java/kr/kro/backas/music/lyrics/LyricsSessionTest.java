@@ -15,11 +15,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class LyricsSessionTest {
 
     @Test
-    void aiNotesSitOnTheClockLineInsteadOfAddingALine() {
-        assertEquals("1:38 — 4:22", LyricsSession.clockLine("1:38 — 4:22", null));
-        assertEquals("1:38 — 4:22 · AI 보정 중", LyricsSession.clockLine("1:38 — 4:22", LyricsSession.AUTO_PENDING_NOTE));
-        assertEquals("1:38 — 4:22 · AI 생성 가사 · 정확하지 않을 수 있어요",
-                LyricsSession.clockLine("1:38 — 4:22", LyricsSession.AI_GENERATED_NOTE));
+    void aiNoteTakesTheLineUnderTheClockInsteadOfTheBlankLineAbove() {
+        LyricsSession.Body withNote = new LyricsSession.Body("lyrics", "-# filler", "1:38 — 4:22", LyricsSession.AUTO_PENDING_NOTE, "");
+        LyricsSession.Body withoutNote = new LyricsSession.Body("lyrics", "-# filler", "1:38 — 4:22", null, "");
+
+        assertEquals("-# 1:38 — 4:22\n-# AI 보정 중", withNote.block());
+        assertEquals("-# " + LyricsSession.SLOT_BLANK + "\n-# 1:38 — 4:22", withoutNote.block());
+        assertEquals(withNote.block().split("\n").length, withoutNote.block().split("\n").length);
+        assertEquals("lyrics\n-# filler\n-# 1:38 — 4:22\n-# AI 보정 중", withNote.whole());
     }
 
     @Test

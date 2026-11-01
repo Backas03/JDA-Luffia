@@ -188,10 +188,6 @@ public class LyricsSession {
         return lyrics.aiTimed() ? LyricsConversions.LABEL_DONE : null;
     }
 
-    static String clockLine(String clock, @Nullable String note) {
-        return note == null || note.isBlank() ? clock : clock + " · " + note;
-    }
-
     public void setOffsetMs(long offsetMs) {
         this.offsetMs = offsetMs;
     }
@@ -511,17 +507,23 @@ public class LyricsSession {
         return container.withAccentColor(ArtworkColors.of(artwork));
     }
 
-    record Body(String lyrics, String filler, String tail) {
+    record Body(String lyrics, String filler, String clock, @Nullable String note, String status) {
         String whole() {
-            return lyrics + (filler.isEmpty() ? "" : "\n" + filler) + tail;
+            return lyrics + (filler.isEmpty() ? "" : "\n" + filler) + (clock.isEmpty() ? "" : "\n-# " + clock)
+                    + (note == null ? "" : "\n-# " + note) + status;
+        }
+
+        String block() {
+            if (note != null) return "-# " + clock + "\n-# " + note + status;
+            return "-# " + SLOT_BLANK + (clock.isEmpty() ? "" : "\n-# " + clock) + status;
         }
     }
 
     static List<ContainerChildComponent> cardComponents(Body parts, @Nullable Button jump) {
         List<ContainerChildComponent> children = new ArrayList<>();
         children.add(TextDisplay.of(parts.lyrics() + "\n-# " + CARD_FILLER));
-        TextDisplay clock = TextDisplay.of("-# " + SLOT_BLANK + parts.tail());
-        children.add(jump == null ? clock : Section.of(jump, clock));
+        TextDisplay block = TextDisplay.of(parts.block());
+        children.add(jump == null ? block : Section.of(jump, block));
         return children;
     }
 
@@ -564,21 +566,25 @@ public class LyricsSession {
             text.append("\n-# ").append(DiscordSafe.text(track.getInfo().author + " - " + track.getInfo().title, MAX_SONG_LENGTH));
             filler = "";
         }
-        StringBuilder tail = new StringBuilder();
-        if (footer != null) tail.append("\n-# ").append(footer);
-        else if (client != null) {
-            tail.append("\n-# ").append(clockLine(playbackClock(client, track), autoNote));
+        String clock = "";
+        String note = null;
+        if (footer != null) {
+            clock = footer;
+        } else if (client != null) {
+            clock = playbackClock(client, track);
+            note = autoNote == null || autoNote.isBlank() ? null : autoNote;
         }
+        StringBuilder status = new StringBuilder();
         if ((translation != null && !translation.isBlank()) || pendingTranslation) {
-            String note = LyricsPresenter.translationStatus(client, translator);
-            if (!note.isBlank()) {
-                for (String noteLine : note.split("\n")) {
-                    tail.append('\n');
-                    if (!noteLine.isBlank()) tail.append("-# ").append(noteLine);
+            String statusText = LyricsPresenter.translationStatus(client, translator);
+            if (!statusText.isBlank()) {
+                for (String statusLine : statusText.split("\n")) {
+                    status.append('\n');
+                    if (!statusLine.isBlank()) status.append("-# ").append(statusLine);
                 }
             }
         }
-        return new Body(text.toString(), filler, tail.toString());
+        return new Body(text.toString(), filler, clock, note, status.toString());
     }
 
     static String playbackClock(MusicPlayerClient client, AudioTrack track) {
