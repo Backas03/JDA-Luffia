@@ -91,6 +91,10 @@ public class MusicTrack {
         player.playTrack(nextTrack);
     }
 
+    public synchronized void resume(AudioTrack track) {
+        player.playTrack(track);
+    }
+
     @Nullable
     private AudioTrack pollNext() {
         AudioTrack next = trackQueue.poll();
