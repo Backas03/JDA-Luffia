@@ -10,6 +10,7 @@ import dev.lavalink.youtube.YoutubeAudioSourceManager;
 import dev.lavalink.youtube.YoutubeSourceOptions;
 import kr.kro.backas.config.LuffiaConfig;
 import kr.kro.backas.music.audio.MusicOpusFormat;
+import org.apache.http.client.config.RequestConfig;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +25,7 @@ public final class MusicSourceRegistry {
     };
     public static final String SPOTIFY_COUNTRY_CODE = Config.get().sources().spotify().country();
     public static final int SPOTIFY_PAGE_LIMIT = Config.get().sources().spotify().pageLimit();
+    static final int SPOTIFY_READ_TIMEOUT_MS = 15_000;
     public static final int YOUTUBE_PLAYLIST_PAGE_COUNT = Config.get().sources().youtube().playlistPageCount();
 
     private final AudioPlayerManager audioPlayerManager;
@@ -133,6 +135,7 @@ public final class MusicSourceRegistry {
                     isBlank(spDc) ? null : spDc.trim(),
                     isBlank(tokenEndpoint) ? null : tokenEndpoint.trim()
             );
+            spotify.configureRequests(MusicSourceRegistry::spotifyRequestConfig);
             spotify.setResolveArtistsInSearch(false);
             spotify.setPlaylistPageLimit(SPOTIFY_PAGE_LIMIT);
             spotify.setAlbumPageLimit(SPOTIFY_PAGE_LIMIT);
@@ -143,6 +146,10 @@ public final class MusicSourceRegistry {
             LOGGER.warn("스포티파이 소스 등록에 실패했습니다. 유튜브만 사용합니다.", e);
             return null;
         }
+    }
+
+    static RequestConfig spotifyRequestConfig(RequestConfig config) {
+        return RequestConfig.copy(config).setSocketTimeout(SPOTIFY_READ_TIMEOUT_MS).build();
     }
 
     private static boolean isBlank(@Nullable String s) {
