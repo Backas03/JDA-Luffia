@@ -56,6 +56,11 @@
         <appender-ref ref="ERROR_FILE"/>
     </appender>
 
+    <turboFilter class="kr.kro.backas.util.MessageDropFilter">
+        <logger>dev.lavalink.youtube.track.YoutubeAudioTrack</logger>
+        <message>Failed to parse token from userData</message>
+    </turboFilter>
+
     <logger name="net.dv8tion.jda" level="INFO"/>
     <logger name="net.dv8tion.jda.internal.requests" level="WARN"/>
     <logger name="com.sedmelluq" level="INFO"/>
