@@ -70,6 +70,7 @@ public class MusicPlayerClient {
     private volatile long connectRequestedAt;
     private volatile TrackCard trackCard;
     private volatile MessageChannel sessionHomeChannel;
+    private volatile AudioTrack resumingTrack;
 
     public MusicPlayerClient(JDA musicBot, Guild guild, AudioPlayerManager sharedAudioPlayerManager) {
         this.musicBot = musicBot;
@@ -86,6 +87,10 @@ public class MusicPlayerClient {
                 }
                 realPositionMs = track.getPosition();
                 markSyncBase(track.getPosition(), realPositionMs);
+                if (track == resumingTrack) {
+                    resumingTrack = null;
+                    return;
+                }
                 onTrackStarted(track);
                 autoplay.onTrackStarted(track);
             }
@@ -452,6 +457,11 @@ public class MusicPlayerClient {
 
     public AudioTrack getCurrentPlaying() {
         return audioPlayer.getPlayingTrack();
+    }
+
+    public void resumeTrack(AudioTrack track) {
+        resumingTrack = track;
+        musicTrack.resume(track);
     }
 
     public void updatePosition() {

@@ -60,6 +60,7 @@
     <logger name="net.dv8tion.jda.internal.requests" level="WARN"/>
     <logger name="com.sedmelluq" level="INFO"/>
     <logger name="dev.lavalink" level="INFO"/>
+    <logger name="dev.lavalink.youtube.track.YoutubeAudioTrack" level="DEBUG"/>
     <logger name="dev.arbjerg" level="INFO"/>
     <logger name="com.github.topi314" level="INFO"/>
     <logger name="org.apache.http" level="WARN"/>
