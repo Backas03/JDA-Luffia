@@ -1,12 +1,36 @@
 package kr.kro.backas.music.lyrics;
 
+import net.dv8tion.jda.api.components.buttons.Button;
+import net.dv8tion.jda.api.components.container.ContainerChildComponent;
+import net.dv8tion.jda.api.components.section.Section;
+import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LyricsSessionTest {
+
+    @Test
+    void gapButtonSpansTheBlankLineAndTheClockWithoutAddingLines() {
+        Lyrics lyrics = new Lyrics("t", "a", null,
+                List.of(new LyricLine(0, "first"), new LyricLine(1000, "second"), new LyricLine(2000, "third")), false);
+        LyricsSession.Body parts = LyricsSession.parts(null, null, lyrics, 1, null, null, "1:38 — 4:22", null, false, false, null);
+
+        List<ContainerChildComponent> plain = LyricsSession.cardComponents(parts, null);
+        List<ContainerChildComponent> withJump = LyricsSession.cardComponents(parts, Button.primary("card:gap:1:2", "간주 점프"));
+
+        assertEquals(2, plain.size());
+        assertEquals(2, withJump.size());
+        String block = ((TextDisplay) plain.get(1)).getContent();
+        Section section = assertInstanceOf(Section.class, withJump.get(1));
+        assertEquals(block, ((TextDisplay) section.getContentComponents().get(0)).getContent());
+        assertEquals("-# " + LyricsSession.SLOT_BLANK + "\n-# 1:38 — 4:22", block);
+        assertTrue(((TextDisplay) plain.get(0)).getContent().endsWith("*third*\n-# " + LyricsSession.CARD_FILLER));
+    }
 
     @Test
     void untranslatedLineKeepsAnEmptyRowWhereTheTranslationWouldGo() {

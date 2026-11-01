@@ -12,8 +12,16 @@ public final class LyricsJumps {
         INTERLUDE
     }
 
+    public enum ButtonState {
+        HIDDEN,
+        ENABLED,
+        DISABLED
+    }
+
     public static final long INTERLUDE_LEAD_MS = 2_000;
-    public static final long MIN_SKIP_MS = 3_000;
+    public static final long MIN_GAP_MS = 5_000;
+    public static final long DISABLE_BEFORE_MS = 2_500;
+    public static final long HIDE_BEFORE_MS = 500;
     static final long INTERLUDE_MIN_MS = 6_000;
     static final long LINE_RESTART_MS = 1_500;
     static final long NEXT_LINE_GUARD_MS = 300;
@@ -30,15 +38,42 @@ public final class LyricsJumps {
         };
     }
 
-    public static boolean inOutro(List<LyricLine> lines, long now) {
+    @Nullable
+    public static Long quietSince(List<LyricLine> lines, long now) {
         LyricLine current = null;
         LyricLine lastSung = null;
+        boolean anySung = false;
         for (LyricLine line : lines) {
-            if (line.timeMs() <= now) current = line;
-            if (sung(line)) lastSung = line;
+            if (sung(line)) anySung = true;
+            if (line.timeMs() <= now) {
+                current = line;
+                if (sung(line)) lastSung = line;
+            }
         }
-        if (lastSung == null || now < lastSung.timeMs()) return false;
-        return current != null && !sung(current) || now - lastSung.timeMs() >= INTERLUDE_MIN_MS;
+        if (!anySung) return null;
+        if (lastSung == null) return 0L;
+        if (!sung(current)) return current.timeMs();
+        long since = lastSung.timeMs() + INTERLUDE_MIN_MS;
+        return now >= since ? since : null;
+    }
+
+    @Nullable
+    public static Long nextSung(List<LyricLine> lines, long now) {
+        for (LyricLine line : lines) {
+            if (sung(line) && line.timeMs() > now) return line.timeMs();
+        }
+        return null;
+    }
+
+    public static boolean inOutro(List<LyricLine> lines, long now) {
+        return quietSince(lines, now) != null && nextSung(lines, now) == null;
+    }
+
+    public static ButtonState buttonState(long quietSince, long end, long now) {
+        if (end - quietSince < MIN_GAP_MS) return ButtonState.HIDDEN;
+        long remaining = end - now;
+        if (remaining <= HIDE_BEFORE_MS) return ButtonState.HIDDEN;
+        return remaining > DISABLE_BEFORE_MS ? ButtonState.ENABLED : ButtonState.DISABLED;
     }
 
     @Nullable
@@ -66,21 +101,9 @@ public final class LyricsJumps {
 
     @Nullable
     private static Long interludeEnd(List<LyricLine> lines, long now) {
-        LyricLine current = null;
-        LyricLine lastSung = null;
-        LyricLine next = null;
-        for (LyricLine line : lines) {
-            if (line.timeMs() <= now) {
-                current = line;
-                if (sung(line)) lastSung = line;
-            } else if (sung(line)) {
-                next = line;
-                break;
-            }
-        }
-        if (next == null || next.timeMs() - INTERLUDE_LEAD_MS - now < MIN_SKIP_MS) return null;
-        boolean quiet = lastSung == null || !sung(current) || now - lastSung.timeMs() >= INTERLUDE_MIN_MS;
-        return quiet ? next.timeMs() - INTERLUDE_LEAD_MS : null;
+        Long next = nextSung(lines, now);
+        if (next == null || quietSince(lines, now) == null || next - now <= DISABLE_BEFORE_MS) return null;
+        return next - INTERLUDE_LEAD_MS;
     }
 
     private static boolean sung(LyricLine line) {
