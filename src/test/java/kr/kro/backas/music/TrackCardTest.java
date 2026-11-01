@@ -39,8 +39,8 @@ class TrackCardTest {
 
     @Test
     void footerNamesTheBotAndStampsWhenPlaybackFinished() {
-        assertEquals("-# 김노래#6163\n-# " + BuildInfo.VERSION, TrackCard.footerText("김노래#6163", 0));
-        assertEquals("-# 김노래#6163 <t:1789900000:t> 재생 완료됨\n-# " + BuildInfo.VERSION,
+        assertEquals("-# 김노래#6163\n-# " + BuildInfo.versionLink(), TrackCard.footerText("김노래#6163", 0));
+        assertEquals("-# 김노래#6163 <t:1789900000:t> 재생 완료됨\n-# " + BuildInfo.versionLink(),
                 TrackCard.footerText("김노래#6163", 1_789_900_000_000L));
     }
 
@@ -52,8 +52,9 @@ class TrackCardTest {
         assertEquals("### 믹스\n-# 총 3분 · YouTube\n2곡을 대기열에 추가 & 재생합니다",
                 MusicEmbeds.playlistText("믹스", null, null, 180_000, "YouTube", 2, 2, true));
         assertEquals("**첫 곡** [Song](https://youtu.be/id)\n-# Artist · 3:34", MusicEmbeds.firstTrackText(info("Song", "Artist", 214_000, false)));
-        assertEquals("-# 김노래#6163 · AI 추천 · 박카스\n-# " + BuildInfo.VERSION, MusicEmbeds.footerText("김노래#6163", "AI 추천 · 박카스"));
-        assertEquals("-# 김노래#6163\n-# " + BuildInfo.VERSION, MusicEmbeds.footerText("김노래#6163", null));
+        assertEquals("-# 김노래#6163 · AI 추천 · 박카스\n-# " + BuildInfo.versionLink(), MusicEmbeds.footerText("김노래#6163", "AI 추천 · 박카스"));
+        assertEquals("-# 김노래#6163\n-# " + BuildInfo.versionLink(), MusicEmbeds.footerText("김노래#6163", null));
+        assertEquals("[" + BuildInfo.VERSION + "](https://github.com/Backas03/JDA-Luffia)", BuildInfo.versionLink());
     }
 
     @Test

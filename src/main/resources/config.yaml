@@ -3,7 +3,7 @@ bot:
   zone: Asia/Seoul
   activity: "/도움말 또는 !도움말  명령어를 사용해보세요"
   github: https://github.com/Backas03/JDA-Luffia
-  license: MIT license
+  license: Apache-2.0 + 추가 조건
   shutdown:
     graceful-seconds: 5
     forced-seconds: 2

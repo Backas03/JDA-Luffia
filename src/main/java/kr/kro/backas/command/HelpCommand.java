@@ -1,7 +1,6 @@
 package kr.kro.backas.command;
 
 import kr.kro.backas.BuildInfo;
-import kr.kro.backas.config.Config;
 import kr.kro.backas.Main;
 import kr.kro.backas.command.api.CommandManager;
 import kr.kro.backas.command.api.CommandSource;
@@ -85,11 +84,8 @@ public class HelpCommand implements CommandSource {
                 false
         );
          */
-        builder.setAuthor(
-                "Luffia Github (click)" +
-                "\n" + Config.get().bot().license(),
-                Config.get().bot().github()
-        );
+        builder.setAuthor(BuildInfo.AUTHOR, BuildInfo.SOURCE_URL);
+        builder.addField("정보", BuildInfo.credits(), false);
 
         builder.setFooter(BuildInfo.VERSION);
         event.getMessage().replyEmbeds(builder.build()).queue();

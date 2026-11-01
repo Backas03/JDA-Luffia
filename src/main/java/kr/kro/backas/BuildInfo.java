@@ -8,6 +8,17 @@ public final class BuildInfo {
 
     public static final String NAME = "Luffia";
     public static final String VERSION = NAME + "/" + readVersion();
+    public static final String AUTHOR = "Luffia by Backas03";
+    public static final String SOURCE_URL = "https://github.com/Backas03/JDA-Luffia";
+    public static final String LICENSE = "Apache-2.0 + 추가 조건";
+
+    public static String credits() {
+        return AUTHOR + "\n" + SOURCE_URL + "\n" + LICENSE;
+    }
+
+    public static String versionLink() {
+        return "[" + VERSION + "](" + SOURCE_URL + ")";
+    }
 
     private BuildInfo() {
     }
