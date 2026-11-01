@@ -13,6 +13,7 @@ public final class LyricsJumps {
     }
 
     public static final long INTERLUDE_LEAD_MS = 2_000;
+    public static final long MIN_SKIP_MS = 3_000;
     static final long INTERLUDE_MIN_MS = 6_000;
     static final long LINE_RESTART_MS = 1_500;
     static final long NEXT_LINE_GUARD_MS = 300;
@@ -27,6 +28,17 @@ public final class LyricsJumps {
             case NEXT_LINE -> nextLine(lines, now);
             case INTERLUDE -> interludeEnd(lines, now);
         };
+    }
+
+    public static boolean inOutro(List<LyricLine> lines, long now) {
+        LyricLine current = null;
+        LyricLine lastSung = null;
+        for (LyricLine line : lines) {
+            if (line.timeMs() <= now) current = line;
+            if (sung(line)) lastSung = line;
+        }
+        if (lastSung == null || now < lastSung.timeMs()) return false;
+        return current != null && !sung(current) || now - lastSung.timeMs() >= INTERLUDE_MIN_MS;
     }
 
     @Nullable
@@ -66,8 +78,8 @@ public final class LyricsJumps {
                 break;
             }
         }
-        if (next == null || next.timeMs() - now <= INTERLUDE_LEAD_MS + 1_000) return null;
-        boolean quiet = current == null || !sung(current) || now - lastSung.timeMs() >= INTERLUDE_MIN_MS;
+        if (next == null || next.timeMs() - INTERLUDE_LEAD_MS - now < MIN_SKIP_MS) return null;
+        boolean quiet = lastSung == null || !sung(current) || now - lastSung.timeMs() >= INTERLUDE_MIN_MS;
         return quiet ? next.timeMs() - INTERLUDE_LEAD_MS : null;
     }
 

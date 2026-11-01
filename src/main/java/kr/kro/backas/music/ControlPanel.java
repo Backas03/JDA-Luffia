@@ -53,6 +53,8 @@ public class ControlPanel extends ListenerAdapter {
     static final String MODAL_PREFIX = "panel-modal:";
     static final String INPUT = "text";
     static final String OPEN = "open";
+    static final String CARD_GAP = "gap";
+    static final String CARD_OUTRO = "outro";
     static final String PREVIOUS = "prev";
     static final String PAUSE = "pause";
     static final String NEXT = "next";
@@ -85,6 +87,14 @@ public class ControlPanel extends ListenerAdapter {
 
     public static Button openButton(MusicPlayerClient client) {
         return Button.secondary(id(OPEN, keyOf(client)), "조작").withEmoji(CardIcons.of(CardIcons.Glyph.ADJUST));
+    }
+
+    public static Button gapButton(MusicPlayerClient client) {
+        return Button.primary(id(CARD_GAP, keyOf(client)), "간주 점프").withEmoji(CardIcons.of(CardIcons.Glyph.NEXT));
+    }
+
+    public static Button outroButton(MusicPlayerClient client) {
+        return Button.primary(id(CARD_OUTRO, keyOf(client)), "종주 건너뛰기").withEmoji(CardIcons.of(CardIcons.Glyph.NEXT));
     }
 
     static String keyOf(MusicPlayerClient client) {
@@ -224,6 +234,12 @@ public class ControlPanel extends ListenerAdapter {
         if (OPEN.equals(parts[0])) {
             event.replyComponents(build(client, null)).setEphemeral(true).useComponentsV2(true)
                     .queue(null, e -> LOGGER.debug("failed to open the control panel", e));
+            return;
+        }
+        if (CARD_GAP.equals(parts[0]) || CARD_OUTRO.equals(parts[0])) {
+            String notice = CARD_GAP.equals(parts[0]) ? jump(client, LyricsJumps.Jump.INTERLUDE, "지금은 간주가 아니에요") : skipOutro(client);
+            if (notice.isEmpty()) event.deferEdit().queue(null, e -> LOGGER.debug("failed to acknowledge a gap jump", e));
+            else event.reply(notice).setEphemeral(true).queue(null, e -> LOGGER.debug("failed to answer a gap jump", e));
             return;
         }
         String notice;
@@ -372,8 +388,18 @@ public class ControlPanel extends ListenerAdapter {
         LyricsSession session = currentSession(client);
         if (session == null) return "이 곡은 가사 타이밍이 없어 쓸 수 없어요";
         Long target = session.seekTarget(jump);
-        if (target == null) return nothing;
+        if (target == null) {
+            if (jump == LyricsJumps.Jump.INTERLUDE && session.inOutro()) return skipOutro(client);
+            return nothing;
+        }
         return client.seekTo(target) ? "" : "이 곡은 위치를 옮길 수 없어요";
+    }
+
+    private static String skipOutro(MusicPlayerClient client) {
+        LyricsSession session = currentSession(client);
+        if (session == null || !session.inOutro()) return "지금은 종주가 아니에요";
+        client.skip(1);
+        return "";
     }
 
     private static String shiftLyrics(MusicPlayerClient client, long deltaMs) {

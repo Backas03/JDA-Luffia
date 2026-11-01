@@ -8,7 +8,9 @@ import static kr.kro.backas.music.lyrics.LyricsJumps.Jump.INTERLUDE;
 import static kr.kro.backas.music.lyrics.LyricsJumps.Jump.NEXT_LINE;
 import static kr.kro.backas.music.lyrics.LyricsJumps.Jump.PREVIOUS_LINE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LyricsJumpsTest {
 
@@ -46,6 +48,26 @@ class LyricsJumpsTest {
         assertEquals(52_000L, LyricsJumps.target(SONG, 24_000, NEXT_LINE));
         assertEquals(23_000L, LyricsJumps.target(SONG, 18_800, NEXT_LINE));
         assertNull(LyricsJumps.target(SONG, 57_000, NEXT_LINE));
+    }
+
+    @Test
+    void gapJumpNeedsToSaveAtLeastThreeSeconds() {
+        assertEquals(50_000L, LyricsJumps.target(SONG, 46_000, INTERLUDE));
+        assertNull(LyricsJumps.target(SONG, 47_500, INTERLUDE));
+        assertEquals(13_000L, LyricsJumps.target(SONG, 9_000, INTERLUDE));
+        assertNull(LyricsJumps.target(SONG, 10_500, INTERLUDE));
+        List<LyricLine> restFirst = List.of(new LyricLine(0, ""), new LyricLine(20_000, "first"));
+        assertEquals(18_000L, LyricsJumps.target(restFirst, 1_000, INTERLUDE));
+    }
+
+    @Test
+    void outroStartsOnceTheLastLineIsOver() {
+        assertFalse(LyricsJumps.inOutro(SONG, 57_000));
+        assertTrue(LyricsJumps.inOutro(SONG, 63_000));
+        assertFalse(LyricsJumps.inOutro(SONG, 30_000));
+        List<LyricLine> restLast = List.of(new LyricLine(10_000, "last"), new LyricLine(13_000, ""));
+        assertTrue(LyricsJumps.inOutro(restLast, 14_000));
+        assertFalse(LyricsJumps.inOutro(List.of(new LyricLine(0, "")), 5_000));
     }
 
     @Test
