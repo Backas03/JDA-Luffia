@@ -26,6 +26,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -61,6 +63,9 @@ public class LyricsSession {
     private final List<String> sources;
     private final String cacheKey;
     private final boolean translatable;
+    private final boolean pronounceable;
+    private final Map<Integer, String> pronunciations = new ConcurrentHashMap<>();
+    private final AtomicBoolean pronouncing = new AtomicBoolean(false);
     private final long leadMs;
     private volatile long offsetMs;
     private volatile long autoOffsetMs;
@@ -71,6 +76,7 @@ public class LyricsSession {
     private ScheduledFuture<?> ticker;
     private int shownIndex = -2;
     private String shownTranslation;
+    private String shownPronunciation;
     private boolean shownPending;
     private String shownClock = "";
     private long lastEditAt;
@@ -97,6 +103,7 @@ public class LyricsSession {
         this.translations = this.translator == null ? Map.of() : this.translator.cacheFor(cacheKey);
         if (lyrics.aiTimed() && lyrics.hasPlain() && this.translator != null) seedFromPlainTranslations(lyrics);
         this.translatable = isTranslatable(this.translator, lyrics);
+        this.pronounceable = KoreanPronunciation.appliesTo(lyrics.synced());
         this.leadMs = EditLatency.leadMs(surface.channelId());
         this.offsetMs = offsetMs;
         TrackCard card = surface.card();
@@ -190,7 +197,7 @@ public class LyricsSession {
     public void stop(String reason) {
         if (!halt()) return;
         try {
-            surface.edit(view(shownIndex, translationFor(shownIndex), reason, false),
+            surface.edit(view(shownIndex, translationFor(shownIndex), shownPronunciation, reason, false),
                             System.currentTimeMillis() + EditRateLimiter.EDIT_DEADLINE_MS)
                     .whenComplete((result, error) -> {
                         if (error != null) LOGGER.debug("failed to finalize lyrics message", error);
@@ -268,15 +275,35 @@ public class LyricsSession {
         return cached == null && translating ? null : FAILED_TRANSLATION;
     }
 
+    @Nullable
+    private String pronunciationFor(int index) {
+        if (!pronounceable || !client.getKaraokeMode().isActive() || index < 0 || index >= sources.size()) return null;
+        if (pronouncing.compareAndSet(false, true)) TranslationJobs.EXECUTOR.execute(this::pronounceAll);
+        return pronunciations.get(index);
+    }
+
+    private void pronounceAll() {
+        try {
+            for (int i = 0; i < sources.size() && !stopped.get(); i++) {
+                String pronunciation = KoreanPronunciation.of(sources.get(i));
+                if (pronunciation != null) pronunciations.put(i, pronunciation);
+            }
+        } catch (RuntimeException e) {
+            LOGGER.warn("failed to build the korean pronunciation for {}", track.getInfo().title, e);
+        }
+    }
+
     private boolean isPendingTranslation(int index, @Nullable String translation) {
         if (translation != null || !translating || index < 0 || translations.containsKey(index)) return false;
         String text = lineText(lyrics.synced(), index);
         return LyricsLanguage.needsTranslation(text);
     }
 
-    private Container view(int index, @Nullable String translation, @Nullable String footer, boolean pending) {
+    private Container view(int index, @Nullable String translation, @Nullable String pronunciation, @Nullable String footer,
+                           boolean pending) {
         String original = originalToken;
-        return surface.frame(body(client, track, lyrics, index, translation, footer, translator, pending, surface.showsSong(), autoNote()),
+        return surface.frame(body(client, track, lyrics, index, translation, pronunciation, footer, translator, pending,
+                        surface.showsSong(), autoNote()),
                 original == null ? null : ActionRow.of(LyricsConversions.originalButton(original)));
     }
 
@@ -292,10 +319,12 @@ public class LyricsSession {
             long position = (long) (client.getRealPositionMs() + (leadMs + offsetMs + autoOffsetMs) * client.getCurrentPlaySpeed());
             int index = indexAt(position);
             String translation = translationFor(index);
+            String pronunciation = pronunciationFor(index);
             boolean pending = isPendingTranslation(index, translation);
             boolean sameLine = index == shownIndex;
             boolean sameTranslation = translation == null ? shownTranslation == null : translation.equals(shownTranslation);
-            boolean clockOnly = sameLine && sameTranslation && pending == shownPending;
+            boolean samePronunciation = Objects.equals(pronunciation, shownPronunciation);
+            boolean clockOnly = sameLine && sameTranslation && samePronunciation && pending == shownPending;
             String clock = playbackClock(client, track);
             if (clockOnly && (clock.equals(shownClock) || !hasRoomBeforeNextLine(index, position))) return;
             long now = System.currentTimeMillis();
@@ -316,11 +345,12 @@ public class LyricsSession {
             editInFlightSince.set(now);
             shownIndex = index;
             shownTranslation = translation;
+            shownPronunciation = pronunciation;
             shownPending = pending;
             shownClock = clock;
             lastEditAt = now;
             if (!clockOnly) lastContentEditAt = now;
-            surface.edit(view(index, translation, null, pending), now + EditRateLimiter.EDIT_DEADLINE_MS)
+            surface.edit(view(index, translation, pronunciation, null, pending), now + EditRateLimiter.EDIT_DEADLINE_MS)
                     .whenComplete((result, error) -> {
                         editInFlightSince.compareAndSet(now, 0);
                         if (error == null) {
@@ -379,7 +409,7 @@ public class LyricsSession {
     }
 
     public static Container buildView(AudioTrack track, Lyrics lyrics, int index, @Nullable String translation, @Nullable String footer) {
-        return hookFrame(track, body(null, track, lyrics, index, translation, footer, null, false, true, null));
+        return hookFrame(track, body(null, track, lyrics, index, translation, null, footer, null, false, true, null));
     }
 
     static Container hookFrame(AudioTrack track, TextDisplay body) {
@@ -391,8 +421,9 @@ public class LyricsSession {
     }
 
     static TextDisplay body(@Nullable MusicPlayerClient client, AudioTrack track, Lyrics lyrics, int index,
-                            @Nullable String translation, @Nullable String footer, @Nullable TranslationClient translator,
-                            boolean pendingTranslation, boolean withSong, @Nullable String autoNote) {
+                            @Nullable String translation, @Nullable String pronunciation, @Nullable String footer,
+                            @Nullable TranslationClient translator, boolean pendingTranslation, boolean withSong,
+                            @Nullable String autoNote) {
         List<LyricLine> lines = lyrics.synced();
         String previous = lineText(lines, index - 1);
         String current = lineText(lines, index);
@@ -401,6 +432,8 @@ public class LyricsSession {
         StringBuilder text = new StringBuilder();
         text.append(previous.isBlank() ? BLANK : "*" + previous + "*").append('\n');
         text.append("## ").append(current.isBlank() ? REST : current).append('\n');
+        String reading = current.isBlank() ? "" : DiscordSafe.escaped(pronunciation, MAX_LINE_LENGTH);
+        if (!reading.isBlank()) text.append("-# *").append(reading).append("*\n");
         if (translation != null && !translation.isBlank()) {
             text.append("-# ").append(translation).append('\n').append(BLANK).append('\n');
         } else if (pendingTranslation) {
