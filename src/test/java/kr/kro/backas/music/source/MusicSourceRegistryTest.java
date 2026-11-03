@@ -60,12 +60,14 @@ class MusicSourceRegistryTest {
     }
 
     @Test
-    void playsThroughWebFirstOnlyWithAPoToken() {
+    void playsThroughWebEmbeddedFirstAndWebOnlyWithAPoToken() {
         Client[] withToken = QualityRecordingClients.create(new SourceQualities(), false, true);
         assertInstanceOf(Music.class, withToken[0]);
         assertFalse(withToken[0].supportsFormatLoading());
-        assertEquals("WEB", withToken[1].getIdentifier());
+        assertEquals("WEB_EMBEDDED_PLAYER", withToken[1].getIdentifier());
         assertTrue(withToken[1].supportsFormatLoading());
+        assertEquals("WEB", withToken[2].getIdentifier());
+        assertTrue(withToken[2].supportsFormatLoading());
         assertTrue(Arrays.stream(withToken).filter(MWeb.class::isInstance).noneMatch(Client::supportsFormatLoading));
         assertEquals("IOS", withToken[withToken.length - 1].getIdentifier());
 

@@ -51,10 +51,11 @@ public class MusicTrackHandler extends AudioEventAdapter {
 
     @Override
     public void onTrackException(AudioPlayer player, AudioTrack track, FriendlyException exception) {
+        long position = client.positionOf(track);
         LOGGER.warn("track exception. title={}, uri={}, severity={}, position={}ms",
-                track.getInfo().title, track.getInfo().uri, exception.severity, track.getPosition(), exception);
+                track.getInfo().title, track.getInfo().uri, exception.severity, position, exception);
         long from = track == startedTrack ? startedAt : 0;
-        if (shouldResume(track.isSeekable(), track.getInfo().isStream, track.getDuration(), from, track.getPosition())) {
+        if (shouldResume(track.isSeekable(), track.getInfo().isStream, track.getDuration(), from, position)) {
             failedTrack = track;
             return;
         }
@@ -68,7 +69,7 @@ public class MusicTrackHandler extends AudioEventAdapter {
     }
 
     private void resume(AudioTrack track) {
-        long position = track.getPosition();
+        long position = client.positionOf(track);
         AudioTrack resumed = track.makeClone();
         resumed.setPosition(position);
         LOGGER.warn("stream broke mid-track, resuming {} at {}ms", track.getInfo().title, position);

@@ -76,7 +76,7 @@ public final class MusicSourceRegistry {
             String url = config.poToken().url().trim();
             options.setRemotePoToken(bgutilEndpoint(url), null);
             if (remoteCipher) {
-                LOGGER.info("PO 토큰을 bgutil 서버 {} 에서 받아 WEB 클라이언트로 Opus 를 재생합니다. 토큰을 못 받으면 IOS(AAC) 로 넘어갑니다.", url);
+                LOGGER.info("PO 토큰을 bgutil 서버 {} 에서 받아 WEB_EMBEDDED, WEB 클라이언트로 Opus 를 재생합니다. 둘 다 안 되면 IOS(AAC) 로 넘어갑니다.", url);
             } else {
                 LOGGER.warn("PO 토큰 서버는 설정됐지만 sources.youtube.remote-cipher.url 이 비어 있어 WEB 클라이언트가 서명을 풀지 못할 수 있습니다.");
             }

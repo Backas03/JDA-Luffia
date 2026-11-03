@@ -73,6 +73,7 @@ public class MusicPlayerClient {
     private volatile TrackCard trackCard;
     private volatile MessageChannel sessionHomeChannel;
     private volatile AudioTrack resumingTrack;
+    private final RewindGuard rewindGuard = new RewindGuard();
 
     public MusicPlayerClient(JDA musicBot, Guild guild, AudioPlayerManager sharedAudioPlayerManager) {
         this.musicBot = musicBot;
@@ -89,6 +90,7 @@ public class MusicPlayerClient {
                 }
                 realPositionMs = track.getPosition();
                 markSyncBase(track.getPosition(), realPositionMs);
+                rewindGuard.start(track, track.getPosition(), track.isSeekable() && !track.getInfo().isStream);
                 if (track == resumingTrack) {
                     resumingTrack = null;
                     return;
@@ -565,9 +567,27 @@ public class MusicPlayerClient {
         if (track == null || !track.isSeekable() || track.getInfo().isStream) return false;
         long target = clampSeek(positionMs, track.getDuration());
         track.setPosition(target);
+        rewindGuard.seeked(track, target);
         realPositionMs = target;
         markSyncBase(target, target);
         return true;
+    }
+
+    boolean acceptFrame(AudioTrack track, long timecode) {
+        RewindGuard.Verdict verdict = rewindGuard.onFrame(track, timecode);
+        if (verdict.play()) return true;
+        long target = verdict.seekTo();
+        if (target >= 0) {
+            LOGGER.warn("stream restarted at {}ms, seeking {} back to {}ms", timecode, track.getInfo().title, target);
+            track.setPosition(target);
+            realPositionMs = target;
+            markSyncBase(target, target);
+        }
+        return false;
+    }
+
+    long positionOf(AudioTrack track) {
+        return rewindGuard.positionOf(track, track.getPosition());
     }
 
     public boolean seekBy(long deltaMs) {

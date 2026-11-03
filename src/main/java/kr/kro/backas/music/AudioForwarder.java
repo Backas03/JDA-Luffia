@@ -30,6 +30,7 @@ public class AudioForwarder implements AudioSendHandler {
     @Override
     public boolean canProvide() {
         AudioPlayer player = client.getAudioPlayer();
+        AudioTrack before = player.getPlayingTrack();
         lastFrame = player.provide();
         long now = System.nanoTime();
         AudioTrack track = player.getPlayingTrack();
@@ -48,6 +49,9 @@ public class AudioForwarder implements AudioSendHandler {
             report(now);
         } else {
             lastCallAt = 0;
+        }
+        if (lastFrame != null && track != null && track == before && !client.acceptFrame(track, lastFrame.getTimecode())) {
+            lastFrame = null;
         }
         if (lastFrame != null) {
             client.updatePosition();
