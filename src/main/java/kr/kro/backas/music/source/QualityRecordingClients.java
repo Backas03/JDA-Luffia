@@ -59,6 +59,21 @@ final class QualityRecordingClients {
                 }
             });
         }
+        clients.add(new WebEmbeddedWithThumbnail() {
+            @Override
+            public synchronized TrackFormats loadFormats(YoutubeAudioSourceManager source, HttpInterface http, String videoId)
+                    throws CannotBeLoaded, IOException {
+                return qualities.capture(videoId, () -> fullStream(super.loadFormats(source, http, videoId), false));
+            }
+
+            @Override
+            protected boolean extractFormat(JsonBrowser json, List<StreamFormat> formats, boolean live, boolean sabrAvailable) {
+                int before = formats.size();
+                boolean result = super.extractFormat(json, formats, live, sabrAvailable);
+                SourceQualities.noteFormats(json, formats, before, live);
+                return result;
+            }
+        });
         clients.add(new WebWithThumbnail(playback(withPoToken)) {
             @Override
             public synchronized TrackFormats loadFormats(YoutubeAudioSourceManager source, HttpInterface http, String videoId)
@@ -106,21 +121,6 @@ final class QualityRecordingClients {
                     }
                 },
                 new MWebWithThumbnail(playback(false)),
-                new WebEmbeddedWithThumbnail() {
-                    @Override
-                    public TrackFormats loadFormats(YoutubeAudioSourceManager source, HttpInterface http, String videoId)
-                            throws CannotBeLoaded, IOException {
-                        return qualities.capture(videoId, () -> fullStream(super.loadFormats(source, http, videoId), false));
-                    }
-
-                    @Override
-                    protected boolean extractFormat(JsonBrowser json, List<StreamFormat> formats, boolean live, boolean sabrAvailable) {
-                        int before = formats.size();
-                        boolean result = super.extractFormat(json, formats, live, sabrAvailable);
-                        SourceQualities.noteFormats(json, formats, before, live);
-                        return result;
-                    }
-                },
                 new Ios() {
                     @Override
                     public TrackFormats loadFormats(YoutubeAudioSourceManager source, HttpInterface http, String videoId)
