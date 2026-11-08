@@ -15,9 +15,6 @@ discord:
   music-bot-tokens: []
   service-guilds: []
 
-riot:
-  api-key: ""
-
 sources:
   youtube:
     playlist-page-count: 10

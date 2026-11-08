@@ -4,7 +4,6 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import kr.kro.backas.Main;
 import kr.kro.backas.command.music.slash.AiShuffleSlashCommand;
-import kr.kro.backas.command.music.slash.AiSlashCommand;
 import kr.kro.backas.command.music.slash.PlaySlashCommand;
 import kr.kro.backas.command.music.slash.QueueSlashCommand;
 import kr.kro.backas.command.music.slash.VolumeSlashCommand;
@@ -76,7 +75,6 @@ public class ControlPanel extends ListenerAdapter {
     static final String REPEAT = "repeat";
     static final String AUTOPLAY = "auto";
     static final String ADD = "add";
-    static final String ASK = "ask";
     static final String LEAVE = "leave";
     static final long JUMP_MS = 10_000;
     static final long LYRICS_STEP_MS = 500;
@@ -161,7 +159,6 @@ public class ControlPanel extends ListenerAdapter {
         children.add(Separator.createDivider(Separator.Spacing.SMALL));
         children.add(ActionRow.of(
                 Button.secondary(id(ADD, key), "곡 추가").withEmoji(CardIcons.of(CardIcons.Glyph.PLUS)),
-                Button.secondary(id(ASK, key), "AI에게 부탁").withEmoji(CardIcons.of(CardIcons.Glyph.CHAT)),
                 Button.danger(id(LEAVE, key), "나가기").withEmoji(CardIcons.of(CardIcons.Glyph.EXIT))));
         Container container = Container.of(children);
         return track == null ? container : container.withAccentColor(ArtworkColors.of(MusicEmbeds.thumbnailOf(track)));
@@ -273,8 +270,6 @@ public class ControlPanel extends ListenerAdapter {
         }
         if (ADD.equals(parts[0])) {
             PlaySlashCommand.play(event, member, text.strip(), null);
-        } else if (ASK.equals(parts[0])) {
-            new AiSlashCommand().request(event, member, text);
         }
     }
 
@@ -369,10 +364,6 @@ public class ControlPanel extends ListenerAdapter {
             case ADD:
                 event.replyModal(inputModal(ADD, key, "곡 추가", "검색어 또는 링크", "유튜브·스포티파이 링크나 곡 제목", TextInputStyle.SHORT))
                         .queue(null, e -> LOGGER.debug("failed to open the add song form", e));
-                return null;
-            case ASK:
-                event.replyModal(inputModal(ASK, key, "AI에게 부탁", "요청", "예: 신나는 J-pop 다섯 곡 틀어줘", TextInputStyle.PARAGRAPH))
-                        .queue(null, e -> LOGGER.debug("failed to open the ai request form", e));
                 return null;
             case LEAVE:
                 client.disconnectFromVoiceChannelAndResetTrack();

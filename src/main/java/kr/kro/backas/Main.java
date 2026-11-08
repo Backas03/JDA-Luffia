@@ -2,8 +2,6 @@ package kr.kro.backas;
 
 import kr.kro.backas.config.Config;
 import club.minnced.discord.jdave.interop.JDaveSessionFactory;
-import com.merakianalytics.orianna.Orianna;
-import com.merakianalytics.orianna.types.common.Platform;
 import kr.kro.backas.config.LuffiaConfig;
 import java.nio.file.Path;
 import kr.kro.backas.util.BotShutdown;
@@ -61,9 +59,6 @@ public class Main {
                 .setAudioModuleConfig(new AudioModuleConfig().withDaveSessionFactory(new JDaveSessionFactory()));
 
         try {
-            Orianna.setRiotAPIKey(config.riot().apiKey());
-            Orianna.setDefaultPlatform(Platform.KOREA);
-
             JDA jda = builder.build().awaitReady();
             luffia = new Luffia(jda);
             LOGGER.info("luffia 시작 완료 (서버 {}개)", jda.getGuilds().size());

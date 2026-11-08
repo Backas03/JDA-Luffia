@@ -42,7 +42,6 @@ public final class CardIcons {
         SPARKLE("✨"),
         REPEAT("🔁"),
         PLUS("➕"),
-        CHAT("💬"),
         EXIT("🚪");
 
         private final String fallback;
@@ -190,14 +189,6 @@ public final class CardIcons {
                 g.setStroke(new BasicStroke(14, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
                 g.draw(new Line2D.Double(64, 24, 64, 104));
                 g.draw(new Line2D.Double(24, 64, 104, 64));
-            }
-            case CHAT -> {
-                g.setStroke(new BasicStroke(9, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                g.draw(new RoundRectangle2D.Double(14, 18, 100, 72, 32, 32));
-                fillRounded(g, triangle(34, 86, 34, 110, 58, 88));
-                g.fill(new Ellipse2D.Double(37, 48, 14, 14));
-                g.fill(new Ellipse2D.Double(57, 48, 14, 14));
-                g.fill(new Ellipse2D.Double(77, 48, 14, 14));
             }
             case EXIT -> {
                 g.setStroke(new BasicStroke(9, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));

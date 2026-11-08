@@ -4,7 +4,6 @@ import kr.kro.backas.config.Config;
 import org.slf4j.LoggerFactory;
 import kr.kro.backas.command.HelpCommand;
 import kr.kro.backas.command.api.CommandManager;
-import kr.kro.backas.command.lol.slash.LOLUserInfoSlashCommand;
 import kr.kro.backas.command.maplestory.MapleUserInfoCommand;
 import kr.kro.backas.command.music.HelpSlashCommand;
 import kr.kro.backas.command.music.slash.*;
@@ -39,13 +38,11 @@ public class Luffia {
         this.commandManager.registerSlashCommand(new PauseOrResumeSlashCommand());
         this.commandManager.registerSlashCommand(new SkipSlashCommand());
         this.commandManager.registerSlashCommand(new ShuffleSlashCommand());
-        this.commandManager.registerSlashCommand(new AiSlashCommand());
         this.commandManager.registerSlashCommand(new AiShuffleSlashCommand());
         this.commandManager.registerSlashCommand(new AiAdminSlashCommand());
         this.commandManager.registerSlashCommand(new EqualizerSlashCommand());
         this.commandManager.registerSlashCommand(new KaraokeModeSlashCommand());
         this.commandManager.registerSlashCommand(new PronunciationSlashCommand());
-        this.commandManager.registerSlashCommand(new LOLUserInfoSlashCommand());
         this.commandManager.registerSlashCommand(new HelpSlashCommand());
         this.commandManager.commitSlashCommands();
 
@@ -56,8 +53,6 @@ public class Luffia {
         //this.commandManager.registerCommand("스킵", new SkipCommand());
         //this.commandManager.registerCommand("일시정지", new PauseCommand());
         //this.commandManager.registerCommand("일시정지해제", new ResumeCommand());
-
-        //this.commandManager.registerCommand("롤정보", new LOLUserInfoCommand());
 
         this.commandManager.registerCommand("메이플정보", new MapleUserInfoCommand());
 
@@ -80,7 +75,6 @@ public class Luffia {
             }
         }
         discordAPI.addEventListener(this.musicPlayerController);
-        discordAPI.addEventListener(this.musicPlayerController.getAiRemovalConfirmations());
         discordAPI.addEventListener(this.musicPlayerController.getLyricsExpansions());
         discordAPI.addEventListener(this.musicPlayerController.getLyricsConversions());
 

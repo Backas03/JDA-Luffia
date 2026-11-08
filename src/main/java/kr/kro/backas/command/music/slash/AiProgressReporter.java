@@ -1,7 +1,6 @@
 package kr.kro.backas.command.music.slash;
 
 import kr.kro.backas.Main;
-import kr.kro.backas.music.ai.AiAgent;
 import kr.kro.backas.music.lyrics.TranslationClient;
 import net.dv8tion.jda.api.components.container.Container;
 import org.jetbrains.annotations.Nullable;
@@ -14,7 +13,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 
-final class AiProgressReporter implements AiAgent.StatusListener {
+final class AiProgressReporter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AiProgressReporter.class);
     static final long INTERVAL_SECONDS = 10;
@@ -37,15 +36,7 @@ final class AiProgressReporter implements AiAgent.StatusListener {
         this.ticker = scheduler.scheduleAtFixedRate(this::render, INTERVAL_SECONDS, INTERVAL_SECONDS, TimeUnit.SECONDS);
     }
 
-    @Override
-    public void status(String message) {
-        this.message = message;
-        this.done = -1;
-        this.total = -1;
-    }
-
-    @Override
-    public void progress(String message, int done, int total) {
+    void progress(String message, int done, int total) {
         this.message = message;
         this.done = done;
         this.total = total;
