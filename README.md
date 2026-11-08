@@ -3,8 +3,8 @@
 
 제작: Discord bagkaseu(박카스#9970) · 오류나 건의는 [Issue](https://github.com/Backas03/JDA-Luffia/issues) 로 남겨 주세요.
 
-## 시연 영상
-### 전체 시연
+## 데모
+### 전체 데모
 https://github.com/user-attachments/assets/c91fb240-f77f-4411-abfc-5ee6b4db37b0
 
 ### AI 타임스탬프 가사
@@ -17,7 +17,7 @@ https://github.com/user-attachments/assets/2b79e159-eeee-4df3-bb4d-33d478a753ae
 
 https://github.com/user-attachments/assets/5044eec6-d06f-44ba-ac81-fcc2b707bc14
 
-### 일반 시연
+### 일반 데모
 LRCLIB 실시간 가사와 한국어 번역입니다.
 
 https://github.com/user-attachments/assets/0649f49e-61ea-4c1e-ae01-06f09d5f702e
@@ -198,13 +198,6 @@ python tools/asr_eval.py --dir songs --endpoint whisper=http://gpu-pc-1:8000 --e
 
 ### 캐시
 번역, 가사, AI 태그, 서버 속도 등을 ``cache/`` 에 저장해 재시작 후에도 씁니다. 위치는 ``cache.dir`` 로 바꾸고, 폴더를 지우면 초기화됩니다.
-
-## 데모
-6코어 CPU 로 LLM 번역을 돌린 영상입니다. GPU 를 쓰면 더 빠릅니다.
-
-https://github.com/user-attachments/assets/7bd6bd92-021b-4578-8bd5-e2e310b9ec6b
-
-https://github.com/user-attachments/assets/5cb94339-9e2c-490b-86a9-42d63d0af4d4
 
 ## 게임 전적 검색
 - ``/롤정보 <닉네임#태그>``
