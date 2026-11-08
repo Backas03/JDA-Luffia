@@ -5,7 +5,6 @@ import java.util.List;
 
 public record LuffiaConfig(Bot bot,
                            Discord discord,
-                           Riot riot,
                            Sources sources,
                            MusicPlayer musicPlayer,
                            Autoplay autoplay,
@@ -31,9 +30,6 @@ public record LuffiaConfig(Bot bot,
         public String activeToken(boolean dev) {
             return dev ? devToken : token;
         }
-    }
-
-    public record Riot(String apiKey) {
     }
 
     public record Sources(Youtube youtube, Spotify spotify) {

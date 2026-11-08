@@ -4,12 +4,7 @@ import com.github.topi314.lavasrc.spotify.SpotifySourceManager;
 import kr.kro.backas.config.Config;
 import club.minnced.discord.jdave.interop.JDaveSessionFactory;
 import kr.kro.backas.music.ai.AiGuard;
-import kr.kro.backas.music.ai.AiRemovalConfirmations;
 import kr.kro.backas.music.ai.AiSongResolver;
-import kr.kro.backas.music.ai.ChartClient;
-import kr.kro.backas.music.ai.SongInfoClient;
-import kr.kro.backas.music.ai.AiPlaylistBuilder;
-import kr.kro.backas.music.ai.AiShuffleClassifier;
 import kr.kro.backas.music.ai.AiTrackTagger;
 import kr.kro.backas.music.lyrics.LrcLibClient;
 import kr.kro.backas.music.lyrics.LyricsConversions;
@@ -72,13 +67,8 @@ public class MusicPlayerController extends ListenerAdapter {
     private final LyricsSources lyricsSources;
     private final TranslationClient translationClient;
     private final AsrClient asrClient;
-    private final AiShuffleClassifier aiShuffleClassifier;
     private final AiTrackTagger aiTrackTagger;
-    private final AiPlaylistBuilder aiPlaylistBuilder;
     private final AiGuard aiGuard = new AiGuard();
-    private final ChartClient chartClient = new ChartClient();
-    private final SongInfoClient songInfoClient = new SongInfoClient();
-    private final AiRemovalConfirmations aiRemovalConfirmations = new AiRemovalConfirmations();
     private final LyricsExpansions lyricsExpansions = new LyricsExpansions();
     private final LyricsConversions lyricsConversions = new LyricsConversions();
     private final LyricsFeedback lyricsFeedback = new LyricsFeedback();
@@ -114,11 +104,9 @@ public class MusicPlayerController extends ListenerAdapter {
         this.translationClient.startEndpointMonitor(this.scheduler);
         this.translationClient.startFallbackManager(this.scheduler);
         this.aiTrackTagger = new AiTrackTagger(this.translationClient);
-        this.aiShuffleClassifier = new AiShuffleClassifier(this.translationClient, this.aiTrackTagger);
         this.scheduler.scheduleWithFixedDelay(this::flushAiCaches, AI_CACHE_FLUSH_SECONDS, AI_CACHE_FLUSH_SECONDS, TimeUnit.SECONDS);
         this.scheduler.scheduleWithFixedDelay(lyricsExpansions::prune, EXPANSION_PRUNE_MINUTES, EXPANSION_PRUNE_MINUTES, TimeUnit.MINUTES);
         this.scheduler.scheduleWithFixedDelay(lyricsConversions::prune, EXPANSION_PRUNE_MINUTES, EXPANSION_PRUNE_MINUTES, TimeUnit.MINUTES);
-        this.aiPlaylistBuilder = new AiPlaylistBuilder(this.translationClient, this.aiShuffleClassifier);
         SpotifySourceManager spotify = sourceRegistry.getSpotify();
         String spDc = Config.get().sources().spotify().spDc();
         boolean spotifyLyrics = spotify != null && spDc != null && !spDc.isBlank();
@@ -214,32 +202,12 @@ public class MusicPlayerController extends ListenerAdapter {
         return translationClient;
     }
 
-    public AiShuffleClassifier getAiShuffleClassifier() {
-        return aiShuffleClassifier;
-    }
-
     public AiTrackTagger getAiTrackTagger() {
         return aiTrackTagger;
     }
 
-    public AiPlaylistBuilder getAiPlaylistBuilder() {
-        return aiPlaylistBuilder;
-    }
-
     public AiGuard getAiGuard() {
         return aiGuard;
-    }
-
-    public ChartClient getChartClient() {
-        return chartClient;
-    }
-
-    public SongInfoClient getSongInfoClient() {
-        return songInfoClient;
-    }
-
-    public AiRemovalConfirmations getAiRemovalConfirmations() {
-        return aiRemovalConfirmations;
     }
 
     public LyricsConversions getLyricsConversions() {
@@ -421,7 +389,6 @@ public class MusicPlayerController extends ListenerAdapter {
 
     private void flushAiCaches() {
         try {
-            aiShuffleClassifier.flush();
             aiTrackTagger.flush();
         } catch (RuntimeException e) {
             LOGGER.warn("failed to save ai caches", e);

@@ -29,6 +29,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class AiShuffleSlashCommand implements SlashCommandSource {
@@ -36,6 +38,9 @@ public class AiShuffleSlashCommand implements SlashCommandSource {
     public static final String COMMAND_NAME = "ai셔플";
     private static final String STATUS_TITLE = "AI 가 대기열을 섞고 있습니다";
     private static final String REJECT_TITLE = "대기열을 섞을 수 없습니다.";
+    private static final int MAX_REASON_DEPTH = 4;
+    private static final int MAX_REASON_LENGTH = 1500;
+    private static final Set<MusicPlayerClient> RUNNING = ConcurrentHashMap.newKeySet();
 
     @Override
     public SlashCommandData buildCommand() {
@@ -74,13 +79,13 @@ public class AiShuffleSlashCommand implements SlashCommandSource {
             reject(event, member, denied, true);
             return;
         }
-        if (!AiSlashCommand.RUNNING.add(client)) {
-            reject(event, member, "이미 AI 가 다른 요청을 처리하고 있습니다. 잠시 후 다시 시도해주세요.", false);
+        if (!RUNNING.add(client)) {
+            reject(event, member, "이미 AI 가 대기열을 섞고 있습니다. 잠시 후 다시 시도해주세요.", false);
             return;
         }
         event.replyComponents(status(member, "대기열을 분석하고 있습니다...", null)).useComponentsV2(true).queue(
                 hook -> TranslationJobs.EXECUTOR.execute(() -> handle(hook, member, client, controller)),
-                error -> AiSlashCommand.RUNNING.remove(client));
+                error -> RUNNING.remove(client));
     }
 
     private static void reject(IReplyCallback event, Member member, String reason, boolean ephemeral) {
@@ -119,21 +124,37 @@ public class AiShuffleSlashCommand implements SlashCommandSource {
             editor.finish(AiCards.error(member,
                     "AI 서버에 연결할 수 없습니다.",
                     "AI 서버가 꺼져 있거나 응답이 올바르지 않습니다. 잠시 후 다시 시도해주세요."));
-            AiSlashCommand.sendReasonToOwner(hook, member, e);
+            sendReasonToOwner(hook, member, e);
         } catch (RuntimeException e) {
             LOGGER.warn("ai shuffle failed", e);
             editor.finish(AiCards.error(member,
                     "AI 셔플을 처리하지 못했습니다.",
                     "처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."));
-            AiSlashCommand.sendReasonToOwner(hook, member, e);
+            sendReasonToOwner(hook, member, e);
         } finally {
             reporter.stop();
-            AiSlashCommand.RUNNING.remove(client);
+            RUNNING.remove(client);
         }
     }
 
+    private static void sendReasonToOwner(InteractionHook hook, Member member, Throwable error) {
+        if (member == null || !OwnerUtil.isOwner(member)) return;
+        StringBuilder reason = new StringBuilder();
+        Throwable current = error;
+        for (int depth = 0; current != null && depth < MAX_REASON_DEPTH; depth++, current = current.getCause()) {
+            if (depth > 0) reason.append("\n<- ");
+            reason.append(current.getClass().getSimpleName());
+            if (current.getMessage() != null) reason.append(": ").append(current.getMessage());
+        }
+        String text = reason.toString().replace("```", "'''");
+        if (text.length() > MAX_REASON_LENGTH) text = text.substring(0, MAX_REASON_LENGTH);
+        hook.sendMessage("실패 사유 (제작자에게만 보입니다)\n```\n" + text + "\n```")
+                .setEphemeral(true)
+                .queue(null, e -> LOGGER.debug("failed to send failure reason", e));
+    }
+
     private static Container status(Member member, String message, @Nullable String compute) {
-        return AiCards.status(member, STATUS_TITLE, null, message, compute);
+        return AiCards.status(member, STATUS_TITLE, message, compute);
     }
 
     @Override
