@@ -3,6 +3,25 @@
 
 제작: Discord bagkaseu(박카스#9970) · 오류나 건의는 [Issue](https://github.com/Backas03/JDA-Luffia/issues) 로 남겨 주세요.
 
+## 시연 영상
+### 전체 시연
+https://github.com/user-attachments/assets/c91fb240-f77f-4411-abfc-5ee6b4db37b0
+
+### AI 타임스탬프 가사
+시간 정보가 없는 가사에 AI 로 싱크를 맞춰 띄웁니다.
+
+https://github.com/user-attachments/assets/2b79e159-eeee-4df3-bb4d-33d478a753ae
+
+### AI 생성 가사
+가사를 못 찾은 곡은 AI 가 받아 적어 띄웁니다.
+
+https://github.com/user-attachments/assets/5044eec6-d06f-44ba-ac81-fcc2b707bc14
+
+### 일반 시연
+LRCLIB 실시간 가사와 한국어 번역입니다.
+
+https://github.com/user-attachments/assets/0649f49e-61ea-4c1e-ae01-06f09d5f702e
+
 ## 명령어
 | 명령어 | 설명 |
 |---|---|
