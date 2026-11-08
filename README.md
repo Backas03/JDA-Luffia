@@ -63,6 +63,13 @@ https://github.com/user-attachments/assets/2b79e159-eeee-4df3-bb4d-33d478a753ae
 
 https://github.com/user-attachments/assets/5044eec6-d06f-44ba-ac81-fcc2b707bc14
 
+### 4. 기존 데모
+6코어 CPU 로 LLM 번역을 돌린 영상입니다. GPU 를 쓰면 더 빠릅니다.
+
+https://github.com/user-attachments/assets/7bd6bd92-021b-4578-8bd5-e2e310b9ec6b
+
+https://github.com/user-attachments/assets/5cb94339-9e2c-490b-86a9-42d63d0af4d4
+
 ## 명령어
 | 명령어 | 설명 |
 |---|---|
