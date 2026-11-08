@@ -48,6 +48,8 @@ asr:
 - 배포: ``./gradlew fatJar`` 로 ``build/libs/JDA-Luffia-1.0.0-SNAPSHOT-all.jar`` 를 만들고, ``config.yaml`` 이 있는 폴더에서 ``java -Dfile.encoding=UTF-8 -jar JDA-Luffia-1.0.0-SNAPSHOT-all.jar``
 
 ## 데모 영상
+모든 데모 영상의 AI 기능(번역·가사)은 NVIDIA GeForce RTX 5080 또는 AMD Radeon RX 7800 XT GPU 로 돌렸습니다.
+
 ### 1. 전체 데모
 https://github.com/user-attachments/assets/c91fb240-f77f-4411-abfc-5ee6b4db37b0
 
