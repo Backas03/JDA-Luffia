@@ -159,7 +159,7 @@ public class ControlPanel extends ListenerAdapter {
         children.add(Separator.createDivider(Separator.Spacing.SMALL));
         children.add(ActionRow.of(
                 Button.secondary(id(ADD, key), "곡 추가").withEmoji(CardIcons.of(CardIcons.Glyph.PLUS)),
-                Button.danger(id(LEAVE, key), "나가기").withEmoji(CardIcons.of(CardIcons.Glyph.EXIT))));
+                Button.danger(id(LEAVE, key), "내보내기").withEmoji(CardIcons.of(CardIcons.Glyph.EXIT))));
         Container container = Container.of(children);
         return track == null ? container : container.withAccentColor(ArtworkColors.of(MusicEmbeds.thumbnailOf(track)));
     }

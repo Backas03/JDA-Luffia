@@ -5,6 +5,7 @@ import com.github.natanbc.lavadsp.karaoke.KaraokePcmAudioFilter;
 import com.github.natanbc.lavadsp.timescale.TimescalePcmAudioFilter;
 import com.sedmelluq.discord.lavaplayer.filter.AudioFilter;
 import com.sedmelluq.discord.lavaplayer.filter.FloatPcmAudioFilter;
+import com.sedmelluq.discord.lavaplayer.filter.UniversalPcmAudioFilter;
 import com.sedmelluq.discord.lavaplayer.filter.equalizer.Equalizer;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
@@ -14,7 +15,9 @@ import com.sedmelluq.discord.lavaplayer.track.InternalAudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.playback.AudioFrameBuffer;
 import com.sedmelluq.discord.lavaplayer.track.playback.LocalAudioTrackExecutor;
 import kr.kro.backas.music.ai.AiAutoplay;
+import kr.kro.backas.music.audio.EncoderVolume;
 import kr.kro.backas.music.filter.ConfiguredEqualizer;
+import kr.kro.backas.music.filter.EncoderVolumeFilter;
 import kr.kro.backas.music.filter.HeadroomLimiter;
 import kr.kro.backas.music.filter.KaraokeMode;
 import kr.kro.backas.music.filter.VocalEchoFilter;
@@ -74,6 +77,9 @@ public class MusicPlayerClient {
     private volatile MessageChannel sessionHomeChannel;
     private volatile AudioTrack resumingTrack;
     private final RewindGuard rewindGuard = new RewindGuard();
+    private final boolean preciseVolume;
+    private final EncoderVolume volume;
+    private boolean filterInstalled;
 
     public MusicPlayerClient(JDA musicBot, Guild guild, AudioPlayerManager sharedAudioPlayerManager) {
         this.musicBot = musicBot;
@@ -81,7 +87,9 @@ public class MusicPlayerClient {
         this.audioPlayerManager = sharedAudioPlayerManager;
 
         this.audioPlayer = this.audioPlayerManager.createPlayer();
-        this.audioPlayer.setVolume(DEFAULT_VOLUME);
+        this.preciseVolume = EncoderVolume.supported(this.audioPlayerManager.getConfiguration());
+        this.volume = new EncoderVolume(this.audioPlayerManager.getConfiguration(), DEFAULT_VOLUME, this::syncFilterPresence);
+        this.audioPlayer.setVolume(preciseVolume ? 100 : DEFAULT_VOLUME);
         this.audioPlayer.addListener(new AudioEventAdapter() {
             @Override
             public void onTrackStart(AudioPlayer player, AudioTrack track) {
@@ -156,13 +164,18 @@ public class MusicPlayerClient {
     }
 
     private int bufferedFrames() {
+        AudioFrameBuffer buffer = currentBuffer();
+        return buffer == null ? 0 : Math.max(0, buffer.getFullCapacity() - buffer.getRemainingCapacity());
+    }
+
+    @Nullable
+    private AudioFrameBuffer currentBuffer() {
         AudioTrack track = audioPlayer.getPlayingTrack();
         if (track instanceof InternalAudioTrack internal
                 && internal.getActiveExecutor() instanceof LocalAudioTrackExecutor executor) {
-            AudioFrameBuffer buffer = executor.getAudioBuffer();
-            if (buffer != null) return Math.max(0, buffer.getFullCapacity() - buffer.getRemainingCapacity());
+            return executor.getAudioBuffer();
         }
-        return 0;
+        return null;
     }
 
     public void setKaraokeMode(KaraokeMode mode) {
@@ -181,19 +194,42 @@ public class MusicPlayerClient {
         return currentEqualizer;
     }
 
-    private void updateFilter() {
+    private boolean effectsActive() {
+        return Math.abs(currentPlaySpeed - 1.0) > 0.001 || karaokeMode.isActive() || !currentEqualizer.isFlat();
+    }
+
+    private boolean volumeFilterNeeded() {
+        return preciseVolume && volume.neededFor(currentBuffer());
+    }
+
+    private synchronized void syncFilterPresence() {
+        if ((effectsActive() || volumeFilterNeeded()) != filterInstalled) updateFilter();
+    }
+
+    private synchronized void updateFilter() {
         double speed = currentPlaySpeed;
         KaraokeMode karaoke = karaokeMode;
         ConfiguredEqualizer equalizerPreset = currentEqualizer;
         boolean speedActive = Math.abs(speed - 1.0) > 0.001;
-        if (!speedActive && !karaoke.isActive() && equalizerPreset.isFlat()) {
+        boolean effects = speedActive || karaoke.isActive() || !equalizerPreset.isFlat();
+        if (!effects && !volumeFilterNeeded()) {
+            filterInstalled = false;
             this.audioPlayer.setFilterFactory(null);
             return;
         }
+        filterInstalled = true;
         this.audioPlayer.setFilterFactory((track, format, output) -> {
             List<AudioFilter> chain = new ArrayList<>();
-            HeadroomLimiter limiter = new HeadroomLimiter(output, format.channelCount, format.sampleRate);
-            chain.add(limiter);
+            UniversalPcmAudioFilter sink = output;
+            if (preciseVolume) {
+                AudioFrameBuffer buffer = currentBuffer();
+                EncoderVolumeFilter volumeFilter = new EncoderVolumeFilter(output, () -> volume.gainFor(buffer));
+                chain.add(volumeFilter);
+                sink = volumeFilter;
+            }
+            if (!effects) return chain;
+            HeadroomLimiter limiter = new HeadroomLimiter(sink, format.channelCount, format.sampleRate);
+            chain.add(0, limiter);
             FloatPcmAudioFilter downstream = limiter;
             if (speedActive) {
                 TimescalePcmAudioFilter speedFilter = new TimescalePcmAudioFilter(downstream, format.channelCount, format.sampleRate)
@@ -357,12 +393,18 @@ public class MusicPlayerClient {
     }
 
     public int getVolume() {
-        return audioPlayer.getVolume();
+        return volume.get();
     }
 
     public void setVolume(int volume) {
-        audioPlayer.setVolume(volume);
+        applyVolume(volume);
         refreshTrackCard();
+    }
+
+    private void applyVolume(int level) {
+        volume.set(level);
+        if (preciseVolume) syncFilterPresence();
+        else audioPlayer.setVolume(level);
     }
 
     public KaraokeMode getKaraokeMode() {
@@ -643,7 +685,7 @@ public class MusicPlayerClient {
         autoplay.reset();
         musicTrack.reset();
         resetLyricsPreferences();
-        audioPlayer.setVolume(DEFAULT_VOLUME);
+        applyVolume(DEFAULT_VOLUME);
         synchronized (speedLock) {
             bufferedSpeeds.clear();
             currentPlaySpeed = 1.0;
