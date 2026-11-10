@@ -5,6 +5,7 @@ import com.sedmelluq.discord.lavaplayer.format.OpusAudioDataFormat;
 import com.sedmelluq.discord.lavaplayer.format.StandardAudioDataFormats;
 import com.sedmelluq.discord.lavaplayer.format.transcoder.AudioChunkEncoder;
 import com.sedmelluq.discord.lavaplayer.player.AudioConfiguration;
+import com.sedmelluq.discord.lavaplayer.track.playback.AudioFrameBuffer;
 import net.dv8tion.jda.api.audio.AudioNatives;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,22 +42,47 @@ public final class MusicOpusFormat extends OpusAudioDataFormat {
         return bitrate;
     }
 
+    public static boolean appliesGain(AudioDataFormat format) {
+        return format instanceof MusicOpusFormat music && music.appliesGain();
+    }
+
+    public boolean appliesGain() {
+        MusicOpusEncoder encoder = openEncoder(AudioConfiguration.OPUS_QUALITY_MAX);
+        if (encoder == null) return false;
+        encoder.close();
+        return true;
+    }
+
+    public int rescaleBuffered(AudioFrameBuffer buffer, AudioConfiguration configuration, float before, float after) {
+        if (fallback || before <= 0f) return 0;
+        try {
+            return BufferedGainChange.apply(buffer, this, configuration.getOpusEncodingQuality(), before, after);
+        } catch (Throwable e) {
+            LOGGER.warn("버퍼에 쌓인 구간의 볼륨을 바꾸지 못했습니다. 새 볼륨은 버퍼가 비워진 뒤부터 들립니다.", e);
+            return 0;
+        }
+    }
+
+    private MusicOpusEncoder openEncoder(int complexity) {
+        if (fallback) return null;
+        try {
+            if (!AudioNatives.ensureOpus()) throw new IllegalStateException("이 플랫폼에서 opus-java 네이티브를 불러오지 못했습니다.");
+            return new MusicOpusEncoder(this, bitrate, complexity);
+        } catch (Throwable e) {
+            fallback = true;
+            LOGGER.warn("고음질 Opus 인코더를 쓸 수 없어 lavaplayer 기본 인코더(약 99kbps)로 재인코딩합니다.", e);
+            return null;
+        }
+    }
+
     @Override
     public AudioChunkEncoder createEncoder(AudioConfiguration configuration) {
-        if (!fallback) {
-            try {
-                if (!AudioNatives.ensureOpus()) throw new IllegalStateException("이 플랫폼에서 opus-java 네이티브를 불러오지 못했습니다.");
-                MusicOpusEncoder encoder = new MusicOpusEncoder(this, bitrate, configuration.getOpusEncodingQuality());
-                if (reported.compareAndSet(false, true)) {
-                    LOGGER.info("재인코딩 Opus 비트레이트 {}kbps (음악 모드, 복잡도 {})", encoder.bitrate() / 1000, configuration.getOpusEncodingQuality());
-                }
-                return encoder;
-            } catch (Throwable e) {
-                fallback = true;
-                LOGGER.warn("고음질 Opus 인코더를 쓸 수 없어 lavaplayer 기본 인코더(약 99kbps)로 재인코딩합니다.", e);
-            }
+        MusicOpusEncoder encoder = openEncoder(configuration.getOpusEncodingQuality());
+        if (encoder == null) return super.createEncoder(configuration);
+        if (reported.compareAndSet(false, true)) {
+            LOGGER.info("재인코딩 Opus 비트레이트 {}kbps (음악 모드, 복잡도 {})", encoder.bitrate() / 1000, configuration.getOpusEncodingQuality());
         }
-        return super.createEncoder(configuration);
+        return encoder;
     }
 
     @Override
