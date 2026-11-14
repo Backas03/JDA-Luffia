@@ -35,7 +35,7 @@ asr:
 | ``discord.service-guilds`` | 명령어를 받을 서버 id. 비우면 모든 서버 |
 | ``sources.spotify.*`` | 스포티파이 지원. 비우면 스포티파이만 꺼짐 (앱 소유자 Premium 필요) |
 | ``music-player.opus-bitrate-kbps`` | 볼륨·이퀄라이저 때문에 다시 인코딩할 때의 Opus 비트레이트 (기본 256). ``0`` 이면 lavaplayer 기본값(약 99kbps) |
-| ``music-player.motion-banner.*`` | 곡 카드 배너를 움짤로 교체 (Spotify Canvas, 없으면 유튜브에서 가장 많이 다시 본 장면). ffmpeg 필요, 경로는 ``ffmpeg``, 형식은 ``format`` (``gif``·``webp``) |
+| ``music-player.motion-banner.*`` | 곡 카드 배너를 움짤로 교체 (Spotify Canvas, 없으면 유튜브에서 가장 많이 다시 본 장면). ffmpeg 필요, 경로는 ``ffmpeg``, 형식은 ``format`` (``webp``·``gif``), 유튜브 장면 수는 ``scenes`` |
 | ``llm.*`` | 가사 번역·AI 서버. 아래 "가사 번역" |
 | ``asr.endpoints`` | 가사 싱크 보정·AI 가사 변환·AI 가사 전사. 아래 "ASR 서버" |
 

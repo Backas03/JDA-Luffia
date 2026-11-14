@@ -3,11 +3,13 @@ package kr.kro.backas.music.motion;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SpotifyCanvasTest {
 
@@ -24,6 +26,14 @@ class SpotifyCanvasTest {
         expected.write(36);
         expected.writeBytes(uri);
         assertArrayEquals(expected.toByteArray(), SpotifyCanvas.cacheBody(TRACK));
+    }
+
+    @Test
+    void aTokenFailureIsReportedAsALookupFailureNotACrash() {
+        IOException failure = assertThrows(IOException.class, () -> SpotifyCanvas.find(() -> {
+            throw new RuntimeException("Account token refreshing failed");
+        }, TRACK));
+        assertEquals("Account token refreshing failed", failure.getCause().getMessage());
     }
 
     @Test

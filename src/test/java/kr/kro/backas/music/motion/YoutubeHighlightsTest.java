@@ -40,7 +40,7 @@ class YoutubeHighlightsTest {
     @Test
     void aVideoWithoutAHeatmapHasNoPeak() throws Exception {
         assertTrue(YoutubeHighlights.markers(new ObjectMapper().readTree("{}")).isEmpty());
-        assertEquals(YoutubeHighlights.NONE, YoutubeHighlights.peakStartMs(List.of(), 6000));
+        assertTrue(YoutubeHighlights.peaks(List.of(), 6000, 3).isEmpty());
     }
 
     @Test
@@ -50,20 +50,38 @@ class YoutubeHighlightsTest {
         raise(markers, 40, 0.6);
         raise(markers, 41, 0.7);
         raise(markers, 42, 0.6);
-        assertEquals(80_000, YoutubeHighlights.peakStartMs(markers, 6000));
+        assertEquals(List.of(80_000L), YoutubeHighlights.peaks(markers, 6000, 1));
     }
 
     @Test
     void theClipNeverRunsPastTheEnd() {
         List<YoutubeHighlights.Marker> markers = flat(100, 2000, 0.2);
         raise(markers, 99, 1.0);
-        long start = YoutubeHighlights.peakStartMs(markers, 6000);
-        assertEquals(194_000, start);
-        assertTrue(start + 6000 <= 200_000);
+        assertEquals(List.of(194_000L), YoutubeHighlights.peaks(markers, 6000, 1));
     }
 
     @Test
     void aVideoShorterThanTheSkippedOpeningHasNoPeak() {
-        assertEquals(YoutubeHighlights.NONE, YoutubeHighlights.peakStartMs(flat(4, 2000, 0.5), 6000));
+        assertTrue(YoutubeHighlights.peaks(flat(4, 2000, 0.5), 6000, 3).isEmpty());
+    }
+
+    @Test
+    void severalScenesComeFromDifferentPartsInPlayingOrder() {
+        List<YoutubeHighlights.Marker> markers = flat(100, 2000, 0.1);
+        raise(markers, 70, 0.9);
+        raise(markers, 71, 0.8);
+        raise(markers, 30, 0.7);
+        raise(markers, 50, 0.5);
+        assertEquals(List.of(60_000L, 100_000L, 140_000L), YoutubeHighlights.peaks(markers, 2000, 3));
+    }
+
+    @Test
+    void aVideoWithFewPeaksStillFillsTheScenesFromElsewhere() {
+        List<YoutubeHighlights.Marker> markers = flat(100, 2000, 0.1);
+        raise(markers, 70, 0.9);
+        List<Long> scenes = YoutubeHighlights.peaks(markers, 2000, 3);
+        assertEquals(3, scenes.size());
+        assertTrue(scenes.contains(140_000L));
+        for (int i = 1; i < scenes.size(); i++) assertTrue(scenes.get(i) - scenes.get(i - 1) >= YoutubeHighlights.MIN_GAP_MS);
     }
 }

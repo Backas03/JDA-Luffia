@@ -38,7 +38,12 @@ final class SpotifyCanvas {
     @Nullable
     static String find(TokenSource tokens, String trackId) throws IOException, InterruptedException {
         if (!TRACK_ID.matcher(trackId).matches()) return null;
-        String token = tokens.token();
+        String token;
+        try {
+            token = tokens.token();
+        } catch (RuntimeException e) {
+            throw new IOException("spotify web player token failed", e);
+        }
         if (token == null || token.isBlank()) throw new IOException("spotify web player token is empty");
         IOException failure = null;
         try {
