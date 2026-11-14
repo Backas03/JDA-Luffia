@@ -10,6 +10,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
@@ -18,9 +19,12 @@ final class YoutubeHighlights {
     record Marker(long startMs, long durationMs, double intensity) {
     }
 
-    static final long NONE = -1;
+    private record Candidate(long startMs, double score) {
+    }
+
     static final long INTRO_MS = 10_000;
     static final double INTRO_RATIO = 0.05;
+    static final long MIN_GAP_MS = 10_000;
     private static final String NEXT_URL = "https://www.youtube.com/youtubei/v1/next?prettyPrint=false";
     private static final String CLIENT_VERSION = "2.20251101.00.00";
     private static final String USER_AGENT =
@@ -31,7 +35,7 @@ final class YoutubeHighlights {
     private YoutubeHighlights() {
     }
 
-    static long find(String videoId, long clipMs) throws IOException, InterruptedException {
+    static List<Long> find(String videoId, long sceneMs, int scenes) throws IOException, InterruptedException {
         String body = MAPPER.createObjectNode()
                 .put("videoId", videoId)
                 .set("context", MAPPER.createObjectNode().set("client", MAPPER.createObjectNode()
@@ -48,7 +52,7 @@ final class YoutubeHighlights {
                 .build();
         HttpResponse<byte[]> response = HTTP.send(request, HttpResponse.BodyHandlers.ofByteArray());
         if (response.statusCode() / 100 != 2) throw new IOException("youtube answered " + response.statusCode() + " for the watch page of " + videoId);
-        return peakStartMs(markers(MAPPER.readTree(response.body())), clipMs);
+        return peaks(markers(MAPPER.readTree(response.body())), sceneMs, scenes);
     }
 
     static List<Marker> markers(JsonNode response) {
@@ -67,25 +71,30 @@ final class YoutubeHighlights {
         return markers;
     }
 
-    static long peakStartMs(List<Marker> markers, long clipMs) {
-        if (markers.isEmpty()) return NONE;
+    static List<Long> peaks(List<Marker> markers, long sceneMs, int scenes) {
+        List<Long> chosen = new ArrayList<>();
+        if (markers.isEmpty() || scenes <= 0) return chosen;
         Marker last = markers.get(markers.size() - 1);
         long total = last.startMs() + last.durationMs();
         long skip = Math.max(INTRO_MS, (long) (total * INTRO_RATIO));
-        int window = (int) Math.max(1, Math.ceil((double) clipMs / markers.get(0).durationMs()));
-        long best = NONE;
-        double bestScore = 0;
+        long gap = Math.max(sceneMs * 2, MIN_GAP_MS);
+        int window = (int) Math.max(1, Math.ceil((double) sceneMs / markers.get(0).durationMs()));
+        List<Candidate> candidates = new ArrayList<>();
         for (int from = 0; from + window <= markers.size(); from++) {
             Marker first = markers.get(from);
             if (first.startMs() < skip) continue;
             double score = 0;
             for (int i = from; i < from + window; i++) score += markers.get(i).intensity();
-            if (score > bestScore) {
-                bestScore = score;
-                best = first.startMs();
-            }
+            if (score > 0) candidates.add(new Candidate(Math.max(0, Math.min(first.startMs(), total - sceneMs)), score));
         }
-        if (best == NONE) return NONE;
-        return Math.max(0, Math.min(best, total - clipMs));
+        candidates.sort(Comparator.comparingDouble(Candidate::score).reversed());
+        for (Candidate candidate : candidates) {
+            if (chosen.size() >= scenes) break;
+            boolean apart = true;
+            for (long taken : chosen) apart &= Math.abs(taken - candidate.startMs()) >= gap;
+            if (apart) chosen.add(candidate.startMs());
+        }
+        Collections.sort(chosen);
+        return chosen;
     }
 }

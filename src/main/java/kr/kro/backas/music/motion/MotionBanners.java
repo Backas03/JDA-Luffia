@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -23,17 +24,25 @@ import java.util.regex.Pattern;
 
 public final class MotionBanners {
 
-    public record Stored(@Nullable String file, @Nullable String source, long at) {
+    public record Stored(@Nullable String file, @Nullable String source, long at, int version, boolean canvasOpen) {
     }
 
-    private record Attempt(@Nullable MotionClip clip, @Nullable String source, boolean settled) {
-        static final Attempt NONE = new Attempt(null, null, true);
-        static final Attempt RETRY = new Attempt(null, null, false);
+    private record Attempt(@Nullable MotionClip clip, boolean settled, String note) {
+        static Attempt none(String note) {
+            return new Attempt(null, true, note);
+        }
+
+        static Attempt retry(String note) {
+            return new Attempt(null, false, note);
+        }
     }
 
     static final String DIRECTORY = "motion-banner/";
     static final long MISS_RETRY_MS = 24L * 60 * 60 * 1000;
     static final int MAX_CLIPS = 100;
+    static final int VERSION = 4;
+    static final int MAX_SCENES = 5;
+    static final long MIN_SCENE_MS = 1_500;
     static final long CANVAS_MS = 8_000;
     static final int MIN_CLIP_SECONDS = 2;
     static final int MAX_CLIP_SECONDS = 10;
@@ -45,6 +54,8 @@ public final class MotionBanners {
 
     private final boolean enabled;
     private final long clipMs;
+    private final int scenes;
+    private final long sceneMs;
     private final MusicSourceRegistry sources;
     private final DiskCache cache;
     private final ClipEncoder encoder;
@@ -57,13 +68,20 @@ public final class MotionBanners {
     MotionBanners(@Nullable LuffiaConfig.MotionBanner config, MusicSourceRegistry sources, DiskCache cache) {
         this.enabled = config != null && config.enabled();
         this.clipMs = clipMs(config == null ? 0 : config.clipSeconds());
+        this.scenes = scenes(config == null ? 1 : config.scenes(), clipMs);
+        this.sceneMs = clipMs / scenes;
         this.sources = sources;
         this.cache = cache;
         this.encoder = new ClipEncoder(config == null ? null : config.ffmpeg(), ClipEncoder.Format.of(config == null ? null : config.format()));
+        if (enabled) TranslationJobs.EXECUTOR.execute(encoder::probe);
     }
 
     static long clipMs(int seconds) {
         return Math.max(MIN_CLIP_SECONDS, Math.min(MAX_CLIP_SECONDS, seconds)) * 1000L;
+    }
+
+    static int scenes(int wanted, long clipMs) {
+        return (int) Math.max(1, Math.min(Math.min(MAX_SCENES, wanted), clipMs / MIN_SCENE_MS));
     }
 
     public boolean isEnabled() {
@@ -74,7 +92,8 @@ public final class MotionBanners {
     public MotionClip cached(AudioTrack track) {
         if (!isEnabled()) return null;
         String key = key(track);
-        return key == null ? null : read(key);
+        Stored stored = key == null ? null : stored(key);
+        return stored == null || stored.canvasOpen() ? null : clip(stored);
     }
 
     public CompletableFuture<MotionClip> prepare(AudioTrack track) {
@@ -101,82 +120,110 @@ public final class MotionBanners {
     }
 
     @Nullable
-    private MotionClip read(String key) {
+    private Stored stored(String key) {
         Stored stored = cache.read(DIRECTORY + key + ".json", Stored.class);
-        if (stored == null || stored.file() == null) return null;
+        return stored == null || stored.version() != VERSION ? null : stored;
+    }
+
+    @Nullable
+    private MotionClip clip(Stored stored) {
+        String extension = encoder.format().extension;
+        if (stored.file() == null || !stored.file().endsWith("." + extension)) return null;
         byte[] data = cache.readBytes(DIRECTORY + stored.file());
-        if (data == null || data.length == 0) return null;
-        int dot = stored.file().lastIndexOf('.');
-        return new MotionClip(data, dot < 0 ? encoder.format().extension : stored.file().substring(dot + 1));
+        return data == null || data.length == 0 ? null : new MotionClip(data, extension);
     }
 
     @Nullable
     private MotionClip load(AudioTrack track, String key) throws InterruptedException {
-        MotionClip cached = read(key);
-        if (cached != null) return cached;
-        Stored stored = cache.read(DIRECTORY + key + ".json", Stored.class);
+        Stored stored = stored(key);
+        MotionClip kept = stored == null ? null : clip(stored);
         long now = System.currentTimeMillis();
-        if (stored != null && stored.file() == null && now - stored.at() < MISS_RETRY_MS) return null;
+        if (kept != null && !stored.canvasOpen()) return kept;
+        if (kept == null && stored != null && stored.file() == null && now - stored.at() < MISS_RETRY_MS) return null;
         Attempt canvas = canvas(track);
+        if (kept != null && canvas.clip() == null) {
+            if (canvas.settled()) cache.write(DIRECTORY + key + ".json", new Stored(stored.file(), stored.source(), stored.at(), VERSION, false));
+            LOGGER.info("kept the motion banner from {} for {}: spotify canvas: {}", stored.source(), track.getInfo().title, canvas.note());
+            return kept;
+        }
         Attempt chosen = canvas.clip() != null ? canvas : highlight(track);
         if (chosen.clip() == null) {
-            if (canvas.settled() && chosen.settled()) cache.write(DIRECTORY + key + ".json", new Stored(null, null, now));
+            boolean settled = canvas.settled() && chosen.settled();
+            if (settled) cache.write(DIRECTORY + key + ".json", new Stored(null, null, now, VERSION, false));
+            LOGGER.info("no motion banner for {} ({}): spotify canvas: {}; youtube: {}", track.getInfo().title,
+                    settled ? "asking again in a day" : "asking again next time", canvas.note(), chosen.note());
             return null;
         }
         String file = key + "." + chosen.clip().extension();
         cache.writeBytes(DIRECTORY + file, chosen.clip().data());
-        cache.write(DIRECTORY + key + ".json", new Stored(file, chosen.source(), now));
-        cache.prune(DIRECTORY, "." + chosen.clip().extension(), MAX_CLIPS);
-        LOGGER.info("made a {} byte motion banner for {} from {}", chosen.clip().data().length, track.getInfo().title, chosen.source());
+        cache.write(DIRECTORY + key + ".json", new Stored(file, chosen.note(), now, VERSION, chosen != canvas && !canvas.settled()));
+        for (ClipEncoder.Format format : ClipEncoder.Format.values()) {
+            cache.prune(DIRECTORY, "." + format.extension, format == encoder.format() ? MAX_CLIPS : 0);
+        }
+        LOGGER.info("made a {} byte motion banner for {} from {}", chosen.clip().data().length, track.getInfo().title, chosen.note());
         return chosen.clip();
     }
 
     private Attempt canvas(AudioTrack track) throws InterruptedException {
         String trackId = spotifyId(track);
         SpotifySourceManager spotify = sources.getSpotify();
-        if (trackId == null || !(spotify instanceof PatchedSpotifySourceManager patched)) return Attempt.NONE;
+        if (trackId == null) return Attempt.none("not a spotify track");
+        if (!(spotify instanceof PatchedSpotifySourceManager patched)) return Attempt.none("spotify is not set up");
         String url;
         try {
             url = SpotifyCanvas.find(patched::webPlayerToken, trackId);
         } catch (IOException e) {
-            LOGGER.info("spotify canvas lookup failed for {}: {}", track.getInfo().title, e.toString());
-            return Attempt.RETRY;
+            return Attempt.retry("lookup failed for track " + trackId + ": " + describe(e));
         }
-        if (url == null) {
-            LOGGER.info("spotify has no canvas for {} (track {})", track.getInfo().title, trackId);
-            return Attempt.NONE;
-        }
-        return encoded(encoder.encode(url, 0, CANVAS_MS, false), "Spotify Canvas");
+        if (url == null) return Attempt.none("track " + trackId + " has none");
+        return encoded(encoder.encode(url, List.of(0L), CANVAS_MS, false), "Spotify Canvas");
     }
 
     private Attempt highlight(AudioTrack track) throws InterruptedException {
         YoutubeAudioSourceManager youtube = sources.getAudioPlayerManager().source(YoutubeAudioSourceManager.class);
         String videoId = awaitVideoId(track);
-        if (youtube == null || videoId == null) return Attempt.RETRY;
-        if (track.getDuration() > 0 && track.getDuration() < clipMs * 2) return Attempt.NONE;
-        long start;
+        if (youtube == null || videoId == null) return Attempt.retry("the youtube video behind this track is not known yet");
+        Attempt played = fromVideo(youtube, videoId, track.getDuration());
+        if (played.clip() != null || !played.settled() || spotifyId(track) == null) return played;
+        List<YoutubeMusicVideos.Candidate> candidates;
         try {
-            start = YoutubeHighlights.find(videoId, clipMs);
+            candidates = YoutubeMusicVideos.search(sources.getAudioPlayerManager(), youtube, track.getInfo().title, track.getInfo().author,
+                    track.getDuration(), videoId);
+        } catch (RuntimeException e) {
+            return Attempt.retry(played.note() + "; music video search failed: " + describe(e));
+        }
+        if (candidates.isEmpty()) return Attempt.none(played.note() + "; no matching music video on youtube");
+        StringBuilder notes = new StringBuilder(played.note());
+        boolean settled = true;
+        for (YoutubeMusicVideos.Candidate candidate : candidates) {
+            Attempt attempt = fromVideo(youtube, candidate.videoId(), candidate.lengthMs());
+            if (attempt.clip() != null) return attempt;
+            settled &= attempt.settled();
+            notes.append("; music video ").append(attempt.note());
+        }
+        return new Attempt(null, settled, notes.toString());
+    }
+
+    private Attempt fromVideo(YoutubeAudioSourceManager youtube, String videoId, long durationMs) throws InterruptedException {
+        if (durationMs > 0 && durationMs < clipMs * 2) return Attempt.none("video " + videoId + " is too short");
+        List<Long> starts;
+        try {
+            starts = YoutubeHighlights.find(videoId, sceneMs, scenes);
         } catch (IOException e) {
-            LOGGER.info("youtube most replayed lookup failed for {}: {}", videoId, e.toString());
-            return Attempt.RETRY;
+            return Attempt.retry("most replayed lookup failed for video " + videoId + ": " + describe(e));
         }
-        if (start == YoutubeHighlights.NONE) {
-            LOGGER.info("youtube has no most replayed graph for {} (video {})", track.getInfo().title, videoId);
-            return Attempt.NONE;
-        }
+        if (starts.isEmpty()) return Attempt.none("video " + videoId + " has no most replayed graph");
         URI stream = YoutubeVideoStreams.find(youtube, videoId);
-        if (stream == null) {
-            LOGGER.info("no youtube client gave a video stream for {}", videoId);
-            return Attempt.RETRY;
-        }
-        return encoded(encoder.encode(stream.toString(), start, clipMs, true), "YouTube " + start / 1000 + "s");
+        if (stream == null) return Attempt.retry("no client gave a video stream for video " + videoId);
+        StringBuilder source = new StringBuilder("YouTube video ").append(videoId).append(" at");
+        for (long start : starts) source.append(' ').append(start / 1000).append('s');
+        return encoded(encoder.encode(stream.toString(), starts, sceneMs, true), source.toString());
     }
 
     private Attempt encoded(ClipEncoder.Result result, String source) {
-        if (result.still()) return Attempt.NONE;
-        if (result.data() == null) return Attempt.RETRY;
-        return new Attempt(new MotionClip(result.data(), encoder.format().extension), source, true);
+        if (result.still()) return Attempt.none(source + ": " + result.note());
+        if (result.data() == null) return Attempt.retry(source + ": " + result.note());
+        return new Attempt(new MotionClip(result.data(), encoder.format().extension), true, source);
     }
 
     @Nullable
@@ -188,6 +235,22 @@ public final class MotionBanners {
             if (spotifyId(track) == null || System.currentTimeMillis() >= deadline) return null;
             Thread.sleep(MIRROR_POLL_MS);
         }
+    }
+
+    static String describe(Throwable error) {
+        StringBuilder text = new StringBuilder(chain(error));
+        for (Throwable other : error.getSuppressed()) text.append(" (before that: ").append(chain(other)).append(')');
+        return text.toString();
+    }
+
+    private static String chain(Throwable error) {
+        StringBuilder text = new StringBuilder(error.toString());
+        Throwable cause = error.getCause();
+        for (int depth = 0; cause != null && depth < 3; depth++) {
+            text.append(" <- ").append(cause);
+            cause = cause.getCause();
+        }
+        return text.toString();
     }
 
     @Nullable

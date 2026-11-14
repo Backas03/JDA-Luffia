@@ -54,7 +54,7 @@ public record LuffiaConfig(Bot bot,
     public record MusicPlayer(int defaultVolume, int connectGraceSeconds, int opusBitrateKbps, Karaoke karaoke, MotionBanner motionBanner) {
     }
 
-    public record MotionBanner(boolean enabled, String ffmpeg, String format, int clipSeconds) {
+    public record MotionBanner(boolean enabled, String ffmpeg, String format, int clipSeconds, int scenes) {
     }
 
     public record Karaoke(double echoSeconds, double echoDecay, double centerGain) {

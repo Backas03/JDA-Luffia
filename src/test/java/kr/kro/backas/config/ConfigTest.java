@@ -32,8 +32,9 @@ class ConfigTest {
         assertEquals(256, config.musicPlayer().opusBitrateKbps());
         assertTrue(config.musicPlayer().motionBanner().enabled());
         assertEquals("ffmpeg", config.musicPlayer().motionBanner().ffmpeg());
-        assertEquals("gif", config.musicPlayer().motionBanner().format());
-        assertEquals(6, config.musicPlayer().motionBanner().clipSeconds());
+        assertEquals("webp", config.musicPlayer().motionBanner().format());
+        assertEquals(9, config.musicPlayer().motionBanner().clipSeconds());
+        assertEquals(3, config.musicPlayer().motionBanner().scenes());
         assertEquals(1200, config.lyrics().display().minEditIntervalMs());
         assertEquals(450, config.lyrics().lead().renderMarginMs());
         assertEquals("KR", config.sources().spotify().country());

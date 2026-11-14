@@ -17,8 +17,8 @@ import java.util.concurrent.TimeUnit;
 final class ClipEncoder {
 
     enum Format {
-        GIF("gif", List.of(new Profile(480, 270, 12), new Profile(360, 202, 10))),
-        WEBP("webp", List.of(new Profile(640, 360, 15), new Profile(480, 270, 12)));
+        GIF("gif", List.of(new Profile(480, 270, 12, 0), new Profile(360, 202, 10, 0))),
+        WEBP("webp", List.of(new Profile(960, 540, 15, 60), new Profile(960, 540, 12, 35)));
 
         final String extension;
         final List<Profile> profiles;
@@ -29,22 +29,25 @@ final class ClipEncoder {
         }
 
         static Format of(@Nullable String name) {
-            return name != null && name.trim().equalsIgnoreCase("webp") ? WEBP : GIF;
+            return name != null && name.trim().equalsIgnoreCase("gif") ? GIF : WEBP;
         }
     }
 
-    record Profile(int width, int height, int fps) {
+    record Profile(int width, int height, int fps, int quality) {
     }
 
-    record Result(@Nullable byte[] data, boolean still) {
-        static final Result FAILED = new Result(null, false);
-        static final Result STILL = new Result(null, true);
+    record Result(@Nullable byte[] data, boolean still, String note) {
+        static Result failed(String note) {
+            return new Result(null, false, note);
+        }
     }
 
     static final int MAX_BYTES = 8 * 1024 * 1024;
     static final double STILL_RATIO = 0.8;
+    static final String MISSING_NOTE = "ffmpeg is not installed";
     private static final String STILL_MARK = "freeze_start";
     private static final long TIMEOUT_SECONDS = 45;
+    private static final long PROBE_SECONDS = 10;
     private static final int LOG_TAIL = 400;
     private static final Logger LOGGER = LoggerFactory.getLogger(ClipEncoder.class);
 
@@ -66,46 +69,63 @@ final class ClipEncoder {
         return format;
     }
 
-    Result encode(String input, long startMs, long durationMs, boolean detectStill) throws InterruptedException {
-        if (missing) return Result.FAILED;
+    void probe() {
+        Path log = null;
+        Process process = null;
+        try {
+            log = Files.createTempFile("luffia-motion-", ".log");
+            process = start(List.of(ffmpeg, "-hide_banner", "-version"), log);
+            if (process == null) return;
+            if (!process.waitFor(PROBE_SECONDS, TimeUnit.SECONDS)) {
+                LOGGER.warn("{} -version 이 {}초 안에 끝나지 않았습니다. 움직이는 배너가 동작하지 않을 수 있습니다.", ffmpeg, PROBE_SECONDS);
+                return;
+            }
+            String version = Files.readString(log, StandardCharsets.ISO_8859_1).lines().findFirst().orElse("").strip();
+            LOGGER.info("움직이는 배너를 {} 형식으로 만듭니다 ({})", format.extension, version.isEmpty() ? ffmpeg : version);
+        } catch (IOException e) {
+            LOGGER.warn("ffmpeg 를 확인하지 못했습니다: {}", e.toString());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            if (process != null && process.isAlive()) process.destroyForcibly();
+            delete(log);
+        }
+    }
+
+    Result encode(String input, List<Long> starts, long sceneMs, boolean detectStill) throws InterruptedException {
+        if (missing) return Result.failed(MISSING_NOTE);
         slot.acquire();
         try {
+            int size = 0;
             for (Profile profile : format.profiles) {
-                Result result = run(profile, input, startMs, durationMs, detectStill);
+                Result result = run(profile, input, starts, sceneMs, detectStill);
                 if (result.still() || result.data() == null) return result;
                 if (result.data().length <= MAX_BYTES) return result;
-                LOGGER.info("motion banner came out at {} bytes with {}, trying a smaller one", result.data().length, profile);
+                size = result.data().length;
             }
-            return Result.FAILED;
+            return Result.failed("even the smallest clip was " + size + " bytes");
         } finally {
             slot.release();
         }
     }
 
-    private Result run(Profile profile, String input, long startMs, long durationMs, boolean detectStill) throws InterruptedException {
+    private Result run(Profile profile, String input, List<Long> starts, long sceneMs, boolean detectStill) throws InterruptedException {
         Path output = null;
         Path log = null;
         Process process = null;
         try {
             output = Files.createTempFile("luffia-motion-", "." + format.extension);
             log = Files.createTempFile("luffia-motion-", ".log");
-            process = start(command(ffmpeg, format, profile, input, startMs, durationMs, detectStill, output), log);
-            if (process == null) return Result.FAILED;
-            if (!process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-                LOGGER.info("ffmpeg took longer than {}s on a motion banner, giving up", TIMEOUT_SECONDS);
-                return Result.FAILED;
-            }
+            process = start(command(ffmpeg, format, profile, input, starts, sceneMs, detectStill, output), log);
+            if (process == null) return Result.failed(MISSING_NOTE);
+            if (!process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)) return Result.failed("ffmpeg took longer than " + TIMEOUT_SECONDS + "s");
             String report = Files.readString(log, StandardCharsets.ISO_8859_1);
-            if (detectStill && report.contains(STILL_MARK)) return Result.STILL;
-            if (process.exitValue() != 0) {
-                LOGGER.info("ffmpeg failed on a motion banner (exit {}): {}", process.exitValue(), tail(report));
-                return Result.FAILED;
-            }
+            if (detectStill && stillScenes(report) >= starts.size()) return new Result(null, true, "the picture does not move");
+            if (process.exitValue() != 0) return Result.failed("ffmpeg exited with " + process.exitValue() + ": " + tail(report));
             byte[] data = Files.readAllBytes(output);
-            return data.length == 0 ? Result.FAILED : new Result(data, false);
+            return data.length == 0 ? Result.failed("ffmpeg wrote an empty file: " + tail(report)) : new Result(data, false, "ok");
         } catch (IOException e) {
-            LOGGER.info("could not read the motion banner ffmpeg made: {}", e.toString());
-            return Result.FAILED;
+            return Result.failed("could not read what ffmpeg made: " + e);
         } finally {
             if (process != null && process.isAlive()) process.destroyForcibly();
             delete(output);
@@ -119,26 +139,49 @@ final class ClipEncoder {
             return new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(log.toFile()).start();
         } catch (IOException e) {
             missing = true;
-            LOGGER.warn("ffmpeg 를 실행할 수 없어 움직이는 배너를 끕니다. ffmpeg 를 설치하거나 music-player.motion-banner.ffmpeg 에 경로를 적어 주세요: {}", e.toString());
+            LOGGER.warn("ffmpeg 를 실행할 수 없어 움직이는 배너를 끕니다. ffmpeg 를 설치하거나 music-player.motion-banner.ffmpeg 에 경로를 적은 뒤 재시작해 주세요: {}", e.toString());
             return null;
         }
     }
 
-    static List<String> command(String ffmpeg, Format format, Profile profile, String input, long startMs, long durationMs,
+    static List<String> command(String ffmpeg, Format format, Profile profile, String input, List<Long> starts, long sceneMs,
                                 boolean detectStill, Path output) {
         List<String> command = new ArrayList<>(List.of(ffmpeg, "-hide_banner", "-nostdin", "-nostats", "-loglevel", "info", "-y"));
-        if (input.startsWith("http")) command.addAll(List.of("-rw_timeout", "15000000"));
-        if (startMs > 0) command.addAll(List.of("-ss", seconds(startMs)));
-        command.addAll(List.of("-t", seconds(durationMs), "-i", input, "-an", "-filter_complex", graph(format, profile, durationMs, detectStill)));
-        if (format == Format.WEBP) command.addAll(List.of("-c:v", "libwebp_anim", "-loop", "0", "-q:v", "60", "-compression_level", "3"));
+        for (long startMs : starts) {
+            if (input.startsWith("http")) command.addAll(List.of("-rw_timeout", "15000000"));
+            if (startMs > 0) command.addAll(List.of("-ss", seconds(startMs)));
+            command.addAll(List.of("-t", seconds(sceneMs), "-i", input));
+        }
+        command.addAll(List.of("-an", "-filter_complex", graph(format, profile, starts.size(), sceneMs, detectStill)));
+        if (format == Format.WEBP) {
+            command.addAll(List.of("-loop", "0", "-q:v", String.valueOf(profile.quality()), "-compression_level", "3"));
+        }
         command.addAll(List.of("-f", format.extension, output.toString()));
         return command;
     }
 
-    static String graph(Format format, Profile profile, long durationMs, boolean detectStill) {
+    static int stillScenes(String report) {
+        int count = 0;
+        for (int at = report.indexOf(STILL_MARK); at >= 0; at = report.indexOf(STILL_MARK, at + STILL_MARK.length())) count++;
+        return count;
+    }
+
+    static String graph(Format format, Profile profile, int scenes, long sceneMs, boolean detectStill) {
         String size = profile.width() + ":" + profile.height();
-        StringBuilder graph = new StringBuilder("[0:v]");
-        if (detectStill) graph.append("freezedetect=n=0.003:d=").append(seconds((long) (durationMs * STILL_RATIO))).append(',');
+        String still = "freezedetect=n=0.003:d=" + seconds((long) (sceneMs * STILL_RATIO));
+        StringBuilder graph = new StringBuilder();
+        if (scenes > 1) {
+            if (detectStill) {
+                for (int i = 0; i < scenes; i++) graph.append('[').append(i).append(":v]").append(still).append("[s").append(i).append("];");
+                for (int i = 0; i < scenes; i++) graph.append("[s").append(i).append(']');
+            } else {
+                for (int i = 0; i < scenes; i++) graph.append('[').append(i).append(":v]");
+            }
+            graph.append("concat=n=").append(scenes).append(":v=1:a=0,");
+        } else {
+            graph.append("[0:v]");
+            if (detectStill) graph.append(still).append(',');
+        }
         graph.append("fps=").append(profile.fps()).append(",split[a][b];")
                 .append("[a]scale=32:18:force_original_aspect_ratio=increase,crop=32:18,scale=").append(size)
                 .append(":flags=bilinear,colorchannelmixer=rr=0.45:gg=0.45:bb=0.45[bg];")
@@ -155,7 +198,7 @@ final class ClipEncoder {
     }
 
     private static String tail(String report) {
-        String trimmed = report.strip();
+        String trimmed = report.strip().replaceAll("\\s*\\R\\s*", " | ");
         return trimmed.length() <= LOG_TAIL ? trimmed : trimmed.substring(trimmed.length() - LOG_TAIL);
     }
 

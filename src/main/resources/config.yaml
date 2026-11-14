@@ -46,8 +46,9 @@ music-player:
   motion-banner:
     enabled: true
     ffmpeg: ffmpeg
-    format: gif
-    clip-seconds: 6
+    format: webp
+    clip-seconds: 9
+    scenes: 3
 
 autoplay:
   enabled-by-default: true

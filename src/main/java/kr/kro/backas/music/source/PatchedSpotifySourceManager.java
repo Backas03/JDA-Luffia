@@ -124,7 +124,11 @@ public class PatchedSpotifySourceManager extends SpotifySourceManager {
         } catch (ReflectiveOperationException | RuntimeException e) {
             throw new IOException("spotify web player token is not reachable", e);
         }
-        return tracker.hasValidAccountCredentials() ? tracker.getAccountAccessToken() : tracker.getAnonymousAccessToken();
+        try {
+            return tracker.getAnonymousAccessToken();
+        } catch (RuntimeException e) {
+            throw new IOException("spotify web player token failed", e);
+        }
     }
 
     @Nullable

@@ -95,9 +95,33 @@ class MotionBannersTest {
     }
 
     @Test
+    void aFailureIsLoggedWithWhatCausedIt() {
+        Exception failure = new java.io.IOException("spotify web player token failed",
+                new RuntimeException("Account token refreshing failed", new IllegalStateException("401")));
+        assertEquals("java.io.IOException: spotify web player token failed <- java.lang.RuntimeException: Account token refreshing failed"
+                + " <- java.lang.IllegalStateException: 401", MotionBanners.describe(failure));
+    }
+
+    @Test
+    void theEarlierAttemptThatAlsoFailedIsNotLost() {
+        Exception failure = new java.io.IOException("spotify web player token failed", new RuntimeException("account"));
+        failure.addSuppressed(new RuntimeException("anonymous", new java.net.ConnectException("refused")));
+        assertEquals("java.io.IOException: spotify web player token failed <- java.lang.RuntimeException: account"
+                + " (before that: java.lang.RuntimeException: anonymous <- java.net.ConnectException: refused)", MotionBanners.describe(failure));
+    }
+
+    @Test
     void theClipLengthStaysWithinSaneBounds() {
         assertEquals(6_000, MotionBanners.clipMs(6));
         assertEquals(2_000, MotionBanners.clipMs(0));
         assertEquals(10_000, MotionBanners.clipMs(60));
+    }
+
+    @Test
+    void scenesNeverGetShorterThanAGlance() {
+        assertEquals(3, MotionBanners.scenes(3, 9_000));
+        assertEquals(1, MotionBanners.scenes(0, 9_000));
+        assertEquals(5, MotionBanners.scenes(20, 10_000));
+        assertEquals(2, MotionBanners.scenes(3, 3_000));
     }
 }

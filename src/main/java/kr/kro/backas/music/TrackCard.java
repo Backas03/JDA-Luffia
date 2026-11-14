@@ -131,13 +131,17 @@ public final class TrackCard {
         if (motion != null) return;
         motionBanners().prepare(track).thenAccept(clip -> {
             if (clip != null) attachMotion(clip);
+        }).whenComplete((result, error) -> {
+            if (error != null) LOGGER.warn("failed to put the motion banner on the track card for {}", track.getInfo().title, error);
         });
     }
 
     private void attachMotion(MotionClip clip) {
-        if (closed.get() || !client.isCurrentTrack(track)) return;
         List<? extends ContainerChildComponent> body = lastBody;
-        if (body.isEmpty()) return;
+        if (closed.get() || !client.isCurrentTrack(track) || body.isEmpty()) {
+            LOGGER.info("the motion banner for {} came after its track card was done, keeping it for the next time", track.getInfo().title);
+            return;
+        }
         List<FileUpload> uploads = new ArrayList<>(stillFiles());
         uploads.add(clip.upload());
         CompletableFuture<Message> swapped = message.replaceFiles(
@@ -145,9 +149,12 @@ public final class TrackCard {
         motion = clip;
         if (closed.get()) motion = null;
         swapped.whenComplete((result, error) -> {
-            if (error == null) return;
+            if (error == null) {
+                LOGGER.info("put the {} byte motion banner on the track card for {}", clip.data().length, track.getInfo().title);
+                return;
+            }
             motion = null;
-            LOGGER.info("could not put the motion banner on the track card for {}: {}", track.getInfo().title, error.toString());
+            LOGGER.warn("discord refused the motion banner on the track card for {}: {}", track.getInfo().title, error.toString());
             if (isGone(error)) onGone();
             else refresh();
         });
