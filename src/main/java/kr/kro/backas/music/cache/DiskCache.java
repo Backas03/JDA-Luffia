@@ -12,6 +12,9 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Stream;
 
 public final class DiskCache {
 
@@ -70,6 +73,55 @@ public final class DiskCache {
             }
         } catch (IOException e) {
             LOGGER.warn("failed to write cache file {}: {}", path, e.toString());
+        }
+    }
+
+    @Nullable
+    public byte[] readBytes(String relative) {
+        Path path = resolve(relative);
+        if (!Files.isRegularFile(path)) return null;
+        try {
+            return Files.readAllBytes(path);
+        } catch (IOException e) {
+            LOGGER.warn("failed to read cache file {}: {}", path, e.toString());
+            return null;
+        }
+    }
+
+    public void writeBytes(String relative, byte[] data) {
+        Path path = resolve(relative);
+        Path temporary = path.resolveSibling(path.getFileName() + ".tmp");
+        try {
+            Files.createDirectories(path.getParent());
+            Files.write(temporary, data);
+            try {
+                Files.move(temporary, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temporary, path, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException e) {
+            LOGGER.warn("failed to write cache file {}: {}", path, e.toString());
+        }
+    }
+
+    public void prune(String directory, String suffix, int keep) {
+        Path folder = resolve(directory);
+        if (!Files.isDirectory(folder)) return;
+        try (Stream<Path> listed = Files.list(folder)) {
+            List<Path> files = listed.filter(path -> path.getFileName().toString().endsWith(suffix))
+                    .sorted(Comparator.comparingLong(DiskCache::modifiedAt).reversed())
+                    .toList();
+            for (int i = keep; i < files.size(); i++) Files.deleteIfExists(files.get(i));
+        } catch (IOException e) {
+            LOGGER.warn("failed to prune cache folder {}: {}", folder, e.toString());
+        }
+    }
+
+    private static long modifiedAt(Path path) {
+        try {
+            return Files.getLastModifiedTime(path).toMillis();
+        } catch (IOException e) {
+            return 0;
         }
     }
 

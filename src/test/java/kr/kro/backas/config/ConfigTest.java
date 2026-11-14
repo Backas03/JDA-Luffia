@@ -30,6 +30,10 @@ class ConfigTest {
         assertEquals("", config.discord().token());
         assertEquals(10, config.musicPlayer().defaultVolume());
         assertEquals(256, config.musicPlayer().opusBitrateKbps());
+        assertTrue(config.musicPlayer().motionBanner().enabled());
+        assertEquals("ffmpeg", config.musicPlayer().motionBanner().ffmpeg());
+        assertEquals("gif", config.musicPlayer().motionBanner().format());
+        assertEquals(6, config.musicPlayer().motionBanner().clipSeconds());
         assertEquals(1200, config.lyrics().display().minEditIntervalMs());
         assertEquals(450, config.lyrics().lead().renderMarginMs());
         assertEquals("KR", config.sources().spotify().country());

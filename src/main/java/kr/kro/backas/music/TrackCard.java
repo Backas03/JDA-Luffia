@@ -8,6 +8,8 @@ import kr.kro.backas.music.ai.AiAutoplay;
 import kr.kro.backas.music.lyrics.EditRateLimiter;
 import kr.kro.backas.music.lyrics.LyricsFeedback;
 import kr.kro.backas.music.lyrics.TranslationJobs;
+import kr.kro.backas.music.motion.MotionBanners;
+import kr.kro.backas.music.motion.MotionClip;
 import kr.kro.backas.music.source.SourceQuality;
 import kr.kro.backas.util.DiscordSafe;
 import kr.kro.backas.util.DurationUtil;
@@ -58,6 +60,8 @@ public final class TrackCard {
     private final AtomicBoolean closed = new AtomicBoolean();
     private volatile AgingMessage message = new AgingMessage(new CompletableFuture<>());
     private volatile boolean bannerAttached;
+    @Nullable
+    private volatile MotionClip motion;
     private volatile List<? extends ContainerChildComponent> lastBody = List.of();
     private volatile boolean lyricsExpanded;
     private volatile Object presenter;
@@ -91,15 +95,20 @@ public final class TrackCard {
                 .supplyAsync(() -> ArtworkColors.await(bannerUrl, BANNER_WAIT_MS), TranslationJobs.EXECUTOR)
                 .thenCompose(banner -> {
                     boolean attach = banner != null && banner.isFile();
+                    MotionClip ready = motionBanners().cached(track);
                     card.bannerAttached = attach;
-                    Container initial = frame(client, track, body, 0, attach, null);
+                    card.motion = ready;
+                    Container initial = frame(client, track, body, 0, attach, ready == null ? null : ready.fileName(), null);
+                    List<FileUpload> files = new ArrayList<>();
+                    if (attach) files.add(bannerFile(banner));
+                    if (ready != null) files.add(ready.upload());
                     if (hook != null) {
                         WebhookMessageEditAction<Message> action = hook.editOriginalComponents(initial).useComponentsV2(true);
-                        if (attach) action = action.setFiles(bannerFile(banner));
+                        if (!files.isEmpty()) action = action.setFiles(files);
                         return action.submit();
                     }
                     MessageCreateAction action = channel.sendMessageComponents(initial).useComponentsV2(true);
-                    if (attach) action = action.addFiles(bannerFile(banner));
+                    if (!files.isEmpty()) action = action.addFiles(files);
                     return action.submit();
                 });
         card.message = new AgingMessage(sent, card::repostFiles);
@@ -109,8 +118,45 @@ public final class TrackCard {
                 return;
             }
             card.watch();
+            card.startMotion();
         });
         return card;
+    }
+
+    private static MotionBanners motionBanners() {
+        return Main.getLuffia().getMusicPlayerController().getMotionBanners();
+    }
+
+    private void startMotion() {
+        if (motion != null) return;
+        motionBanners().prepare(track).thenAccept(clip -> {
+            if (clip != null) attachMotion(clip);
+        });
+    }
+
+    private void attachMotion(MotionClip clip) {
+        if (closed.get() || !client.isCurrentTrack(track)) return;
+        List<? extends ContainerChildComponent> body = lastBody;
+        if (body.isEmpty()) return;
+        List<FileUpload> uploads = new ArrayList<>(stillFiles());
+        uploads.add(clip.upload());
+        CompletableFuture<Message> swapped = message.replaceFiles(
+                frame(client, track, body, 0, bannerAttached, clip.fileName(), lyricsSource), uploads);
+        motion = clip;
+        if (closed.get()) motion = null;
+        swapped.whenComplete((result, error) -> {
+            if (error == null) return;
+            motion = null;
+            LOGGER.info("could not put the motion banner on the track card for {}: {}", track.getInfo().title, error.toString());
+            if (isGone(error)) onGone();
+            else refresh();
+        });
+    }
+
+    private List<FileUpload> stillFiles() {
+        if (!bannerAttached) return List.of();
+        ArtworkColors.Banner banner = ArtworkColors.bannerFor(MusicEmbeds.bannerOf(track));
+        return banner != null && banner.isFile() ? List.of(bannerFile(banner)) : List.of();
     }
 
     public AudioTrack track() {
@@ -148,7 +194,8 @@ public final class TrackCard {
 
     public Container frame(List<? extends ContainerChildComponent> body) {
         lastBody = body;
-        return frame(client, track, body, finishedAt, bannerAttached, lyricsSource);
+        MotionClip clip = motion;
+        return frame(client, track, body, finishedAt, bannerAttached, clip == null ? null : clip.fileName(), lyricsSource);
     }
 
     public static FileUpload bannerFile(ArtworkColors.Banner banner) {
@@ -179,9 +226,10 @@ public final class TrackCard {
     }
 
     private List<FileUpload> repostFiles() {
-        if (!bannerAttached) return List.of();
-        ArtworkColors.Banner banner = ArtworkColors.bannerFor(MusicEmbeds.bannerOf(track));
-        return banner != null && banner.isFile() ? List.of(bannerFile(banner)) : List.of();
+        List<FileUpload> files = new ArrayList<>(stillFiles());
+        MotionClip clip = motion;
+        if (clip != null) files.add(clip.upload());
+        return files;
     }
 
     private void onGone() {
@@ -234,6 +282,7 @@ public final class TrackCard {
 
     public boolean close() {
         if (!closed.compareAndSet(false, true)) return false;
+        motion = null;
         finishedAt = System.currentTimeMillis();
         if (LyricsFeedback.asksAbout(lyricsSource)) openFeedback();
         if (recordChannel != null) {
@@ -288,9 +337,15 @@ public final class TrackCard {
 
     public static Container frame(MusicPlayerClient client, AudioTrack track, List<? extends ContainerChildComponent> body, long finishedAt,
                                   boolean bannerAttached, @Nullable String lyricsSource) {
+        return frame(client, track, body, finishedAt, bannerAttached, null, lyricsSource);
+    }
+
+    static Container frame(MusicPlayerClient client, AudioTrack track, List<? extends ContainerChildComponent> body, long finishedAt,
+                           boolean bannerAttached, @Nullable String motionFile, @Nullable String lyricsSource) {
         boolean playing = !body.isEmpty();
         List<ContainerChildComponent> children = new ArrayList<>();
-        MediaGallery banner = banner(track, bannerAttached);
+        MediaGallery banner = motionFile == null ? banner(track, bannerAttached)
+                : MediaGallery.of(MediaGalleryItem.fromUrl("attachment://" + motionFile));
         if (banner != null) {
             children.add(banner);
             children.add(headerText(client, track, playing, lyricsSource));

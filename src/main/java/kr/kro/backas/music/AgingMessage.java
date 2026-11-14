@@ -46,6 +46,10 @@ public final class AgingMessage {
         });
     }
 
+    public CompletableFuture<Message> replaceFiles(Container view, List<FileUpload> uploads) {
+        return current.thenCompose(target -> target.editMessageComponents(view).useComponentsV2(true).setFiles(uploads).submit());
+    }
+
     static boolean isAging(long createdAt, long now) {
         return now - createdAt >= REPOST_AGE_MS;
     }

@@ -14,6 +14,7 @@ import kr.kro.backas.music.lyrics.LyricsSources;
 import kr.kro.backas.music.lyrics.SpotifyLyricsClient;
 import kr.kro.backas.music.lyrics.TranslationClient;
 import kr.kro.backas.music.lyrics.sync.AsrClient;
+import kr.kro.backas.music.motion.MotionBanners;
 import kr.kro.backas.music.source.MusicSourceRegistry;
 import kr.kro.backas.util.BotShutdown;
 import kr.kro.backas.util.MemberUtil;
@@ -72,6 +73,7 @@ public class MusicPlayerController extends ListenerAdapter {
     private final LyricsExpansions lyricsExpansions = new LyricsExpansions();
     private final LyricsConversions lyricsConversions = new LyricsConversions();
     private final LyricsFeedback lyricsFeedback = new LyricsFeedback();
+    private final MotionBanners motionBanners;
     private final ScheduledExecutorService lyricsScheduler;
     private final java.util.concurrent.atomic.AtomicReference<Thread> schedulerThread = new java.util.concurrent.atomic.AtomicReference<>();
     private volatile long schedulerHeartbeat = System.currentTimeMillis();
@@ -82,6 +84,7 @@ public class MusicPlayerController extends ListenerAdapter {
 
     public MusicPlayerController(MusicSourceRegistry sourceRegistry, String translatorUrl, @Nullable String asrUrl) {
         this.sourceRegistry = sourceRegistry;
+        this.motionBanners = new MotionBanners(Config.get().musicPlayer().motionBanner(), sourceRegistry);
         this.translationClient = new TranslationClient(translatorUrl);
         this.asrClient = new AsrClient(asrUrl);
         if (asrClient.isConfigured()) {
@@ -220,6 +223,10 @@ public class MusicPlayerController extends ListenerAdapter {
 
     public LyricsFeedback getLyricsFeedback() {
         return lyricsFeedback;
+    }
+
+    public MotionBanners getMotionBanners() {
+        return motionBanners;
     }
 
     public void search(Identifier id, String query, Member member, IReplyCallback slashEvent) {

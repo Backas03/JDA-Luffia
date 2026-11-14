@@ -6,6 +6,7 @@ import com.github.topi314.lavasrc.mirror.MirroringAudioTrackResolver;
 import com.github.topi314.lavasrc.spotify.SpotifyAudioTrack;
 import com.github.topi314.lavasrc.spotify.SpotifyPartnerApiClient;
 import com.github.topi314.lavasrc.spotify.SpotifySourceManager;
+import com.github.topi314.lavasrc.spotify.SpotifyTokenTracker;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.tools.JsonBrowser;
@@ -112,6 +113,18 @@ public class PatchedSpotifySourceManager extends SpotifySourceManager {
             LOGGER.warn("스포티파이 토큰 요청의 HTTP 설정을 바꾸지 못해 기본 타임아웃(3초)을 그대로 씁니다", e);
             return null;
         }
+    }
+
+    public String webPlayerToken() throws IOException {
+        SpotifyTokenTracker tracker;
+        try {
+            Field field = SpotifySourceManager.class.getDeclaredField("tokenTracker");
+            field.setAccessible(true);
+            tracker = (SpotifyTokenTracker) field.get(this);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            throw new IOException("spotify web player token is not reachable", e);
+        }
+        return tracker.hasValidAccountCredentials() ? tracker.getAccountAccessToken() : tracker.getAnonymousAccessToken();
     }
 
     @Nullable
