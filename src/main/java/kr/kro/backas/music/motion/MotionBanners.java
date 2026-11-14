@@ -40,7 +40,7 @@ public final class MotionBanners {
     static final String DIRECTORY = "motion-banner/";
     static final long MISS_RETRY_MS = 24L * 60 * 60 * 1000;
     static final int MAX_CLIPS = 100;
-    static final int VERSION = 3;
+    static final int VERSION = 4;
     static final int MAX_SCENES = 5;
     static final long MIN_SCENE_MS = 1_500;
     static final long CANVAS_MS = 8_000;
@@ -183,7 +183,29 @@ public final class MotionBanners {
         YoutubeAudioSourceManager youtube = sources.getAudioPlayerManager().source(YoutubeAudioSourceManager.class);
         String videoId = awaitVideoId(track);
         if (youtube == null || videoId == null) return Attempt.retry("the youtube video behind this track is not known yet");
-        if (track.getDuration() > 0 && track.getDuration() < clipMs * 2) return Attempt.none("video " + videoId + " is too short");
+        Attempt played = fromVideo(youtube, videoId, track.getDuration());
+        if (played.clip() != null || !played.settled() || spotifyId(track) == null) return played;
+        List<YoutubeMusicVideos.Candidate> candidates;
+        try {
+            candidates = YoutubeMusicVideos.search(sources.getAudioPlayerManager(), youtube, track.getInfo().title, track.getInfo().author,
+                    track.getDuration(), videoId);
+        } catch (RuntimeException e) {
+            return Attempt.retry(played.note() + "; music video search failed: " + describe(e));
+        }
+        if (candidates.isEmpty()) return Attempt.none(played.note() + "; no matching music video on youtube");
+        StringBuilder notes = new StringBuilder(played.note());
+        boolean settled = true;
+        for (YoutubeMusicVideos.Candidate candidate : candidates) {
+            Attempt attempt = fromVideo(youtube, candidate.videoId(), candidate.lengthMs());
+            if (attempt.clip() != null) return attempt;
+            settled &= attempt.settled();
+            notes.append("; music video ").append(attempt.note());
+        }
+        return new Attempt(null, settled, notes.toString());
+    }
+
+    private Attempt fromVideo(YoutubeAudioSourceManager youtube, String videoId, long durationMs) throws InterruptedException {
+        if (durationMs > 0 && durationMs < clipMs * 2) return Attempt.none("video " + videoId + " is too short");
         List<Long> starts;
         try {
             starts = YoutubeHighlights.find(videoId, sceneMs, scenes);
