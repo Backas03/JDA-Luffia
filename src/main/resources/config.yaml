@@ -43,6 +43,11 @@ music-player:
     echo-seconds: 0.30
     echo-decay: 0.15
     center-gain: 1.3
+  motion-banner:
+    enabled: true
+    ffmpeg: ffmpeg
+    format: gif
+    clip-seconds: 6
 
 autoplay:
   enabled-by-default: true

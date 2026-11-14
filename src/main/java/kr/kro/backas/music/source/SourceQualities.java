@@ -29,6 +29,7 @@ public final class SourceQualities {
     private static final Logger LOGGER = LoggerFactory.getLogger(SourceQualities.class);
     private static final int MAX_ENTRIES = 512;
     private static final ThreadLocal<Map<StreamFormat, SourceQuality.Details>> CAPTURE = new ThreadLocal<>();
+    private static final ThreadLocal<Boolean> SILENT = new ThreadLocal<>();
 
     private final Map<String, SourceQuality> byVideo = lruMap();
     private final Map<String, String> mirrors = lruMap();
@@ -80,11 +81,26 @@ public final class SourceQualities {
     }
 
     @FunctionalInterface
+    public interface Lookup<T> {
+        T run() throws CannotBeLoaded, IOException;
+    }
+
+    @FunctionalInterface
     interface FormatsLoader {
         TrackFormats load() throws CannotBeLoaded, IOException;
     }
 
+    public static <T> T withoutRecording(Lookup<T> lookup) throws CannotBeLoaded, IOException {
+        SILENT.set(Boolean.TRUE);
+        try {
+            return lookup.run();
+        } finally {
+            SILENT.remove();
+        }
+    }
+
     TrackFormats capture(String videoId, FormatsLoader loader) throws CannotBeLoaded, IOException {
+        if (SILENT.get() != null) return loader.load();
         Map<StreamFormat, SourceQuality.Details> previous = CAPTURE.get();
         Map<StreamFormat, SourceQuality.Details> seen = new IdentityHashMap<>();
         CAPTURE.set(seen);
