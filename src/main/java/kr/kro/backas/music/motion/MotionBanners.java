@@ -14,9 +14,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.URI;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
@@ -40,9 +41,10 @@ public final class MotionBanners {
     static final String DIRECTORY = "motion-banner/";
     static final long MISS_RETRY_MS = 24L * 60 * 60 * 1000;
     static final int MAX_CLIPS = 100;
-    static final int VERSION = 4;
+    static final int VERSION = 5;
     static final int MAX_SCENES = 5;
     static final long MIN_SCENE_MS = 1_500;
+    static final int MAX_STREAM_CLIENTS = 3;
     static final long CANVAS_MS = 8_000;
     static final int MIN_CLIP_SECONDS = 2;
     static final int MAX_CLIP_SECONDS = 10;
@@ -183,28 +185,7 @@ public final class MotionBanners {
         YoutubeAudioSourceManager youtube = sources.getAudioPlayerManager().source(YoutubeAudioSourceManager.class);
         String videoId = awaitVideoId(track);
         if (youtube == null || videoId == null) return Attempt.retry("the youtube video behind this track is not known yet");
-        Attempt played = fromVideo(youtube, videoId, track.getDuration());
-        if (played.clip() != null || !played.settled() || spotifyId(track) == null) return played;
-        List<YoutubeMusicVideos.Candidate> candidates;
-        try {
-            candidates = YoutubeMusicVideos.search(sources.getAudioPlayerManager(), youtube, track.getInfo().title, track.getInfo().author,
-                    track.getDuration(), videoId);
-        } catch (RuntimeException e) {
-            return Attempt.retry(played.note() + "; music video search failed: " + describe(e));
-        }
-        if (candidates.isEmpty()) return Attempt.none(played.note() + "; no matching music video on youtube");
-        StringBuilder notes = new StringBuilder(played.note());
-        boolean settled = true;
-        for (YoutubeMusicVideos.Candidate candidate : candidates) {
-            Attempt attempt = fromVideo(youtube, candidate.videoId(), candidate.lengthMs());
-            if (attempt.clip() != null) return attempt;
-            settled &= attempt.settled();
-            notes.append("; music video ").append(attempt.note());
-        }
-        return new Attempt(null, settled, notes.toString());
-    }
-
-    private Attempt fromVideo(YoutubeAudioSourceManager youtube, String videoId, long durationMs) throws InterruptedException {
+        long durationMs = track.getDuration();
         if (durationMs > 0 && durationMs < clipMs * 2) return Attempt.none("video " + videoId + " is too short");
         List<Long> starts;
         try {
@@ -213,11 +194,20 @@ public final class MotionBanners {
             return Attempt.retry("most replayed lookup failed for video " + videoId + ": " + describe(e));
         }
         if (starts.isEmpty()) return Attempt.none("video " + videoId + " has no most replayed graph");
-        URI stream = YoutubeVideoStreams.find(youtube, videoId);
-        if (stream == null) return Attempt.retry("no client gave a video stream for video " + videoId);
         StringBuilder source = new StringBuilder("YouTube video ").append(videoId).append(" at");
         for (long start : starts) source.append(' ').append(start / 1000).append('s');
-        return encoded(encoder.encode(stream.toString(), starts, sceneMs, true), source.toString());
+        Set<String> tried = new HashSet<>();
+        StringBuilder failures = new StringBuilder();
+        while (tried.size() < MAX_STREAM_CLIENTS) {
+            YoutubeVideoStreams.Stream stream = YoutubeVideoStreams.find(youtube, videoId, tried);
+            if (stream == null) break;
+            tried.add(stream.client());
+            Attempt attempt = encoded(encoder.encode(stream.uri().toString(), starts, sceneMs, true), source + " via " + stream.client());
+            if (attempt.clip() != null || attempt.settled()) return attempt;
+            if (failures.length() > 0) failures.append("; ");
+            failures.append(attempt.note());
+        }
+        return Attempt.retry(failures.length() > 0 ? failures.toString() : "no client gave a video stream for video " + videoId);
     }
 
     private Attempt encoded(ClipEncoder.Result result, String source) {
