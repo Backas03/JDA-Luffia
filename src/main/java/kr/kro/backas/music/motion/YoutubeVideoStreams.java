@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.URI;
 import java.util.List;
+import java.util.Set;
 
 final class YoutubeVideoStreams {
 
@@ -23,18 +24,21 @@ final class YoutubeVideoStreams {
     private YoutubeVideoStreams() {
     }
 
+    record Stream(URI uri, String client) {
+    }
+
     @Nullable
-    static URI find(YoutubeAudioSourceManager source, String videoId) {
+    static Stream find(YoutubeAudioSourceManager source, String videoId, Set<String> skippedClients) {
         for (Client client : source.getClients()) {
-            if (!client.supportsFormatLoading()) continue;
+            if (!client.supportsFormatLoading() || skippedClients.contains(client.getIdentifier())) continue;
             try (HttpInterface http = source.getInterface()) {
                 http.getContext().setAttribute(Client.OAUTH_CLIENT_ATTRIBUTE, client.supportsOAuth());
                 TrackFormats formats = SourceQualities.withoutRecording(() -> client.loadFormats(source, http, videoId));
                 StreamFormat format = formats == null ? null : pick(formats.getFormats());
                 if (format == null) continue;
-                if (!client.requirePlayerScript()) return format.getUrl();
+                if (!client.requirePlayerScript()) return new Stream(format.getUrl(), client.getIdentifier());
                 URI resolved = source.getCipherManager().resolveFormatUrl(http, formats.getPlayerScriptUrl(), format);
-                return client.transformPlaybackUri(format.getUrl(), resolved, formats.getPoToken());
+                return new Stream(client.transformPlaybackUri(format.getUrl(), resolved, formats.getPoToken()), client.getIdentifier());
             } catch (CannotBeLoaded | IOException | RuntimeException e) {
                 LOGGER.debug("youtube client {} gave no video stream for {}: {}", client.getIdentifier(), videoId, e.toString());
             }

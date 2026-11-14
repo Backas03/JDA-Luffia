@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 final class ClipEncoder {
 
@@ -46,6 +47,7 @@ final class ClipEncoder {
     static final double STILL_RATIO = 0.8;
     static final String MISSING_NOTE = "ffmpeg is not installed";
     private static final String STILL_MARK = "freeze_start";
+    private static final Pattern URL = Pattern.compile("https?://[^\\s|]+");
     private static final long TIMEOUT_SECONDS = 45;
     private static final long PROBE_SECONDS = 10;
     private static final int LOG_TAIL = 400;
@@ -121,9 +123,9 @@ final class ClipEncoder {
             if (!process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)) return Result.failed("ffmpeg took longer than " + TIMEOUT_SECONDS + "s");
             String report = Files.readString(log, StandardCharsets.ISO_8859_1);
             if (detectStill && stillScenes(report) >= starts.size()) return new Result(null, true, "the picture does not move");
-            if (process.exitValue() != 0) return Result.failed("ffmpeg exited with " + process.exitValue() + ": " + tail(report));
+            if (process.exitValue() != 0) return Result.failed("ffmpeg exited with " + process.exitValue() + ": " + tail(report, input));
             byte[] data = Files.readAllBytes(output);
-            return data.length == 0 ? Result.failed("ffmpeg wrote an empty file: " + tail(report)) : new Result(data, false, "ok");
+            return data.length == 0 ? Result.failed("ffmpeg wrote an empty file: " + tail(report, input)) : new Result(data, false, "ok");
         } catch (IOException e) {
             return Result.failed("could not read what ffmpeg made: " + e);
         } finally {
@@ -197,8 +199,8 @@ final class ClipEncoder {
         return String.format(Locale.ROOT, "%.3f", millis / 1000.0);
     }
 
-    private static String tail(String report) {
-        String trimmed = report.strip().replaceAll("\\s*\\R\\s*", " | ");
+    static String tail(String report, String input) {
+        String trimmed = URL.matcher(report.replace(input, "<input>")).replaceAll("<url>").strip().replaceAll("\\s*\\R\\s*", " | ");
         return trimmed.length() <= LOG_TAIL ? trimmed : trimmed.substring(trimmed.length() - LOG_TAIL);
     }
 

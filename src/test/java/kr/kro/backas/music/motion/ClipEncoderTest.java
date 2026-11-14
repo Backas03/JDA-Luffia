@@ -87,6 +87,20 @@ class ClipEncoderTest {
     }
 
     @Test
+    void aFailureReportNeverCarriesTheSignedStreamAddress() {
+        String input = "https://rr1.googlevideo.com/videoplayback?expire=1&sig=" + "A".repeat(900);
+        String report = "Input #0 from '" + input + "'\n[https @ 0x1] HTTP error 403 Forbidden\n"
+                + "[in#0 @ 0x2] Error opening input: Server returned 403 Forbidden (access denied)\nError opening input file " + input + ".\n"
+                + "see https://ffmpeg.org/help for more";
+        String tail = ClipEncoder.tail(report, input);
+        assertFalse(tail.contains("googlevideo"));
+        assertFalse(tail.contains("AAAA"));
+        assertTrue(tail.contains("403 Forbidden"));
+        assertTrue(tail.contains("<input>"));
+        assertTrue(tail.endsWith("see <url> for more"));
+    }
+
+    @Test
     void aMissingFfmpegTurnsTheEncoderOffInsteadOfFailingEveryTrack() throws Exception {
         ClipEncoder encoder = new ClipEncoder("luffia-no-such-ffmpeg-binary", ClipEncoder.Format.GIF);
         assertTrue(encoder.isAvailable());
