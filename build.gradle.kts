@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "kr.kro.backas"
-version = "3.2.29-SNAPSHOT"
+version = "3.2.30-SNAPSHOT"
 
 repositories {
     mavenCentral()
