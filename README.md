@@ -137,7 +137,7 @@ llm:
     start-command: /home/<사용자>/JDA-Luffia/translator/llm/run.sh
     stop-command: pkill -f llama-server
 ```
-- ``slots``: 서버에 동시에 넣을 요청 수 (1~8, 기본 1). Ollama 의 ``OLLAMA_NUM_PARALLEL`` 과 맞춥니다.
+- ``slots``: 서버에 동시에 넣을 요청 수 (1~8, 기본 1). Ollama 의 ``OLLAMA_NUM_PARALLEL`` 과 맞춥니다. 서버가 그보다 적게 처리하면 봇이 시작할 때 재서 그만큼만 씁니다.
 - 요청은 측정한 속도를 보고 가장 빨리 끝날 GPU 로 보냅니다. 현재 곡 번역과 AI 셔플이 미리 번역보다 우선합니다.
 - ``fallback``: GPU 가 모두 꺼졌을 때만 쓰는 CPU 서버입니다. 비우면 ``endpoints`` 가 2개 이상일 때 마지막 항목이 대신합니다. ``start-command`` / ``stop-command`` 를 적으면 봇이 GPU 상태에 따라 CPU 서버를 켜고 끕니다 (Linux 전용).
 - 서버 상태와 속도는 ``/ai관리 상태`` 로 확인합니다.

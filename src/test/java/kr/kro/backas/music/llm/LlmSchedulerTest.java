@@ -121,6 +121,27 @@ class LlmSchedulerTest {
     }
 
     @Test
+    void limitedSlotsMakeAUserRequestPreemptInsteadOfQueueingBehindBackground() throws IOException {
+        LlmEndpoint radeon = gpu("7800XT", 4, 60, 55, 50, 45);
+        radeon.limitSlots(1);
+        assertEquals(1, radeon.slots());
+        assertEquals(4, radeon.configuredSlots());
+        LlmScheduler scheduler = scheduler(radeon);
+        LlmLease background = take(scheduler, LlmPriority.BACKGROUND);
+        assertThrows(IOException.class, () -> take(scheduler, LlmPriority.BACKGROUND));
+        AtomicBoolean preempted = new AtomicBoolean();
+        background.onPreempt(() -> {
+            preempted.set(true);
+            background.close();
+        });
+        LlmLease user = scheduler.acquire(() -> LlmPriority.INTERACTIVE, 500, Set.of(), 1_000);
+        assertTrue(preempted.get());
+        assertSame(radeon, user.endpoint());
+        radeon.limitSlots(9);
+        assertEquals(4, radeon.slots());
+    }
+
+    @Test
     void releasedSlotsCanBeReused() throws IOException {
         LlmEndpoint rtx = gpu("5080", 1, 85);
         LlmScheduler scheduler = scheduler(rtx);

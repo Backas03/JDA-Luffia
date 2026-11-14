@@ -54,6 +54,7 @@ public class TranslationClient {
     private static final int TOKENS_PER_LINE = 25;
     private static final int TRANSLATION_VERSION = 3;
     private static final long ENDPOINT_RECHECK_SECONDS = Math.max(5, Config.get().llm().recheckSeconds());
+    static final double SAME_WAVE_RATIO = 1.5;
     private static final String SPEEDS_PATH = "llm/speeds.json";
     private static final java.util.regex.Pattern MARKUP_TAG = java.util.regex.Pattern.compile("</?[A-Za-z][A-Za-z0-9-]*(\\s[^<>]*)?/?>");
     private static final java.util.regex.Pattern ALIGNMENT_NOISE = java.util.regex.Pattern.compile(
@@ -215,13 +216,17 @@ public class TranslationClient {
         others.remove(endpoint);
         try {
             measureCalibration(endpoint, others);
+            boolean idle = scheduler.inUse(endpoint) == 0;
+            if (idle) endpoint.limitSlots(endpoint.configuredSlots());
             int slots = endpoint.slots();
             if (slots > 1) {
+                long[] elapsed = new long[slots];
                 List<CompletableFuture<Void>> runs = new ArrayList<>();
                 for (int i = 0; i < slots; i++) {
+                    int run = i;
                     runs.add(CompletableFuture.runAsync(() -> {
                         try {
-                            measureCalibration(endpoint, others);
+                            elapsed[run] = measureCalibration(endpoint, others);
                         } catch (IOException e) {
                             throw new UncheckedIOException(e);
                         }
@@ -230,6 +235,13 @@ public class TranslationClient {
                 CompletableFuture.allOf(runs.toArray(CompletableFuture[]::new)).join();
                 LOGGER.info("{} calibrated at about {} token/s alone and {} token/s each with {} at once", endpoint.label(),
                         Math.round(endpoint.speed().estimate(1)), Math.round(endpoint.speed().estimate(slots)), slots);
+                int served = servedAtOnce(elapsed);
+                if (idle && served < slots) {
+                    endpoint.limitSlots(served);
+                    LOGGER.warn("{} is configured with {} slots but answered only {} request(s) at a time, so {} slot(s) will be used. "
+                                    + "Raise OLLAMA_NUM_PARALLEL on that server or lower its slots in config.yaml",
+                            endpoint.label(), slots, served, served);
+                }
             } else {
                 LOGGER.info("{} calibrated at about {} token/s", endpoint.label(), Math.round(endpoint.speed().estimate(1)));
             }
@@ -278,7 +290,20 @@ public class TranslationClient {
         diskCache.write(SPEEDS_PATH, stored);
     }
 
-    private void measureCalibration(LlmEndpoint endpoint, Set<LlmEndpoint> others) throws IOException {
+    static int servedAtOnce(long[] elapsedMs) {
+        long fastest = Long.MAX_VALUE;
+        for (long elapsed : elapsedMs) {
+            if (elapsed > 0) fastest = Math.min(fastest, elapsed);
+        }
+        if (fastest == Long.MAX_VALUE) return elapsedMs.length;
+        int together = 0;
+        for (long elapsed : elapsedMs) {
+            if (elapsed > 0 && elapsed <= fastest * SAME_WAVE_RATIO) together++;
+        }
+        return Math.max(1, together);
+    }
+
+    private long measureCalibration(LlmEndpoint endpoint, Set<LlmEndpoint> others) throws IOException {
         try (LlmLease lease = scheduler.acquire(() -> LlmPriority.BACKGROUND, 120, others)) {
             ObjectNode body = MAPPER.createObjectNode();
             body.put("model", modelOf(lease));
@@ -288,7 +313,9 @@ public class TranslationClient {
             body.putArray("messages").addObject().put("role", "user").put("content", CALIBRATION_PROMPT);
             long startedAt = System.currentTimeMillis();
             JsonNode node = postJson(endpoint, "/v1/chat/completions", body, Duration.ofSeconds(60));
-            lease.complete(node.path("usage").path("completion_tokens").asLong(0), System.currentTimeMillis() - startedAt);
+            long elapsed = System.currentTimeMillis() - startedAt;
+            lease.complete(node.path("usage").path("completion_tokens").asLong(0), elapsed);
+            return Math.max(1, elapsed);
         }
     }
 
