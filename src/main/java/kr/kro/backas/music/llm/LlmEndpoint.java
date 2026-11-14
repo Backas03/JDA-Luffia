@@ -11,6 +11,7 @@ public final class LlmEndpoint {
     private final String label;
     private final String preferredModel;
     private final int slots;
+    private volatile int usableSlots;
     private final boolean fallback;
     private final SpeedModel speed = new SpeedModel();
     final List<LlmLease> leases = new ArrayList<>();
@@ -27,6 +28,7 @@ public final class LlmEndpoint {
         this.label = label;
         this.preferredModel = preferredModel;
         this.slots = Math.max(1, slots);
+        this.usableSlots = this.slots;
         this.fallback = fallback;
     }
 
@@ -43,7 +45,15 @@ public final class LlmEndpoint {
     }
 
     public int slots() {
+        return usableSlots;
+    }
+
+    public int configuredSlots() {
         return slots;
+    }
+
+    public void limitSlots(int usable) {
+        usableSlots = Math.max(1, Math.min(slots, usable));
     }
 
     public boolean isFallback() {

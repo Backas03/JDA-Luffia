@@ -88,6 +88,12 @@ public final class LlmScheduler {
         }
     }
 
+    public int inUse(LlmEndpoint endpoint) {
+        synchronized (lock) {
+            return endpoint.leases.size();
+        }
+    }
+
     public void wake() {
         synchronized (lock) {
             lock.notifyAll();
